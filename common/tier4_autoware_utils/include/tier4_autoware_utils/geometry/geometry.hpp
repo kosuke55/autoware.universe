@@ -80,13 +80,6 @@ inline geometry_msgs::msg::Point getPoint(
   return p.pose.position;
 }
 
-template <>
-inline geometry_msgs::msg::Point getPoint(
-  const autoware_auto_planning_msgs::msg::PathPointWithLaneId & p)
-{
-  return p.point.pose.position;
-}
-
 template <class T>
 geometry_msgs::msg::Pose getPose([[maybe_unused]] const T & p)
 {

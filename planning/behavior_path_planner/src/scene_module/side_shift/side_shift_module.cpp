@@ -27,6 +27,15 @@
 #include <memory>
 #include <string>
 
+namespace tier4_autoware_utils
+{
+template <>
+geometry_msgs::msg::Point getPoint(const autoware_auto_planning_msgs::msg::PathPointWithLaneId & p)
+{
+  return p.point.pose.position;
+}
+}  // namespace tier4_autoware_utils
+
 namespace
 {
 lanelet::ConstLanelets calcLaneAroundPose(

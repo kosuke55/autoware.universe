@@ -22,6 +22,21 @@
 #include <string>
 #include <vector>
 
+namespace tier4_autoware_utils
+{
+template <>
+geometry_msgs::msg::Point getPoint(const autoware_auto_planning_msgs::msg::PathPointWithLaneId & p)
+{
+  return p.point.pose.position;
+}
+
+template<>
+inline geometry_msgs::msg::Pose getPose(const autoware_auto_planning_msgs::msg::PathPointWithLaneId & p)
+{
+  return p.point.pose;
+}
+}  // namespace tier4_autoware_utils
+
 namespace behavior_velocity_planner
 {
 namespace
@@ -399,10 +414,10 @@ bool VirtualTrafficLightModule::modifyPathVelocity(
     return true;
   }
 
-  // Stop at stop_line if state is timeout
-  if (isBeforeStopLine() || planner_param_.check_timeout_after_stop_line) {
+  // Stop at stop_line if state is timeout before stop_line
+  if (isBeforeStopLine()) {
     if (isStateTimeout(*virtual_traffic_light_state)) {
-      RCLCPP_DEBUG(logger_, "state is timeout");
+      RCLCPP_DEBUG(logger_, "state is timeout before stop line");
       insertStopVelocityAtStopLine(path, stop_reason);
     }
 
@@ -412,6 +427,16 @@ bool VirtualTrafficLightModule::modifyPathVelocity(
 
   // After stop_line
   state_ = State::PASSING;
+
+  // Check timeout after stop_line if the option is on
+  if (planner_param_.check_timeout_after_stop_line &&
+    isStateTimeout(*virtual_traffic_light_state))
+  {
+    RCLCPP_DEBUG(logger_, "state is timeout after stop line");
+    insertStopVelocityAtStopLine(path, stop_reason);
+    updateInfrastructureCommand();
+    return true;
+  }
 
   // Stop at stop_line if finalization isn't completed
   if (!virtual_traffic_light_state->is_finalized) {
