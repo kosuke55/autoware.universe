@@ -459,9 +459,8 @@ PathWithLaneId PullOverModule::getReferencePath() const
     parameters_.deceleration_interval, goal_pose);
 
   reference_path.drivable_area = util::generateDrivableArea(
-    current_lanes, *planner_data_->self_pose, common_parameters.drivable_area_width,
-    common_parameters.drivable_area_height, common_parameters.drivable_area_resolution,
-    common_parameters.vehicle_length, *planner_data_->route_handler);
+    current_lanes, common_parameters.drivable_area_resolution, common_parameters.vehicle_length,
+    planner_data_);
 
   return reference_path;
 }
