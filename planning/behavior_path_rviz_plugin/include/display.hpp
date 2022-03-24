@@ -30,7 +30,7 @@
 #include "rviz_common/properties/parse_color.hpp"
 #include "rviz_common/validate_floats.hpp"
 
-#include "autoware_planning_msgs/msg/path_with_lane_id.hpp"
+#include "autoware_auto_planning_msgs/msg/path_with_lane_id.hpp"
 
 #include <deque>
 #include <memory>
@@ -38,7 +38,7 @@
 namespace rviz_plugins
 {
 class AutowarePathWithLaneIdDisplay
-: public rviz_common::MessageFilterDisplay<autoware_planning_msgs::msg::PathWithLaneId>
+: public rviz_common::MessageFilterDisplay<autoware_auto_planning_msgs::msg::PathWithLaneId>
 {
   Q_OBJECT
 
@@ -54,7 +54,7 @@ private Q_SLOTS:
 
 protected:
   void processMessage(
-    const autoware_planning_msgs::msg::PathWithLaneId::ConstSharedPtr msg_ptr) override;
+    const autoware_auto_planning_msgs::msg::PathWithLaneId::ConstSharedPtr msg_ptr) override;
   std::unique_ptr<Ogre::ColourValue> setColorDependsOnVelocity(
     const double vel_max, const double cmd_vel);
   std::unique_ptr<Ogre::ColourValue> gradation(
@@ -74,8 +74,9 @@ protected:
   rviz_common::properties::FloatProperty * property_vel_max_;
 
 private:
-  autoware_planning_msgs::msg::PathWithLaneId::ConstSharedPtr last_msg_ptr_;
-  bool validateFloats(const autoware_planning_msgs::msg::PathWithLaneId::ConstSharedPtr & msg_ptr);
+  autoware_auto_planning_msgs::msg::PathWithLaneId::ConstSharedPtr last_msg_ptr_;
+  bool validateFloats(
+    const autoware_auto_planning_msgs::msg::PathWithLaneId::ConstSharedPtr & msg_ptr);
 };
 
 }  // namespace rviz_plugins
