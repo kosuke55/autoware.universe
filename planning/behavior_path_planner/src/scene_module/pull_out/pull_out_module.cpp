@@ -153,13 +153,21 @@ BehaviorModuleOutput PullOutModule::plan()
   constexpr double RESAMPLE_INTERVAL = 1.0;
 
   PathWithLaneId path;
+
+  RCLCPP_ERROR(
+    getLogger(), "is_retreat_path_valid%d is_safe:%d", status_.is_retreat_path_valid, status_.is_safe);
   if (status_.is_retreat_path_valid && !status_.is_safe) {
     path = util::resamplePathWithSpline(status_.straight_back_path.path, RESAMPLE_INTERVAL);
+    RCLCPP_ERROR(getLogger(), "straight_back_path %d->%d", status_.straight_back_path.path.points.size(), path.points.size());
+    // path = status_.straight_back_path.path;
   } else {
     path = util::resamplePathWithSpline(status_.pull_out_path.path, RESAMPLE_INTERVAL);
+    RCLCPP_ERROR(getLogger(), "pull_out_path %d->%d", status_.pull_out_path.path.points.size(), path.points.size());
     status_.back_finished = true;
   }
 
+  RCLCPP_ERROR(
+    getLogger(), "is_retreat_path_valid%d back_finished:%d", status_.is_retreat_path_valid, status_.back_finished);
   if (status_.is_retreat_path_valid && status_.back_finished) {
     path = util::resamplePathWithSpline(status_.retreat_path.path, RESAMPLE_INTERVAL);
   }
@@ -170,6 +178,7 @@ BehaviorModuleOutput PullOutModule::plan()
   output.path = std::make_shared<PathWithLaneId>(path);
   output.turn_signal_info = calcTurnSignalInfo(status_.pull_out_path.shift_point);
 
+  RCLCPP_ERROR(getLogger(), "output.path size:%d ", output.path->points.size());
   return output;
 }
 
@@ -241,6 +250,7 @@ void PullOutModule::setParameters(const PullOutParameters & parameters)
 
 void PullOutModule::updatePullOutStatus()
 {
+  RCLCPP_ERROR(getLogger(), "PULL_OUT updatePullOutStatus");
   const auto & route_handler = planner_data_->route_handler;
   const auto common_parameters = planner_data_->parameters;
 
@@ -261,6 +271,8 @@ void PullOutModule::updatePullOutStatus()
   std::tie(found_valid_path, found_safe_path) =
     getSafePath(pull_out_lanes, check_distance_, selected_path);
 
+  RCLCPP_ERROR(
+    getLogger(), "found_valid_path:%d found_safe_path:%d", found_valid_path, found_safe_path);
   if (found_valid_path && !found_safe_path) {
     double back_distance;
     if (getBackDistance(pull_out_lanes, check_distance_, selected_path, back_distance)) {
@@ -268,11 +280,16 @@ void PullOutModule::updatePullOutStatus()
       RetreatPath selected_retreat_path;
       std::tie(found_valid_retreat_path, found_safe_retreat_path) =
         getSafeRetreatPath(pull_out_lanes, check_distance_, selected_retreat_path, back_distance);
+
+      RCLCPP_ERROR(
+        getLogger(), "found_valid_retreat_path:%d found_safe_retreat_path:%d",
+        found_valid_retreat_path, found_safe_retreat_path);
       if (found_valid_retreat_path && found_safe_retreat_path) {
         status_.is_retreat_path_valid = true;
         status_.backed_pose = selected_retreat_path.backed_pose;
         status_.retreat_path = selected_retreat_path.pull_out_path;
         status_.retreat_path.path.header = planner_data_->route_handler->getRouteHeader();
+        RCLCPP_ERROR(getLogger(), "PULL_OUT getBackPaths");
         status_.straight_back_path = pull_out_utils::getBackPaths(
           *route_handler, pull_out_lanes, current_pose, common_parameters, parameters_,
           back_distance);
@@ -307,6 +324,7 @@ void PullOutModule::updatePullOutStatus()
 
 PathWithLaneId PullOutModule::getReferencePath() const
 {
+  RCLCPP_DEBUG(getLogger(), "PULL_OUT getReferencePath");
   PathWithLaneId reference_path;
 
   const auto & route_handler = planner_data_->route_handler;
