@@ -366,13 +366,14 @@ void BehaviorVelocityPlannerNode::onTrigger(
     std::make_shared<const PlannerData>(planner_data), *input_path_msg);
 
   // screening
-  const auto filtered_path = filterLitterPathPoint(to_path(velocity_planned_path));
+  // const auto filtered_path = filterLitterPathPoint(to_path(velocity_planned_path));
 
   // interpolation
-  const auto interpolated_path_msg = interpolatePath(filtered_path, forward_path_length_);
+  // const auto interpolated_path_msg = interpolatePath(filtered_path, forward_path_length_);
 
   // check stop point
-  auto output_path_msg = filterStopPathPoint(interpolated_path_msg);
+  // auto output_path_msg = filterStopPathPoint(interpolated_path_msg);
+  auto output_path_msg = to_path(velocity_planned_path);
   output_path_msg.header.frame_id = "map";
   output_path_msg.header.stamp = this->now();
 

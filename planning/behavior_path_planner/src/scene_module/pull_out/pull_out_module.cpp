@@ -159,7 +159,7 @@ BehaviorModuleOutput PullOutModule::plan()
   if (status_.is_retreat_path_valid && !status_.is_safe) {
     path = util::resamplePathWithSpline(status_.straight_back_path.path, RESAMPLE_INTERVAL);
     RCLCPP_ERROR(getLogger(), "straight_back_path %d->%d", status_.straight_back_path.path.points.size(), path.points.size());
-    // path = status_.straight_back_path.path;
+    path = status_.straight_back_path.path;
   } else {
     path = util::resamplePathWithSpline(status_.pull_out_path.path, RESAMPLE_INTERVAL);
     RCLCPP_ERROR(getLogger(), "pull_out_path %d->%d", status_.pull_out_path.path.points.size(), path.points.size());

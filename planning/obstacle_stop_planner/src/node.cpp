@@ -626,7 +626,9 @@ void ObstacleStopPlannerNode::pathCallback(const Trajectory::ConstSharedPtr inpu
     resetExternalVelocityLimit(current_acc);
   }
 
-  auto trajectory = tier4_autoware_utils::convertToTrajectory(output_trajectory_points);
+  // auto trajectory = tier4_autoware_utils::convertToTrajectory(output_trajectory_points);
+  // TODO (tmp) just pass input
+  auto trajectory = *input_msg;
   trajectory.header = input_msg->header;
   path_pub_->publish(trajectory);
   publishDebugData(planner_data, current_acc);

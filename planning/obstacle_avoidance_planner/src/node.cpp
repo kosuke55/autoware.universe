@@ -866,14 +866,17 @@ void ObstacleAvoidancePlanner::pathCallback(
     mpt_param_.vehicle_circle_radius, mpt_param_.vehicle_circle_longitudinal_offsets);
 
   // generate optimized trajectory
-  const auto optimized_traj_points = generateOptimizedTrajectory(*path_ptr);
+  // const auto optimized_traj_points = generateOptimizedTrajectory(*path_ptr);
 
   // generate post processed trajectory
-  const auto post_processed_traj_points =
-    generatePostProcessedTrajectory(path_ptr->points, optimized_traj_points);
+  // const auto post_processed_traj_points =
+  //   generatePostProcessedTrajectory(path_ptr->points, optimized_traj_points);
+
+  // TODO: (tmp) just convert to trajectory
+  const auto traj_points = points_utils::convertToTrajectoryPoints(path_ptr->points);
 
   // convert to output msg type
-  auto output_traj_msg = tier4_autoware_utils::convertToTrajectory(post_processed_traj_points);
+  auto output_traj_msg = tier4_autoware_utils::convertToTrajectory(traj_points);
   output_traj_msg.header = path_ptr->header;
 
   // publish debug data

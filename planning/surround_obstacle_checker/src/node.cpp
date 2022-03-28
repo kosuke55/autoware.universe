@@ -140,7 +140,9 @@ void SurroundObstacleCheckerNode::pathCallback(
   }
 
   // publish trajectory and debug info
-  auto output_msg = tier4_autoware_utils::convertToTrajectory(output_trajectory_points);
+  // auto output_msg = tier4_autoware_utils::convertToTrajectory(output_trajectory_points);
+  // TODO (tmp) just pass input
+  auto output_msg = *input_msg;
   output_msg.header = input_msg->header;
   path_pub_->publish(output_msg);
   stop_reason_diag_pub_->publish(no_start_reason_diag);
