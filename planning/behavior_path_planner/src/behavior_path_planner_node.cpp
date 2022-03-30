@@ -481,14 +481,15 @@ void BehaviorPathPlannerNode::run()
   const auto path_candidate = getPathCandidate(output);
   planner_data_->prev_output_path = path;
 
-  auto clipped_path = modifyPathForSmoothGoalConnection(*path);
-  clipPathLength(clipped_path);
+  // auto clipped_path = modifyPathForSmoothGoalConnection(*path);
+  path_publisher_->publish(*path);
 
-  if (!clipped_path.points.empty()) {
-    path_publisher_->publish(clipped_path);
-  } else {
-    RCLCPP_ERROR(get_logger(), "behavior path output is empty! Stop publish.");
-  }
+  // clipPathLength(clipped_path);
+  // if (!clipped_path.points.empty()) {
+  //   path_publisher_->publish(clipped_path);
+  // } else {
+  //   RCLCPP_ERROR(get_logger(), "behavior path output is empty! Stop publish.");
+  // }
   path_candidate_publisher_->publish(util::toPath(*path_candidate));
 
   // debug_path_publisher_->publish(util::toPath(path));

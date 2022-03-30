@@ -120,12 +120,12 @@ std::vector<PullOverPath> getPullOverPaths(
       const auto arc_position_pose = lanelet::utils::getArcCoordinates(original_lanelets, pose);
       straight_distance = arc_position_goal.length - after_pull_over_straight_distance -
                           pull_over_distance - arc_position_pose.length;
-      if (straight_distance < before_pull_over_straight_distance) {
-        RCLCPP_ERROR_STREAM(
-          rclcpp::get_logger("behavior_path_planner").get_child("pull_over").get_child("util"),
-          "straight distance before pull_over is not enough");
-        continue;
-      }
+      // if (straight_distance < before_pull_over_straight_distance) {
+      //   RCLCPP_ERROR_STREAM(
+      //     rclcpp::get_logger("behavior_path_planner").get_child("pull_over").get_child("util"),
+      //     "straight distance before pull_over is not enough");
+      //   continue;
+      // }
     }
 
     PathWithLaneId reference_path2;

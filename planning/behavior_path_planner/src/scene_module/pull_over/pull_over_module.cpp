@@ -51,7 +51,8 @@ BehaviorModuleOutput PullOverModule::run()
 
 void PullOverModule::onEntry()
 {
-  RCLCPP_DEBUG(getLogger(), "PULL_OVER onEntry");
+  // RCLCPP_DEBUG(getLogger(), "PULL_OVER onEntry");
+  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   current_state_ = BT::NodeStatus::SUCCESS;
   updatePullOverStatus();
   // Get arclength to start lane change
@@ -66,11 +67,13 @@ void PullOverModule::onExit()
 {
   approval_handler_.clearWaitApproval();
   current_state_ = BT::NodeStatus::IDLE;
-  RCLCPP_DEBUG(getLogger(), "PULL_OVER onExit");
+  // RCLCPP_DEBUG(getLogger(), "PULL_OVER onExit");
+  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
 }
 
 bool PullOverModule::isExecutionRequested() const
 {
+  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   if (current_state_ == BT::NodeStatus::RUNNING) {
     return true;
   }
@@ -96,11 +99,16 @@ bool PullOverModule::isExecutionRequested() const
       }
     }
   }
-  return goal_is_in_shoulder_lane && isLongEnough(current_lanes);
+  RCLCPP_ERROR(
+    getLogger(), "(%s): goal_is_in_shoulder_lane:%d isLongEnough%d", __func__,
+    goal_is_in_shoulder_lane, isLongEnough(current_lanes));
+  // return goal_is_in_shoulder_lane && isLongEnough(current_lanes);
+  return goal_is_in_shoulder_lane;
 }
 
 bool PullOverModule::isExecutionReady() const
 {
+  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   if (current_state_ == BT::NodeStatus::RUNNING) {
     return true;
   }
@@ -118,47 +126,80 @@ bool PullOverModule::isExecutionReady() const
 
 BT::NodeStatus PullOverModule::updateState()
 {
-  RCLCPP_DEBUG(getLogger(), "PULL_OVER updateState");
+  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
+  // RCLCPP_DEBUG(getLogger(), "PULL_OVER updateState");
 
-  if (hasFinishedPullOver()) {
-    current_state_ = BT::NodeStatus::SUCCESS;
-    return current_state_;
-  }
+  // if (hasFinishedPullOver()) {
+  //   current_state_ = BT::NodeStatus::SUCCESS;
+  //   return current_state_;
+  // }
   current_state_ = BT::NodeStatus::RUNNING;
   return current_state_;
 }
 
 BehaviorModuleOutput PullOverModule::plan()
 {
-  constexpr double RESAMPLE_INTERVAL = 1.0;
-  auto path = util::resamplePathWithSpline(status_.pull_over_path.path, RESAMPLE_INTERVAL);
+  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
+  // auto path = util::resamplePathWithSpline(status_.pull_over_path.path, RESAMPLE_INTERVAL);
+  PathWithLaneId path{};
 
+  auto self_pose = planner_data_->self_pose->pose;
+  auto goal_pose = planner_data_->route_handler->getGoalPose();
+
+  {
+    PathPointWithLaneId p{};
+    p.point.pose = self_pose;
+    p.point.longitudinal_velocity_mps = -5;
+    lanelet::ConstLanelet current_lane;
+    planner_data_->route_handler->getClosestLaneletWithinRoute(self_pose, &current_lane);
+    p.lane_ids.push_back(current_lane.id());
+    path.points.push_back(p);
+  }
+
+  {
+    PathPointWithLaneId p{};
+    p.point.pose = goal_pose;
+    p.point.longitudinal_velocity_mps = 0;
+    lanelet::ConstLanelet goal_lane;
+    planner_data_->route_handler->getClosestLaneletWithinRoute(goal_pose, &goal_lane);
+    p.lane_ids.push_back(goal_lane.id());
+    path.points.push_back(p);
+  }
+  RCLCPP_ERROR(getLogger(), "(%s): size:%d", __func__, path.points.size());
+  constexpr double RESAMPLE_INTERVAL = 1.0;
+  path = util::resamplePathWithSpline(path, RESAMPLE_INTERVAL);
+  RCLCPP_ERROR(getLogger(), "(%s): size:%d", __func__, path.points.size());
+
+  // const auto current_lanes = getCurrentLanes();
+  // auto center_line_path = planner_data_->route_handler.getCenterLinePath(current_lanes, )
+  
   BehaviorModuleOutput output;
   output.path = std::make_shared<PathWithLaneId>(path);
 
-  const auto hazard_info = getHazard(
-    status_.pull_over_lanes, planner_data_->self_pose->pose,
-    planner_data_->route_handler->getGoalPose(), planner_data_->self_odometry->twist.twist.linear.x,
-    parameters_.hazard_on_threshold_dis, parameters_.hazard_on_threshold_vel,
-    planner_data_->parameters.base_link2front);
+  // const auto hazard_info = getHazard(
+  //   status_.pull_over_lanes, planner_data_->self_pose->pose,
+  //   planner_data_->route_handler->getGoalPose(), planner_data_->self_odometry->twist.twist.linear.x,
+  //   parameters_.hazard_on_threshold_dis, parameters_.hazard_on_threshold_vel,
+  //   planner_data_->parameters.base_link2front);
 
-  const auto turn_info = util::getPathTurnSignal(
-    status_.current_lanes, status_.pull_over_path.shifted_path, status_.pull_over_path.shift_point,
-    planner_data_->self_pose->pose, planner_data_->self_odometry->twist.twist.linear.x,
-    planner_data_->parameters, parameters_.pull_over_search_distance);
+  // const auto turn_info = util::getPathTurnSignal(
+  //   status_.current_lanes, status_.pull_over_path.shifted_path, status_.pull_over_path.shift_point,
+  //   planner_data_->self_pose->pose, planner_data_->self_odometry->twist.twist.linear.x,
+  //   planner_data_->parameters, parameters_.pull_over_search_distance);
 
-  if (hazard_info.first.command == HazardLightsCommand::ENABLE) {
-    output.turn_signal_info.hazard_signal.command = hazard_info.first.command;
-    output.turn_signal_info.signal_distance = hazard_info.second;
-  } else {
-    output.turn_signal_info.turn_signal.command = turn_info.first.command;
-    output.turn_signal_info.signal_distance = turn_info.second;
-  }
+  // if (hazard_info.first.command == HazardLightsCommand::ENABLE) {
+  //   output.turn_signal_info.hazard_signal.command = hazard_info.first.command;
+  //   output.turn_signal_info.signal_distance = hazard_info.second;
+  // } else {
+  //   output.turn_signal_info.turn_signal.command = turn_info.first.command;
+  //   output.turn_signal_info.signal_distance = turn_info.second;
+  // }
   return output;
 }
 
 PathWithLaneId PullOverModule::planCandidate() const
 {
+  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   // Get lane change lanes
   const auto current_lanes = getCurrentLanes();
   const auto pull_over_lanes = getPullOverLanes(current_lanes);
@@ -175,6 +216,7 @@ PathWithLaneId PullOverModule::planCandidate() const
 
 BehaviorModuleOutput PullOverModule::planWaitingApproval()
 {
+  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   BehaviorModuleOutput out;
   out.path = std::make_shared<PathWithLaneId>(getReferencePath());
   out.path_candidate = std::make_shared<PathWithLaneId>(planCandidate());
@@ -183,11 +225,13 @@ BehaviorModuleOutput PullOverModule::planWaitingApproval()
 
 void PullOverModule::setParameters(const PullOverParameters & parameters)
 {
+  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   parameters_ = parameters;
 }
 
 void PullOverModule::updatePullOverStatus()
 {
+  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   const auto & route_handler = planner_data_->route_handler;
   const auto common_parameters = planner_data_->parameters;
 
@@ -213,6 +257,7 @@ void PullOverModule::updatePullOverStatus()
   PullOverPath selected_path;
   std::tie(found_valid_path, found_safe_path) =
     getSafePath(pull_over_lanes, check_distance_, selected_path);
+  
 
   // Update status
   status_.is_safe = found_safe_path;
@@ -242,6 +287,7 @@ void PullOverModule::updatePullOverStatus()
 
 PathWithLaneId PullOverModule::getReferencePath() const
 {
+  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   PathWithLaneId reference_path;
 
   const auto & route_handler = planner_data_->route_handler;
@@ -276,6 +322,7 @@ PathWithLaneId PullOverModule::getReferencePath() const
 
 lanelet::ConstLanelets PullOverModule::getCurrentLanes() const
 {
+  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   const auto & route_handler = planner_data_->route_handler;
   const auto current_pose = planner_data_->self_pose->pose;
   const auto common_parameters = planner_data_->parameters;
@@ -325,6 +372,7 @@ std::pair<bool, bool> PullOverModule::getSafePath(
   const lanelet::ConstLanelets & pull_over_lanes, const double check_distance,
   PullOverPath & safe_path) const
 {
+  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   std::vector<PullOverPath> valid_paths;
 
   const auto & route_handler = planner_data_->route_handler;
@@ -371,6 +419,7 @@ std::pair<bool, bool> PullOverModule::getSafePath(
 
 bool PullOverModule::isLongEnough(const lanelet::ConstLanelets & lanelets) const
 {
+  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   PathShifter path_shifter;
   const double maximum_jerk = parameters_.maximum_lateral_jerk;
   const double pull_over_velocity = parameters_.minimum_pull_over_velocity;
@@ -391,15 +440,21 @@ bool PullOverModule::isLongEnough(const lanelet::ConstLanelets & lanelets) const
     abs(offset_from_center_line), maximum_jerk, pull_over_velocity);
   const double pull_over_total_distance_min =
     distance_after_pull_over + pull_over_distance_min + distance_before_pull_over;
-  const double distance_to_goal = util::getSignedDistance(current_pose, goal_pose, lanelets);
+  // const double distance_to_goal = util::getSignedDistance(current_pose, goal_pose, lanelets);
+  const double distance_to_goal = std::abs(util::getSignedDistance(current_pose, goal_pose, lanelets));
 
   return distance_to_goal > pull_over_total_distance_min;
 }
 
-bool PullOverModule::isSafe() const { return status_.is_safe; }
+bool PullOverModule::isSafe() const
+{
+  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
+  return status_.is_safe;
+}
 
 bool PullOverModule::isNearEndOfLane() const
 {
+  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   const auto current_pose = planner_data_->self_pose->pose;
   const auto common_parameters = planner_data_->parameters;
   const double threshold = 5 + common_parameters.minimum_pull_over_length;
@@ -410,6 +465,7 @@ bool PullOverModule::isNearEndOfLane() const
 
 bool PullOverModule::isCurrentSpeedLow() const
 {
+  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   const auto current_twist = planner_data_->self_odometry->twist.twist;
   const double threshold_kmph = 10;
   return util::l2Norm(current_twist.linear) < threshold_kmph * 1000 / 3600;
@@ -417,6 +473,7 @@ bool PullOverModule::isCurrentSpeedLow() const
 
 bool PullOverModule::hasFinishedPullOver() const
 {
+  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   // check ego car is close enough to goal pose
   const auto current_pose = planner_data_->self_pose->pose;
   const auto goal_pose = planner_data_->route_handler->getGoalPose();
@@ -455,6 +512,7 @@ std::pair<HazardLightsCommand, double> PullOverModule::getHazard(
   const double & velocity, const double & hazard_on_threshold_dis,
   const double & hazard_on_threshold_vel, const double & base_link2front) const
 {
+  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   HazardLightsCommand hazard_signal;
   const double max_distance = std::numeric_limits<double>::max();
 

@@ -63,7 +63,7 @@ void PathShifter::setShiftPoints(const std::vector<ShiftPoint> & points)
 bool PathShifter::generate(
   ShiftedPath * shifted_path, const bool offset_back, const SHIFT_TYPE type)
 {
-  RCLCPP_DEBUG_STREAM(logger_, "PathShifter::generate start!");
+  RCLCPP_ERROR(logger_, "PathShifter::generate start!");
 
   // Guard
   if (reference_path_.points.empty()) {
@@ -75,7 +75,7 @@ bool PathShifter::generate(
   shifted_path->shift_length.resize(reference_path_.points.size(), 0.0);
 
   if (shift_points_.empty()) {
-    RCLCPP_DEBUG_STREAM(logger_, "shift_points_ is empty. Return reference with base offset.");
+    RCLCPP_ERROR(logger_, "shift_points_ is empty. Return reference with base offset.");
     shiftBaseLength(shifted_path, base_offset_);
     return true;
   }
