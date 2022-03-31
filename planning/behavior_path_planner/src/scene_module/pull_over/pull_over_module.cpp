@@ -113,15 +113,16 @@ bool PullOverModule::isExecutionReady() const
     return true;
   }
 
-  const auto current_lanes = getCurrentLanes();
-  const auto pull_over_lanes = getPullOverLanes(current_lanes);
+  // const auto current_lanes = getCurrentLanes();
+  // const auto pull_over_lanes = getPullOverLanes(current_lanes);
 
   // Find pull_over path
-  bool found_valid_path, found_safe_path;
-  PullOverPath selected_path;
-  std::tie(found_valid_path, found_safe_path) =
-    getSafePath(pull_over_lanes, check_distance_, selected_path);
-  return found_safe_path;
+  // bool found_valid_path, found_safe_path;
+  // PullOverPath selected_path;
+  // std::tie(found_valid_path, found_safe_path) =
+  //   getSafePath(pull_over_lanes, check_distance_, selected_path);
+  return true;
+  // return found_safe_path;
 }
 
 BT::NodeStatus PullOverModule::updateState()
@@ -145,36 +146,54 @@ BehaviorModuleOutput PullOverModule::plan()
 
   auto self_pose = planner_data_->self_pose->pose;
   auto goal_pose = planner_data_->route_handler->getGoalPose();
+  const auto common_parameters = planner_data_->parameters;
 
+  lanelet::ConstLanelet current_lane;
+  planner_data_->route_handler->getClosestLaneletWithinRoute(self_pose, &current_lane);
   {
     PathPointWithLaneId p{};
     p.point.pose = self_pose;
-    p.point.longitudinal_velocity_mps = -5;
-    lanelet::ConstLanelet current_lane;
-    planner_data_->route_handler->getClosestLaneletWithinRoute(self_pose, &current_lane);
+    p.point.longitudinal_velocity_mps = -10;
     p.lane_ids.push_back(current_lane.id());
     path.points.push_back(p);
   }
 
+    lanelet::ConstLanelet goal_lane;
+    planner_data_->route_handler->getClosestLaneletWithinRoute(goal_pose, &goal_lane);
   {
     PathPointWithLaneId p{};
     p.point.pose = goal_pose;
     p.point.longitudinal_velocity_mps = 0;
-    lanelet::ConstLanelet goal_lane;
-    planner_data_->route_handler->getClosestLaneletWithinRoute(goal_pose, &goal_lane);
     p.lane_ids.push_back(goal_lane.id());
     path.points.push_back(p);
   }
-  RCLCPP_ERROR(getLogger(), "(%s): size:%d", __func__, path.points.size());
-  constexpr double RESAMPLE_INTERVAL = 1.0;
-  path = util::resamplePathWithSpline(path, RESAMPLE_INTERVAL);
-  RCLCPP_ERROR(getLogger(), "(%s): size:%d", __func__, path.points.size());
+  // RCLCPP_ERROR(getLogger(), "(%s): size:%d", __func__, path.points.size());
+  // constexpr double RESAMPLE_INTERVAL = 1.0;
+  // path = util::resamplePathWithSpline(path, RESAMPLE_INTERVAL);
+  // RCLCPP_ERROR(getLogger(), "(%s): size:%d", __func__, path.points.size());
+
+  // Generate drivable area
+  {
+    lanelet::ConstLanelets lanes;
+    lanes.push_back(current_lane);
+    lanes.push_back(goal_lane);
+    path.drivable_area = util::generateDrivableArea(
+      lanes, common_parameters.drivable_area_resolution, common_parameters.vehicle_length,
+      planner_data_);
+  }
 
   // const auto current_lanes = getCurrentLanes();
-  // auto center_line_path = planner_data_->route_handler.getCenterLinePath(current_lanes, )
-  
+  // const auto pull_over_lanes = getPullOverLanes(current_lanes);
+  // auto self_arc_position = lanelet::utils::getArcCoordinates(current_lanes, self_pose);
+  // auto center_line_path = planner_data_->route_handler->getCenterLinePath(
+  //   current_lanes, self_arc_position.length, self_arc_position.length + 30.0);
+  // center_line_path.drivable_area = util::generateDrivableArea(
+  //   current_lanes, common_parameters.drivable_area_resolution, common_parameters.vehicle_length,
+  //   planner_data_);
+
   BehaviorModuleOutput output;
   output.path = std::make_shared<PathWithLaneId>(path);
+  // output.path = std::make_shared<PathWithLaneId>(center_line_path);
 
   // const auto hazard_info = getHazard(
   //   status_.pull_over_lanes, planner_data_->self_pose->pose,
