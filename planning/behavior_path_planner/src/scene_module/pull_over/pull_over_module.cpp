@@ -16,6 +16,7 @@
 
 #include "behavior_path_planner/behavior_path_planner_node.hpp"
 #include "behavior_path_planner/path_shifter/path_shifter.hpp"
+#include "behavior_path_planner/parallel_parking_planner/parallel_parking_planner.hpp"
 #include "behavior_path_planner/path_utilities.hpp"
 #include "behavior_path_planner/scene_module/avoidance/debug.hpp"
 #include "behavior_path_planner/scene_module/pull_over/util.hpp"
@@ -40,6 +41,8 @@ PullOverModule::PullOverModule(
 : SceneModuleInterface{name, node}, parameters_{parameters}
 {
   approval_handler_.waitApproval();
+  Cl_publisher_ = node.create_publisher<PoseStamped>("~/pull_over/debug/Cl", 1);
+  Cr_publisher_ = node.create_publisher<PoseStamped>("~/pull_over/debug/Cr", 1);
 }
 
 BehaviorModuleOutput PullOverModule::run()
@@ -182,6 +185,12 @@ BehaviorModuleOutput PullOverModule::plan()
       planner_data_);
   }
 
+
+  ParallelParkingPlanner parallel_parking_planner;
+  parallel_parking_planner.setParams(planner_data_);
+  parallel_parking_planner.generate();
+  Cl_publisher_->publish(parallel_parking_planner.Cl_);
+  Cr_publisher_->publish(parallel_parking_planner.Cr_);
   // const auto current_lanes = getCurrentLanes();
   // const auto pull_over_lanes = getPullOverLanes(current_lanes);
   // auto self_arc_position = lanelet::utils::getArcCoordinates(current_lanes, self_pose);

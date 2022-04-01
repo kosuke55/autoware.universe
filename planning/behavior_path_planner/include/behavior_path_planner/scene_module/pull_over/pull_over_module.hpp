@@ -128,6 +128,9 @@ private:
   bool isNearEndOfLane() const;
   bool isCurrentSpeedLow() const;
   bool hasFinishedPullOver() const;
+
+  rclcpp::Publisher<PoseStamped>::SharedPtr Cr_publisher_;
+  rclcpp::Publisher<PoseStamped>::SharedPtr Cl_publisher_;
 };
 }  // namespace behavior_path_planner
 
