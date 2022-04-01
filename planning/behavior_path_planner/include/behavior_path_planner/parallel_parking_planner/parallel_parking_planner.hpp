@@ -24,6 +24,7 @@
 #include <autoware_auto_perception_msgs/msg/predicted_objects.hpp>
 #include <autoware_auto_planning_msgs/msg/path_with_lane_id.hpp>
 #include <geometry_msgs/msg/point.hpp>
+#include <geometry_msgs/msg/pose_array.hpp>
 #include <geometry_msgs/msg/polygon.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 
@@ -40,19 +41,22 @@ namespace behavior_path_planner
 using autoware_auto_planning_msgs::msg::PathPointWithLaneId;
 using autoware_auto_planning_msgs::msg::PathWithLaneId;
 using geometry_msgs::msg::Point;
+using geometry_msgs::msg::PoseArray;
 using geometry_msgs::msg::Pose;
+using geometry_msgs::msg::PoseStamped;
+using autoware_auto_planning_msgs::msg::PathWithLaneId;
 
 class ParallelParkingPlanner
 {
 public:
   // ParallelParkingPlanner();
   bool generate();
-  bool planOneTraial();
   void setParams(const std::shared_ptr<const PlannerData> & planner_data);
 
   // debug
-  geometry_msgs::msg::PoseStamped Cr_;
-  geometry_msgs::msg::PoseStamped Cl_;
+  PoseStamped Cr_;
+  PoseStamped Cl_;
+  PoseArray path_pose_array_;
 
 private:
   // std::shared_ptr<PlannerData> planner_data_;
@@ -65,9 +69,14 @@ private:
   //   float R_base_link_min;
   //   float R_frontleft_l_min;
   // } geometric_params_;
-    float R_Er_min_; // base_link
+    float R_E_min_; // base_link
     float R_Bl_min_; // front_lef
-
+    bool planOneTraial();
+    bool generateArcPath(
+      const Pose & center, const float radius, const float start_rad,
+      float end_rad, const bool is_left_turn, PathWithLaneId & path);
+    PathPointWithLaneId generateArcPathPoint(
+      const Pose & center, const float radius, const float yaw);
 };
 
 }  // namespace behavior_path_planner

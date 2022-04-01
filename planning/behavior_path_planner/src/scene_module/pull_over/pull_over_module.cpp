@@ -43,6 +43,7 @@ PullOverModule::PullOverModule(
   approval_handler_.waitApproval();
   Cl_publisher_ = node.create_publisher<PoseStamped>("~/pull_over/debug/Cl", 1);
   Cr_publisher_ = node.create_publisher<PoseStamped>("~/pull_over/debug/Cr", 1);
+  path_pose_array_pub_ = node.create_publisher<PoseArray>("~/pull_over/debug/path", 1);
 }
 
 BehaviorModuleOutput PullOverModule::run()
@@ -191,6 +192,7 @@ BehaviorModuleOutput PullOverModule::plan()
   parallel_parking_planner.generate();
   Cl_publisher_->publish(parallel_parking_planner.Cl_);
   Cr_publisher_->publish(parallel_parking_planner.Cr_);
+  path_pose_array_pub_->publish(parallel_parking_planner.path_pose_array_);
   // const auto current_lanes = getCurrentLanes();
   // const auto pull_over_lanes = getPullOverLanes(current_lanes);
   // auto self_arc_position = lanelet::utils::getArcCoordinates(current_lanes, self_pose);

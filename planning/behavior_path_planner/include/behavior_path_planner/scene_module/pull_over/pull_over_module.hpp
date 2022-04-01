@@ -37,6 +37,7 @@
 namespace behavior_path_planner
 {
 using autoware_auto_vehicle_msgs::msg::HazardLightsCommand;
+using geometry_msgs::msg::PoseArray;
 struct PullOverParameters
 {
   double min_stop_distance;
@@ -131,6 +132,7 @@ private:
 
   rclcpp::Publisher<PoseStamped>::SharedPtr Cr_publisher_;
   rclcpp::Publisher<PoseStamped>::SharedPtr Cl_publisher_;
+  rclcpp::Publisher<PoseArray>::SharedPtr path_pose_array_pub_;
 };
 }  // namespace behavior_path_planner
 
