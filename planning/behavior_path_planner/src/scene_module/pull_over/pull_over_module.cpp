@@ -152,7 +152,7 @@ BehaviorModuleOutput PullOverModule::plan()
 {
   RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   // auto path = util::resamplePathWithSpline(status_.pull_over_path.path, RESAMPLE_INTERVAL);
-  PathWithLaneId path{};
+  // PathWithLaneId path{};
 
   auto self_pose = planner_data_->self_pose->pose;
   auto goal_pose = planner_data_->route_handler->getGoalPose();
@@ -182,6 +182,12 @@ BehaviorModuleOutput PullOverModule::plan()
   // path = util::resamplePathWithSpline(path, RESAMPLE_INTERVAL);
   // RCLCPP_ERROR(getLogger(), "(%s): size:%d", __func__, path.points.size());
 
+  // std::reverse(path.points.begin(), path.points.end());
+
+  ParallelParkingPlanner parallel_parking_planner;
+  parallel_parking_planner.setParams(planner_data_);
+  PathWithLaneId path = parallel_parking_planner.generate();
+
   // Generate drivable area
   {
     lanelet::ConstLanelets lanes;
@@ -191,17 +197,15 @@ BehaviorModuleOutput PullOverModule::plan()
       lanes, common_parameters.drivable_area_resolution, common_parameters.vehicle_length,
       planner_data_);
   }
-
-  // std::reverse(path.points.begin(), path.points.end());
   path.header = planner_data_->route_handler->getRouteHeader();
-  ParallelParkingPlanner parallel_parking_planner;
-  parallel_parking_planner.setParams(planner_data_);
-  if (parallel_parking_planner.generate(path)){
+
+  if (!path.points.empty()) {
     status_.pull_over_path.path = path;
     Cl_publisher_->publish(parallel_parking_planner.Cl_);
     Cr_publisher_->publish(parallel_parking_planner.Cr_);
     path_pose_array_pub_->publish(parallel_parking_planner.path_pose_array_);
   }
+
   // const auto current_lanes = getCurrentLanes();
   // const auto pull_over_lanes = getPullOverLanes(current_lanes);
   // auto self_arc_position = lanelet::utils::getArcCoordinates(current_lanes, self_pose);

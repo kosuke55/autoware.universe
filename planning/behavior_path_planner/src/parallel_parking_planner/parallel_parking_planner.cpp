@@ -50,7 +50,7 @@ using behavior_path_planner::util::removeOverlappingPoints;
 
 namespace
 {
-PoseArray pathWithLaneId2PoseArray(const PathWithLaneId & path)
+PoseArray PathWithLaneId2PoseArray(const PathWithLaneId & path)
 {
   PoseArray pose_array;
   pose_array.header = path.header;
@@ -84,6 +84,19 @@ Pose transformPose(const Pose & pose, const Transform & transform)
   return transformed_pose.pose;
 }
 
+
+PathWithLaneId concatePath(const PathWithLaneId path1, const PathWithLaneId path2)
+{
+  PathWithLaneId path{};
+  for (const auto & point : path1.points) {
+    path.points.push_back(point);
+  }
+  for (const auto & point : path2.points) {
+    path.points.push_back(point);
+  }
+  path.header = path1.header;
+  return path;
+}
 }  // namespace
 
 namespace behavior_path_planner
@@ -93,13 +106,14 @@ namespace behavior_path_planner
 //   max_steer_rad_ = tier4_autoware_utils::deg2rad(max_steer_deg_);
 // }
 
-bool ParallelParkingPlanner::generate(PathWithLaneId & path)
+PathWithLaneId ParallelParkingPlanner::generate()
 {
-  return planOneTraial(path);
+  return planOneTraial();
 }
 
-bool ParallelParkingPlanner::planOneTraial(PathWithLaneId & path)
+PathWithLaneId ParallelParkingPlanner::planOneTraial()
 {
+  PathWithLaneId path;
   const auto self_pose = planner_data_->self_pose->pose;
   const auto goal_pose = planner_data_->route_handler->getGoalPose();
 
@@ -136,7 +150,7 @@ bool ParallelParkingPlanner::planOneTraial(PathWithLaneId & path)
                           (2 * (R_E_min_ + d_Cr_Einit * std::cos(alpha)));
   std::cerr << "R_Einit_l: " << R_Einit_l << std::endl;
   if (R_Einit_l <= 0){
-    return false;
+    return path;
   }
 
   const float steer_l = std::atan(common_params.wheel_base / R_Einit_l);
@@ -151,11 +165,17 @@ bool ParallelParkingPlanner::planOneTraial(PathWithLaneId & path)
     (2 * R_Einit_l * (R_Einit_l + R_E_min_)));
 
   // PathWithLaneId path{};
-  generateArcPath(Cl, R_Einit_l, - M_PI_2, normalizeRadian(- M_PI_2 - theta_l), false, path);
-  generateArcPath(Cr, R_E_min_, normalizeRadian(psi + M_PI_2 - theta_l), M_PI_2, true, path);
-  path = removeOverlappingPoints(path);
+  PathWithLaneId path_turn_left = generateArcPath(Cl, R_Einit_l, - M_PI_2, normalizeRadian(- M_PI_2 - theta_l), false);
+  path_turn_left.header = planner_data_->route_handler->getRouteHeader();
+  paths_.push_back(path_turn_left);
+
+  PathWithLaneId path_turn_right = generateArcPath(Cr, R_E_min_, normalizeRadian(psi + M_PI_2 - theta_l), M_PI_2, true);
+  path_turn_right.header = planner_data_->route_handler->getRouteHeader();
+  paths_.push_back(path_turn_right);
+
+  PathWithLaneId concat_path = concatePath(paths_.at(0), paths_.at(1));
   path.header = planner_data_->route_handler->getRouteHeader();
-  path_pose_array_ = pathWithLaneId2PoseArray(path);
+  path_pose_array_ = PathWithLaneId2PoseArray(concat_path);
 
   // geometry_msgs::msg::Transform transform_Cl;
   // transform_Cl.translation.y = R_Einit_l;
@@ -164,13 +184,15 @@ bool ParallelParkingPlanner::planOneTraial(PathWithLaneId & path)
   // Cl_.pose.position = toMsg(Cl);
   // Cl_.header = planner_data_->route_handler->getRouteHeader();
 
-  return true;
+  return concat_path;
 }
 
-bool ParallelParkingPlanner::generateArcPath(
+PathWithLaneId ParallelParkingPlanner::generateArcPath(
   const Pose & center, const float radius, const float start_yaw,
-  float end_yaw, const bool is_left_turn, PathWithLaneId & path)
+  float end_yaw, const bool is_left_turn)
 {
+  PathWithLaneId path;
+
   const float interval = 0.5;
   const float yaw_interval = interval / radius;
   float yaw = start_yaw;
@@ -196,7 +218,7 @@ bool ParallelParkingPlanner::generateArcPath(
   p.point.longitudinal_velocity_mps = 0.0;
   path.points.push_back(p);
 
-  return !path.points.empty();
+  return path;
 }
 
 PathPointWithLaneId ParallelParkingPlanner::generateArcPathPoint(
