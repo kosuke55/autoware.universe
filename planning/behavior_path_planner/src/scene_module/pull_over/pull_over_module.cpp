@@ -142,6 +142,12 @@ BT::NodeStatus PullOverModule::updateState()
   return current_state_;
 }
 
+// void PullOverModule::publishTF(
+//   const std::string & child_frame_id, const geometry_msgs::msg::PoseStamped & pose_msg)
+// {
+//   tf2_broadcaster_.sendTransform(tier4_autoware_utils::pose2transform(pose_msg, child_frame_id));
+// }
+
 BehaviorModuleOutput PullOverModule::plan()
 {
   RCLCPP_ERROR(getLogger(), "(%s):", __func__);
@@ -154,23 +160,23 @@ BehaviorModuleOutput PullOverModule::plan()
 
   lanelet::ConstLanelet current_lane;
   planner_data_->route_handler->getClosestLaneletWithinRoute(self_pose, &current_lane);
-  {
-    PathPointWithLaneId p{};
-    p.point.pose = self_pose;
-    p.point.longitudinal_velocity_mps = -10;
-    p.lane_ids.push_back(current_lane.id());
-    path.points.push_back(p);
-  }
+  // {
+  //   PathPointWithLaneId p{};
+  //   p.point.pose = self_pose;
+  //   p.point.longitudinal_velocity_mps = -10;
+  //   p.lane_ids.push_back(current_lane.id());
+  //   path.points.push_back(p);
+  // }
 
-    lanelet::ConstLanelet goal_lane;
-    planner_data_->route_handler->getClosestLaneletWithinRoute(goal_pose, &goal_lane);
-  {
-    PathPointWithLaneId p{};
-    p.point.pose = goal_pose;
-    p.point.longitudinal_velocity_mps = 0;
-    p.lane_ids.push_back(goal_lane.id());
-    path.points.push_back(p);
-  }
+  lanelet::ConstLanelet goal_lane;
+  planner_data_->route_handler->getClosestLaneletWithinRoute(goal_pose, &goal_lane);
+  // {
+  //   PathPointWithLaneId p{};
+  //   p.point.pose = goal_pose;
+  //   p.point.longitudinal_velocity_mps = 0;
+  //   p.lane_ids.push_back(goal_lane.id());
+  //   path.points.push_back(p);
+  // }
   // RCLCPP_ERROR(getLogger(), "(%s): size:%d", __func__, path.points.size());
   // constexpr double RESAMPLE_INTERVAL = 1.0;
   // path = util::resamplePathWithSpline(path, RESAMPLE_INTERVAL);
@@ -186,13 +192,16 @@ BehaviorModuleOutput PullOverModule::plan()
       planner_data_);
   }
 
-
+  // std::reverse(path.points.begin(), path.points.end());
+  path.header = planner_data_->route_handler->getRouteHeader();
   ParallelParkingPlanner parallel_parking_planner;
   parallel_parking_planner.setParams(planner_data_);
-  parallel_parking_planner.generate();
-  Cl_publisher_->publish(parallel_parking_planner.Cl_);
-  Cr_publisher_->publish(parallel_parking_planner.Cr_);
-  path_pose_array_pub_->publish(parallel_parking_planner.path_pose_array_);
+  if (parallel_parking_planner.generate(path)){
+    status_.pull_over_path.path = path;
+    Cl_publisher_->publish(parallel_parking_planner.Cl_);
+    Cr_publisher_->publish(parallel_parking_planner.Cr_);
+    path_pose_array_pub_->publish(parallel_parking_planner.path_pose_array_);
+  }
   // const auto current_lanes = getCurrentLanes();
   // const auto pull_over_lanes = getPullOverLanes(current_lanes);
   // auto self_arc_position = lanelet::utils::getArcCoordinates(current_lanes, self_pose);
@@ -203,7 +212,8 @@ BehaviorModuleOutput PullOverModule::plan()
   //   planner_data_);
 
   BehaviorModuleOutput output;
-  output.path = std::make_shared<PathWithLaneId>(path);
+  // output.path = std::make_shared<PathWithLaneId>(path);
+  output.path = std::make_shared<PathWithLaneId>(status_.pull_over_path.path);
   // output.path = std::make_shared<PathWithLaneId>(center_line_path);
 
   // const auto hazard_info = getHazard(

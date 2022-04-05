@@ -454,6 +454,9 @@ void MotionVelocitySmootherNode::onCurrentTrajectory(const Trajectory::ConstShar
   // calculate trajectory velocity
   TrajectoryPoints output = calcTrajectoryVelocity(
     tier4_autoware_utils::convertToTrajectoryPointArray(*base_traj_raw_ptr_));
+
+  auto point_array = tier4_autoware_utils::convertToTrajectoryPointArray(*base_traj_raw_ptr_);
+
   if (output.empty()) {
     RCLCPP_WARN(get_logger(), "Output Point is empty");
     return;

@@ -95,6 +95,7 @@ public:
   PathWithLaneId planCandidate() const override;
   void onEntry() override;
   void onExit() override;
+  // void publishTF(const std::string & child_frame_id, const geometry_msgs::msg::PoseStamped & pose_msg);
 
   void setParameters(const PullOverParameters & parameters);
 

@@ -50,7 +50,7 @@ class ParallelParkingPlanner
 {
 public:
   // ParallelParkingPlanner();
-  bool generate();
+  bool generate(PathWithLaneId & path);
   void setParams(const std::shared_ptr<const PlannerData> & planner_data);
 
   // debug
@@ -71,12 +71,12 @@ private:
   // } geometric_params_;
     float R_E_min_; // base_link
     float R_Bl_min_; // front_lef
-    bool planOneTraial();
+    bool planOneTraial(PathWithLaneId & path);
     bool generateArcPath(
       const Pose & center, const float radius, const float start_rad,
       float end_rad, const bool is_left_turn, PathWithLaneId & path);
     PathPointWithLaneId generateArcPathPoint(
-      const Pose & center, const float radius, const float yaw);
+      const Pose & center, const float radius, const float yaw, const bool is_left_turn);
 };
 
 }  // namespace behavior_path_planner
