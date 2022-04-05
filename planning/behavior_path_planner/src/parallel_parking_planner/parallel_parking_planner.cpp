@@ -27,9 +27,15 @@
 #include <limits>
 #include <string>
 #include <utility>
-
 #include <vector>
 
+using autoware_auto_planning_msgs::msg::PathWithLaneId;
+using behavior_path_planner::util::removeOverlappingPoints;
+using geometry_msgs::msg::Pose;
+using geometry_msgs::msg::PoseArray;
+using geometry_msgs::msg::PoseStamped;
+using geometry_msgs::msg::Transform;
+using geometry_msgs::msg::TransformStamped;
 using tier4_autoware_utils::calcDistance2d;
 using tier4_autoware_utils::deg2rad;
 using tier4_autoware_utils::fromMsg;
@@ -37,16 +43,9 @@ using tier4_autoware_utils::inverseTransformPoint;
 using tier4_autoware_utils::normalizeRadian;
 using tier4_autoware_utils::Point2d;
 using tier4_autoware_utils::Point3d;
+using tier4_autoware_utils::pose2transform;
 using tier4_autoware_utils::toMsg;
 using tier4_autoware_utils::translateLocal;
-using tier4_autoware_utils::pose2transform;
-using geometry_msgs::msg::PoseArray;
-using geometry_msgs::msg::Pose;
-using geometry_msgs::msg::PoseStamped;
-using geometry_msgs::msg::Transform;
-using geometry_msgs::msg::TransformStamped;
-using autoware_auto_planning_msgs::msg::PathWithLaneId;
-using behavior_path_planner::util::removeOverlappingPoints;
 
 namespace
 {
@@ -84,17 +83,12 @@ Pose transformPose(const Pose & pose, const Transform & transform)
   return transformed_pose.pose;
 }
 
-
 PathWithLaneId concatePath(const PathWithLaneId path1, const PathWithLaneId path2)
 {
-  PathWithLaneId path{};
-  for (const auto & point : path1.points) {
-    path.points.push_back(point);
-  }
+  PathWithLaneId path = path1;
   for (const auto & point : path2.points) {
     path.points.push_back(point);
   }
-  path.header = path1.header;
   return path;
 }
 }  // namespace
@@ -106,8 +100,34 @@ namespace behavior_path_planner
 //   max_steer_rad_ = tier4_autoware_utils::deg2rad(max_steer_deg_);
 // }
 
+PathWithLaneId ParallelParkingPlanner::getCurrentPath()
+{
+  const auto current_path = paths_.at(current_path_idx_);
+  const auto current_target = current_path.points.back();
+  const auto self_pose = planner_data_->self_pose->pose;
+
+  const float th_arrived_distance_m = 1.0;
+  const bool is_near_target =
+    tier4_autoware_utils::calcDistance2d(current_target, self_pose) < th_arrived_distance_m;
+
+  const float ego_speed = std::abs(planner_data_->self_odometry->twist.twist.linear.x);
+
+  const float th_stopped_velocity_mps = 0.1;
+  const bool is_stopped = std::abs(ego_speed) < th_stopped_velocity_mps;
+
+  if (is_near_target && is_stopped) {
+    current_path_idx_ += 1;
+    rclcpp::Rate(1.0).sleep();
+  }
+  current_path_idx_ = std::min(current_path_idx_, paths_.size() - 1);
+
+  return paths_.at(current_path_idx_);
+}
+
 PathWithLaneId ParallelParkingPlanner::generate()
 {
+  paths_.clear();
+  current_path_idx_ = 0;
   return planOneTraial();
 }
 
@@ -149,7 +169,7 @@ PathWithLaneId ParallelParkingPlanner::planOneTraial()
   const float R_Einit_l = (std::pow(d_Cr_Einit, 2) - std::pow(R_E_min_, 2)) /
                           (2 * (R_E_min_ + d_Cr_Einit * std::cos(alpha)));
   std::cerr << "R_Einit_l: " << R_Einit_l << std::endl;
-  if (R_Einit_l <= 0){
+  if (R_Einit_l <= 0) {
     return path;
   }
 
@@ -164,13 +184,35 @@ PathWithLaneId ParallelParkingPlanner::planOneTraial()
     (std::pow(R_Einit_l, 2) + std::pow(R_Einit_l + R_E_min_, 2) - std::pow(d_Cr_Einit, 2)) /
     (2 * R_Einit_l * (R_Einit_l + R_E_min_)));
 
-  // PathWithLaneId path{};
-  PathWithLaneId path_turn_left = generateArcPath(Cl, R_Einit_l, - M_PI_2, normalizeRadian(- M_PI_2 - theta_l), false);
+  lanelet::ConstLanelet current_lane;
+  planner_data_->route_handler->getClosestLaneletWithinRoute(self_pose, &current_lane);
+  lanelet::ConstLanelet goal_lane;
+  planner_data_->route_handler->getClosestLaneletWithinRoute(goal_pose, &goal_lane);
+
+  PathWithLaneId path_turn_left =
+    generateArcPath(Cl, R_Einit_l, -M_PI_2, normalizeRadian(-M_PI_2 - theta_l), false);
   path_turn_left.header = planner_data_->route_handler->getRouteHeader();
+  // Generate drivable area
+  {
+    lanelet::ConstLanelets lanes;
+    lanes.push_back(current_lane);
+    lanes.push_back(goal_lane);
+    path_turn_left.drivable_area = util::generateDrivableArea(
+      lanes, common_params.drivable_area_resolution, common_params.vehicle_length, planner_data_);
+  }
   paths_.push_back(path_turn_left);
 
-  PathWithLaneId path_turn_right = generateArcPath(Cr, R_E_min_, normalizeRadian(psi + M_PI_2 - theta_l), M_PI_2, true);
+  PathWithLaneId path_turn_right =
+    generateArcPath(Cr, R_E_min_, normalizeRadian(psi + M_PI_2 - theta_l), M_PI_2, true);
   path_turn_right.header = planner_data_->route_handler->getRouteHeader();
+  // Generate drivable area
+  {
+    lanelet::ConstLanelets lanes;
+    lanes.push_back(current_lane);
+    lanes.push_back(goal_lane);
+    path_turn_right.drivable_area = util::generateDrivableArea(
+      lanes, common_params.drivable_area_resolution, common_params.vehicle_length, planner_data_);
+  }
   paths_.push_back(path_turn_right);
 
   PathWithLaneId concat_path = concatePath(paths_.at(0), paths_.at(1));
@@ -188,8 +230,8 @@ PathWithLaneId ParallelParkingPlanner::planOneTraial()
 }
 
 PathWithLaneId ParallelParkingPlanner::generateArcPath(
-  const Pose & center, const float radius, const float start_yaw,
-  float end_yaw, const bool is_left_turn)
+  const Pose & center, const float radius, const float start_yaw, float end_yaw,
+  const bool is_left_turn)
 {
   PathWithLaneId path;
 
@@ -199,7 +241,7 @@ PathWithLaneId ParallelParkingPlanner::generateArcPath(
 
   if (is_left_turn) {
     if (end_yaw < start_yaw) end_yaw += M_PI_2;
-    while(yaw < end_yaw){
+    while (yaw < end_yaw) {
       PathPointWithLaneId p = generateArcPathPoint(center, radius, yaw, is_left_turn);
       p.point.longitudinal_velocity_mps = -0.5;
       path.points.push_back(p);
@@ -230,10 +272,10 @@ PathPointWithLaneId ParallelParkingPlanner::generateArcPathPoint(
   pose_centercoords.position.z = center.position.z;
 
   tf2::Quaternion quat;
-  if (is_left_turn){
+  if (is_left_turn) {
     quat.setRPY(0, 0, normalizeRadian(yaw - M_PI_2));
   } else {
-    quat.setRPY(0, 0,normalizeRadian(yaw + M_PI_2));
+    quat.setRPY(0, 0, normalizeRadian(yaw + M_PI_2));
   }
   pose_centercoords.orientation = tf2::toMsg(quat);
 

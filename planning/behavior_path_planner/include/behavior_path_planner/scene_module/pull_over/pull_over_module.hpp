@@ -19,6 +19,7 @@
 #include "behavior_path_planner/scene_module/pull_over/pull_over_path.hpp"
 #include "behavior_path_planner/scene_module/scene_module_interface.hpp"
 #include "behavior_path_planner/utilities.hpp"
+#include "behavior_path_planner/parallel_parking_planner/parallel_parking_planner.hpp"
 
 #include <lanelet2_extension/utility/message_conversion.hpp>
 #include <lanelet2_extension/utility/utilities.hpp>
@@ -134,6 +135,8 @@ private:
   rclcpp::Publisher<PoseStamped>::SharedPtr Cr_publisher_;
   rclcpp::Publisher<PoseStamped>::SharedPtr Cl_publisher_;
   rclcpp::Publisher<PoseArray>::SharedPtr path_pose_array_pub_;
+
+  ParallelParkingPlanner parallel_parking_planner_;  
 };
 }  // namespace behavior_path_planner
 

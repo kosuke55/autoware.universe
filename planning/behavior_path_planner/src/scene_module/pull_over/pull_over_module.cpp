@@ -151,93 +151,45 @@ BT::NodeStatus PullOverModule::updateState()
 BehaviorModuleOutput PullOverModule::plan()
 {
   RCLCPP_ERROR(getLogger(), "(%s):", __func__);
-  // auto path = util::resamplePathWithSpline(status_.pull_over_path.path, RESAMPLE_INTERVAL);
-  // PathWithLaneId path{};
+  // auto self_pose = planner_data_->self_pose->pose;
+  // auto goal_pose = planner_data_->route_handler->getGoalPose();
+  // const auto common_parameters = planner_data_->parameters;
 
-  auto self_pose = planner_data_->self_pose->pose;
-  auto goal_pose = planner_data_->route_handler->getGoalPose();
-  const auto common_parameters = planner_data_->parameters;
+  // lanelet::ConstLanelet current_lane;
+  // planner_data_->route_handler->getClosestLaneletWithinRoute(self_pose, &current_lane);
 
-  lanelet::ConstLanelet current_lane;
-  planner_data_->route_handler->getClosestLaneletWithinRoute(self_pose, &current_lane);
-  // {
-  //   PathPointWithLaneId p{};
-  //   p.point.pose = self_pose;
-  //   p.point.longitudinal_velocity_mps = -10;
-  //   p.lane_ids.push_back(current_lane.id());
-  //   path.points.push_back(p);
-  // }
+  // lanelet::ConstLanelet goal_lane;
+  // planner_data_->route_handler->getClosestLaneletWithinRoute(goal_pose, &goal_lane);
 
-  lanelet::ConstLanelet goal_lane;
-  planner_data_->route_handler->getClosestLaneletWithinRoute(goal_pose, &goal_lane);
-  // {
-  //   PathPointWithLaneId p{};
-  //   p.point.pose = goal_pose;
-  //   p.point.longitudinal_velocity_mps = 0;
-  //   p.lane_ids.push_back(goal_lane.id());
-  //   path.points.push_back(p);
-  // }
-  // RCLCPP_ERROR(getLogger(), "(%s): size:%d", __func__, path.points.size());
-  // constexpr double RESAMPLE_INTERVAL = 1.0;
-  // path = util::resamplePathWithSpline(path, RESAMPLE_INTERVAL);
-  // RCLCPP_ERROR(getLogger(), "(%s): size:%d", __func__, path.points.size());
-
-  // std::reverse(path.points.begin(), path.points.end());
-
-  ParallelParkingPlanner parallel_parking_planner;
-  parallel_parking_planner.setParams(planner_data_);
-  PathWithLaneId path = parallel_parking_planner.generate();
+  // ParallelParkingPlanner parallel_parking_planner;
+  // parallel_parking_planner.setParams(planner_data_);
+  PathWithLaneId path = parallel_parking_planner_.getCurrentPath();
 
   // Generate drivable area
-  {
-    lanelet::ConstLanelets lanes;
-    lanes.push_back(current_lane);
-    lanes.push_back(goal_lane);
-    path.drivable_area = util::generateDrivableArea(
-      lanes, common_parameters.drivable_area_resolution, common_parameters.vehicle_length,
-      planner_data_);
-  }
-  path.header = planner_data_->route_handler->getRouteHeader();
+  // {
+  //   lanelet::ConstLanelets lanes;
+  //   lanes.push_back(current_lane);
+  //   lanes.push_back(goal_lane);
+  //   path.drivable_area = util::generateDrivableArea(
+  //     lanes, common_parameters.drivable_area_resolution, common_parameters.vehicle_length,
+  //     planner_data_);
+  // }
+  // path.header = planner_data_->route_handler->getRouteHeader();
 
   if (!path.points.empty()) {
     status_.pull_over_path.path = path;
-    Cl_publisher_->publish(parallel_parking_planner.Cl_);
-    Cr_publisher_->publish(parallel_parking_planner.Cr_);
-    path_pose_array_pub_->publish(parallel_parking_planner.path_pose_array_);
+    Cl_publisher_->publish(parallel_parking_planner_.Cl_);
+    Cr_publisher_->publish(parallel_parking_planner_.Cr_);
+    path_pose_array_pub_->publish(parallel_parking_planner_.path_pose_array_);
   }
-
-  // const auto current_lanes = getCurrentLanes();
-  // const auto pull_over_lanes = getPullOverLanes(current_lanes);
-  // auto self_arc_position = lanelet::utils::getArcCoordinates(current_lanes, self_pose);
-  // auto center_line_path = planner_data_->route_handler->getCenterLinePath(
-  //   current_lanes, self_arc_position.length, self_arc_position.length + 30.0);
-  // center_line_path.drivable_area = util::generateDrivableArea(
-  //   current_lanes, common_parameters.drivable_area_resolution, common_parameters.vehicle_length,
-  //   planner_data_);
 
   BehaviorModuleOutput output;
   // output.path = std::make_shared<PathWithLaneId>(path);
   output.path = std::make_shared<PathWithLaneId>(status_.pull_over_path.path);
-  // output.path = std::make_shared<PathWithLaneId>(center_line_path);
 
-  // const auto hazard_info = getHazard(
-  //   status_.pull_over_lanes, planner_data_->self_pose->pose,
-  //   planner_data_->route_handler->getGoalPose(), planner_data_->self_odometry->twist.twist.linear.x,
-  //   parameters_.hazard_on_threshold_dis, parameters_.hazard_on_threshold_vel,
-  //   planner_data_->parameters.base_link2front);
 
-  // const auto turn_info = util::getPathTurnSignal(
-  //   status_.current_lanes, status_.pull_over_path.shifted_path, status_.pull_over_path.shift_point,
-  //   planner_data_->self_pose->pose, planner_data_->self_odometry->twist.twist.linear.x,
-  //   planner_data_->parameters, parameters_.pull_over_search_distance);
 
-  // if (hazard_info.first.command == HazardLightsCommand::ENABLE) {
-  //   output.turn_signal_info.hazard_signal.command = hazard_info.first.command;
-  //   output.turn_signal_info.signal_distance = hazard_info.second;
-  // } else {
-  //   output.turn_signal_info.turn_signal.command = turn_info.first.command;
-  //   output.turn_signal_info.signal_distance = turn_info.second;
-  // }
+
   return output;
 }
 
@@ -301,7 +253,6 @@ void PullOverModule::updatePullOverStatus()
   PullOverPath selected_path;
   std::tie(found_valid_path, found_safe_path) =
     getSafePath(pull_over_lanes, check_distance_, selected_path);
-  
 
   // Update status
   status_.is_safe = found_safe_path;
@@ -327,6 +278,30 @@ void PullOverModule::updatePullOverStatus()
   status_.start_distance = arclength_start.length;
 
   status_.pull_over_path.path.header = planner_data_->route_handler->getRouteHeader();
+
+  // とりあえずここでparral parkingのpathを生成する。
+
+
+  parallel_parking_planner_.setParams(planner_data_);
+  PathWithLaneId path = parallel_parking_planner_.generate();
+
+  // Generate drivable area
+  // {
+  //   lanelet::ConstLanelets lanes;
+  //   lanes.push_back(current_lane);
+  //   lanes.push_back(goal_lane);
+  //   path.drivable_area = util::generateDrivableArea(
+  //     lanes, common_parameters.drivable_area_resolution, common_parameters.vehicle_length,
+  //     planner_data_);
+  // }
+  // path.header = planner_data_->route_handler->getRouteHeader();
+
+  if (!path.points.empty()) {
+    Cl_publisher_->publish(parallel_parking_planner_.Cl_);
+    Cr_publisher_->publish(parallel_parking_planner_.Cr_);
+    path_pose_array_pub_->publish(parallel_parking_planner_.path_pose_array_);
+  }
+
 }
 
 PathWithLaneId PullOverModule::getReferencePath() const

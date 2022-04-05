@@ -58,6 +58,11 @@ public:
   PoseStamped Cl_;
   PoseArray path_pose_array_;
 
+  std::vector<PathWithLaneId> paths_;
+  size_t current_path_idx_ = 0;
+
+  PathWithLaneId getCurrentPath();
+
 private:
   // std::shared_ptr<PlannerData> planner_data_;
   std::shared_ptr<const PlannerData> planner_data_;
@@ -71,7 +76,6 @@ private:
   // } geometric_params_;
     float R_E_min_; // base_link
     float R_Bl_min_; // front_lef
-    std::vector<PathWithLaneId> paths_;
 
     PathWithLaneId planOneTraial();
     PathWithLaneId generateArcPath(
