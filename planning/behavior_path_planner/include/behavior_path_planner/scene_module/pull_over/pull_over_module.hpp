@@ -134,6 +134,7 @@ private:
 
   rclcpp::Publisher<PoseStamped>::SharedPtr Cr_publisher_;
   rclcpp::Publisher<PoseStamped>::SharedPtr Cl_publisher_;
+  rclcpp::Publisher<PoseStamped>::SharedPtr start_pose_publisher_;
   rclcpp::Publisher<PoseArray>::SharedPtr path_pose_array_pub_;
 
   ParallelParkingPlanner parallel_parking_planner_;  

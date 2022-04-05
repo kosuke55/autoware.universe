@@ -56,6 +56,8 @@ public:
   // debug
   PoseStamped Cr_;
   PoseStamped Cl_;
+  PoseStamped start_pose_;
+  // PoseArray debug_pose_array_;
   PoseArray path_pose_array_;
 
   std::vector<PathWithLaneId> paths_;
@@ -83,6 +85,8 @@ private:
       const bool is_left_turn);
     PathPointWithLaneId generateArcPathPoint(
       const Pose & center, const float radius, const float yaw, const bool is_left_turn);
+    lanelet::ConstLanelets getCurrentLanes() const;
+    Pose getStartPose();
 };
 
 }  // namespace behavior_path_planner

@@ -37,6 +37,7 @@ using geometry_msgs::msg::PoseStamped;
 using geometry_msgs::msg::Transform;
 using geometry_msgs::msg::TransformStamped;
 using tier4_autoware_utils::calcDistance2d;
+using tier4_autoware_utils::calcSignedArcLength;
 using tier4_autoware_utils::deg2rad;
 using tier4_autoware_utils::fromMsg;
 using tier4_autoware_utils::inverseTransformPoint;
@@ -100,6 +101,25 @@ namespace behavior_path_planner
 //   max_steer_rad_ = tier4_autoware_utils::deg2rad(max_steer_deg_);
 // }
 
+lanelet::ConstLanelets ParallelParkingPlanner::getCurrentLanes() const
+{
+  const auto & route_handler = planner_data_->route_handler;
+  const auto current_pose = planner_data_->self_pose->pose;
+  const auto common_parameters = planner_data_->parameters;
+
+  lanelet::ConstLanelet current_lane;
+  if (!route_handler->getClosestLaneletWithinRoute(current_pose, &current_lane)) {
+    // RCLCPP_ERROR(getLogger(), "failed to find closest lanelet within route!!!");
+    std::cerr << "failed to find closest lanelet within route!!!" << std::endl;
+    return {};  // TODO(Horibe) what should be returned?
+  }
+
+  // For current_lanes with desired length
+  return route_handler->getLaneletSequence(
+    current_lane, current_pose, common_parameters.backward_path_length,
+    common_parameters.forward_path_length);
+}
+
 PathWithLaneId ParallelParkingPlanner::getCurrentPath()
 {
   const auto current_path = paths_.at(current_path_idx_);
@@ -131,8 +151,25 @@ PathWithLaneId ParallelParkingPlanner::generate()
   return planOneTraial();
 }
 
+Pose ParallelParkingPlanner::getStartPose(){
+  const auto goal_pose = planner_data_->route_handler->getGoalPose();
+
+  auto current_lanes = getCurrentLanes();
+  const auto arc_coordinates = lanelet::utils::getArcCoordinates(current_lanes, goal_pose);
+
+  const float dx =
+    2 * std::sqrt(std::pow(R_E_min_, 2) - std::pow(-arc_coordinates.distance / 2 + R_E_min_, 2));
+  Pose start_pose = translateLocal(goal_pose, Eigen::Vector3d(dx, -arc_coordinates.distance, 0));
+
+  return start_pose;
+}
+
 PathWithLaneId ParallelParkingPlanner::planOneTraial()
 {
+  // debug
+  start_pose_.pose = getStartPose();
+  start_pose_.header =  planner_data_->route_handler->getRouteHeader();
+
   PathWithLaneId path;
   const auto self_pose = planner_data_->self_pose->pose;
   const auto goal_pose = planner_data_->route_handler->getGoalPose();

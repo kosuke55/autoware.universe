@@ -43,6 +43,7 @@ PullOverModule::PullOverModule(
   approval_handler_.waitApproval();
   Cl_publisher_ = node.create_publisher<PoseStamped>("~/pull_over/debug/Cl", 1);
   Cr_publisher_ = node.create_publisher<PoseStamped>("~/pull_over/debug/Cr", 1);
+  start_pose_publisher_ = node.create_publisher<PoseStamped>("~/pull_over/debug/start_pose", 1);
   path_pose_array_pub_ = node.create_publisher<PoseArray>("~/pull_over/debug/path", 1);
 }
 
@@ -180,6 +181,7 @@ BehaviorModuleOutput PullOverModule::plan()
     status_.pull_over_path.path = path;
     Cl_publisher_->publish(parallel_parking_planner_.Cl_);
     Cr_publisher_->publish(parallel_parking_planner_.Cr_);
+    start_pose_publisher_->publish(parallel_parking_planner_.start_pose_);
     path_pose_array_pub_->publish(parallel_parking_planner_.path_pose_array_);
   }
 
