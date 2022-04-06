@@ -148,6 +148,8 @@ PathWithLaneId ParallelParkingPlanner::generate()
 {
   paths_.clear();
   current_path_idx_ = 0;
+  const auto stright_path = getStraightPath();
+
   return planOneTraial();
 }
 
@@ -164,6 +166,32 @@ Pose ParallelParkingPlanner::getStartPose(){
   return start_pose;
 }
 
+PathWithLaneId ParallelParkingPlanner::getStraightPath(){
+  // get stright path before parking.
+  const auto current_lanes = getCurrentLanes();
+
+  const Pose start_pose = getStartPose();
+  const auto start_arc_position = lanelet::utils::getArcCoordinates(current_lanes, start_pose);
+
+  const Pose current_pose = planner_data_->self_pose->pose;
+  const auto crrent_arc_position = lanelet::utils::getArcCoordinates(current_lanes, current_pose);
+
+  auto path = planner_data_->route_handler->getCenterLinePath(
+    current_lanes, crrent_arc_position.length, start_arc_position.length);
+  path.header = planner_data_->route_handler->getRouteHeader();
+
+  const auto common_params = planner_data_->parameters;
+  path.drivable_area = util::generateDrivableArea(
+    current_lanes, common_params.drivable_area_resolution, common_params.vehicle_length,
+    planner_data_);
+
+  path.points[path.points.size() - 1].point.longitudinal_velocity_mps = 0;
+
+  paths_.push_back(path);
+
+  return path;
+}
+
 PathWithLaneId ParallelParkingPlanner::planOneTraial()
 {
   // debug
@@ -171,10 +199,11 @@ PathWithLaneId ParallelParkingPlanner::planOneTraial()
   start_pose_.header =  planner_data_->route_handler->getRouteHeader();
 
   PathWithLaneId path;
-  const auto self_pose = planner_data_->self_pose->pose;
+  const auto start_pose = getStartPose();
+  // const auto start_pose = planner_data_->self_pose->pose;
   const auto goal_pose = planner_data_->route_handler->getGoalPose();
 
-  const float self_yaw = tf2::getYaw(self_pose.orientation);
+  const float self_yaw = tf2::getYaw(start_pose.orientation);
   const float goal_yaw = tf2::getYaw(goal_pose.orientation);
   const float psi = normalizeRadian(self_yaw - goal_yaw);
   std::cerr << "self_yaw: " << self_yaw << "goal_yaw: " << goal_yaw << "psi: " << psi << std::endl;
@@ -183,13 +212,13 @@ PathWithLaneId ParallelParkingPlanner::planOneTraial()
   Pose Cr = translateLocal(goal_pose, Eigen::Vector3d(0, -R_E_min_, 0));
   Cr_.pose = Cr;
   Cr_.header = planner_data_->route_handler->getRouteHeader();
-  const float d_Cr_Einit = calcDistance2d(Cr, self_pose);
+  const float d_Cr_Einit = calcDistance2d(Cr, start_pose);
   std::cerr << "R_E_min_: : " << R_E_min_ << std::endl;
   std::cerr << "d_Cr_Einit: " << d_Cr_Einit << std::endl;
 
   geometry_msgs::msg::Point Cr_goalcoords = inverseTransformPoint(Cr.position, goal_pose);
   geometry_msgs::msg::Point self_point_goalcoords =
-    inverseTransformPoint(self_pose.position, goal_pose);
+    inverseTransformPoint(start_pose.position, goal_pose);
   std::cerr << "Cr_goalcoords: " << Cr_goalcoords.x << ", " << Cr_goalcoords.y << std::endl;
   std::cerr << "self_point_goalcoords: " << self_point_goalcoords.x << ", "
             << self_point_goalcoords.y << std::endl;
@@ -213,7 +242,7 @@ PathWithLaneId ParallelParkingPlanner::planOneTraial()
   const float steer_l = std::atan(common_params.wheel_base / R_Einit_l);
   std::cerr << "steer_l: " << steer_l << std::endl;
 
-  Pose Cl = translateLocal(self_pose, Eigen::Vector3d(0, R_Einit_l, 0));
+  Pose Cl = translateLocal(start_pose, Eigen::Vector3d(0, R_Einit_l, 0));
   Cl_.pose = Cl;
   Cl_.header = planner_data_->route_handler->getRouteHeader();
 
@@ -222,7 +251,7 @@ PathWithLaneId ParallelParkingPlanner::planOneTraial()
     (2 * R_Einit_l * (R_Einit_l + R_E_min_)));
 
   lanelet::ConstLanelet current_lane;
-  planner_data_->route_handler->getClosestLaneletWithinRoute(self_pose, &current_lane);
+  planner_data_->route_handler->getClosestLaneletWithinRoute(start_pose, &current_lane);
   lanelet::ConstLanelet goal_lane;
   planner_data_->route_handler->getClosestLaneletWithinRoute(goal_pose, &goal_lane);
 
@@ -252,13 +281,14 @@ PathWithLaneId ParallelParkingPlanner::planOneTraial()
   }
   paths_.push_back(path_turn_right);
 
-  PathWithLaneId concat_path = concatePath(paths_.at(0), paths_.at(1));
+  PathWithLaneId concat_path = concatePath(path_turn_right, path_turn_left);
+
   path.header = planner_data_->route_handler->getRouteHeader();
   path_pose_array_ = PathWithLaneId2PoseArray(concat_path);
 
   // geometry_msgs::msg::Transform transform_Cl;
   // transform_Cl.translation.y = R_Einit_l;
-  // const auto Cl = transformPoint(fromMsg(self_pose.position), transform_Cl);
+  // const auto Cl = transformPoint(fromMsg(start_pose.position), transform_Cl);
   // Cl_.pose = self_pose;
   // Cl_.pose.position = toMsg(Cl);
   // Cl_.header = planner_data_->route_handler->getRouteHeader();

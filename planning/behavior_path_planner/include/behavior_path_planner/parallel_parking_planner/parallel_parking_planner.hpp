@@ -87,6 +87,7 @@ private:
       const Pose & center, const float radius, const float yaw, const bool is_left_turn);
     lanelet::ConstLanelets getCurrentLanes() const;
     Pose getStartPose();
+    PathWithLaneId getStraightPath();
 };
 
 }  // namespace behavior_path_planner

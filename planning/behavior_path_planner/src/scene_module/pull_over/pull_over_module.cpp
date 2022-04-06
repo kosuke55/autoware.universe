@@ -175,7 +175,7 @@ BehaviorModuleOutput PullOverModule::plan()
   //     lanes, common_parameters.drivable_area_resolution, common_parameters.vehicle_length,
   //     planner_data_);
   // }
-  // path.header = planner_data_->route_handler->getRouteHeader();
+  path.header = planner_data_->route_handler->getRouteHeader();
 
   if (!path.points.empty()) {
     status_.pull_over_path.path = path;
@@ -186,8 +186,8 @@ BehaviorModuleOutput PullOverModule::plan()
   }
 
   BehaviorModuleOutput output;
-  // output.path = std::make_shared<PathWithLaneId>(path);
-  output.path = std::make_shared<PathWithLaneId>(status_.pull_over_path.path);
+  output.path = std::make_shared<PathWithLaneId>(path);
+  // output.path = std::make_shared<PathWithLaneId>(status_.pull_over_path.path);
 
 
 
@@ -282,8 +282,6 @@ void PullOverModule::updatePullOverStatus()
   status_.pull_over_path.path.header = planner_data_->route_handler->getRouteHeader();
 
   // とりあえずここでparral parkingのpathを生成する。
-
-
   parallel_parking_planner_.setParams(planner_data_);
   PathWithLaneId path = parallel_parking_planner_.generate();
 
