@@ -34,6 +34,8 @@
 #include <utility>
 #include <vector>
 
+using nav_msgs::msg::OccupancyGrid;
+
 namespace behavior_path_planner
 {
 PullOverModule::PullOverModule(
@@ -45,6 +47,11 @@ PullOverModule::PullOverModule(
   Cr_publisher_ = node.create_publisher<PoseStamped>("~/pull_over/debug/Cr", 1);
   start_pose_publisher_ = node.create_publisher<PoseStamped>("~/pull_over/debug/start_pose", 1);
   path_pose_array_pub_ = node.create_publisher<PoseArray>("~/pull_over/debug/path", 1);
+
+  using std::placeholders::_1;
+  occupancy_grid_sub_ = node.create_subscription<nav_msgs::msg::OccupancyGrid>(
+    "/perception/occupancy_grid_map/map", 1, std::bind(&PullOverModule::onOccupancyGrid, this, _1));
+    // "~/input/occupancy_grid", 1, std::bind(&BehaviorModuleOutput::onOccupancyGrid, this, _1));
 }
 
 BehaviorModuleOutput PullOverModule::run()
@@ -52,6 +59,11 @@ BehaviorModuleOutput PullOverModule::run()
   approval_handler_.clearWaitApproval();
   current_state_ = BT::NodeStatus::RUNNING;
   return plan();
+}
+
+void PullOverModule::onOccupancyGrid(const OccupancyGrid::ConstSharedPtr msg)
+{
+  occupancy_grid_ = msg;
 }
 
 void PullOverModule::onEntry()
