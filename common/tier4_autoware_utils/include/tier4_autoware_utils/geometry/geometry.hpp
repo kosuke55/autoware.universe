@@ -34,6 +34,50 @@
 
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
+// TODO(wep21): Remove these apis
+//              after they are implemented in ros2 geometry2.
+namespace tf2
+{
+inline void fromMsg(const geometry_msgs::msg::PoseStamped & msg, tf2::Stamped<tf2::Transform> & out)
+{
+  out.stamp_ = tf2_ros::fromMsg(msg.header.stamp);
+  out.frame_id_ = msg.header.frame_id;
+  tf2::Transform tmp;
+  fromMsg(msg.pose, tmp);
+  out.setData(tmp);
+}
+
+// Remove after this commit is released
+// https://github.com/ros2/geometry2/commit/e9da371d81e388a589540357c050e262442f1b4a
+inline geometry_msgs::msg::Point & toMsg(const tf2::Vector3 & in, geometry_msgs::msg::Point & out)
+{
+  out.x = in.getX();
+  out.y = in.getY();
+  out.z = in.getZ();
+  return out;
+}
+
+// Remove after this commit is released
+// https://github.com/ros2/geometry2/commit/e9da371d81e388a589540357c050e262442f1b4a
+inline void fromMsg(const geometry_msgs::msg::Point & in, tf2::Vector3 & out)
+{
+  out = tf2::Vector3(in.x, in.y, in.z);
+}
+
+template <>
+inline void doTransform(
+  const geometry_msgs::msg::Point & t_in, geometry_msgs::msg::Point & t_out,
+  const geometry_msgs::msg::TransformStamped & transform)
+{
+  tf2::Transform t;
+  fromMsg(transform.transform, t);
+  tf2::Vector3 v_in;
+  fromMsg(t_in, v_in);
+  tf2::Vector3 v_out = t * v_in;
+  toMsg(v_out, t_out);
+}
+}  // namespace tf2
+
 namespace tier4_autoware_utils
 {
 template <class T>
@@ -338,6 +382,70 @@ T transformVector(const T & points, const geometry_msgs::msg::Transform & transf
   return transformed;
 }
 
+inline geometry_msgs::msg::Pose transformPose(
+  const geometry_msgs::msg::Pose & pose, const geometry_msgs::msg::TransformStamped & transform)
+{
+  geometry_msgs::msg::Pose transformed_pose;
+  tf2::doTransform(pose, transformed_pose, transform);
+
+  return transformed_pose;
+}
+
+inline geometry_msgs::msg::Pose transformPose(
+  const geometry_msgs::msg::Pose & pose, geometry_msgs::msg::Transform & transform)
+{
+  geometry_msgs::msg::TransformStamped transform_stamped;
+  transform_stamped.transform = transform;
+
+  return transformPose(pose, transform_stamped);
+}
+
+inline geometry_msgs::msg::Pose transformPose(
+  const geometry_msgs::msg::Pose & pose, const geometry_msgs::msg::Pose & pose_transform)
+{
+  tf2::Transform transform;
+  tf2::convert(pose_transform, transform);
+
+  geometry_msgs::msg::TransformStamped transform_msg;
+  transform_msg.transform = tf2::toMsg(transform);
+
+  return transformPose(pose, transform_msg);
+}
+
+// Transform pose in world coordinates to local coordinates
+inline geometry_msgs::msg::Pose inverseTransformPose(
+  const geometry_msgs::msg::Pose & pose, const geometry_msgs::msg::TransformStamped & transform)
+{
+  tf2::Transform tf;
+  tf2::fromMsg(transform, tf);
+  geometry_msgs::msg::TransformStamped transform_stamped;
+  transform_stamped.transform = tf2::toMsg(tf.inverse());
+
+  return transformPose(pose, transform_stamped);
+}
+
+// Transform pose in world coordinates to local coordinates
+inline geometry_msgs::msg::Pose inverseTransformPose(
+  const geometry_msgs::msg::Pose & pose, const geometry_msgs::msg::Transform & transform)
+{
+  tf2::Transform tf;
+  tf2::fromMsg(transform, tf);
+  geometry_msgs::msg::TransformStamped transform_stamped;
+  transform_stamped.transform = tf2::toMsg(tf.inverse());
+
+  return transformPose(pose, transform_stamped);
+}
+
+// Transform pose in world coordinates to local coordinates
+inline geometry_msgs::msg::Pose inverseTransformPose(
+  const geometry_msgs::msg::Pose & pose, const geometry_msgs::msg::Pose & transform_pose)
+{
+  tf2::Transform transform;
+  tf2::convert(transform_pose, transform);
+
+  return inverseTransformPose(pose, tf2::toMsg(transform));
+}
+
 inline geometry_msgs::msg::Pose translateLocal(
   const geometry_msgs::msg::Pose pose, const Eigen::Vector3d translate)
 {
@@ -361,11 +469,10 @@ inline geometry_msgs::msg::Pose translateLocal(
   return translateLocal(pose, Eigen::Vector3d(translate.x, translate.y, translate.z));
 }
 
+// Transform point in world coordinates to local coordinates
 inline Eigen::Vector3d inverseTransformPoint(
-  const Eigen::Vector3d point,
-  const geometry_msgs::msg::Pose pose)
+  const Eigen::Vector3d point, const geometry_msgs::msg::Pose pose)
 {
-  // Transform point in world coordinates to local coordinates
   const Eigen::Quaterniond q(
     pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z);
   const Eigen::Matrix3d R = q.normalized().toRotationMatrix();
@@ -376,9 +483,9 @@ inline Eigen::Vector3d inverseTransformPoint(
   return local_point;
 }
 
+// Transform point in world coordinates to local coordinates
 inline geometry_msgs::msg::Point inverseTransformPoint(
-  const geometry_msgs::msg::Point point,
-  const geometry_msgs::msg::Pose pose)
+  const geometry_msgs::msg::Point point, const geometry_msgs::msg::Pose pose)
 {
   const Eigen::Vector3d local_vec =
     inverseTransformPoint(Eigen::Vector3d(point.x, point.y, point.z), pose);
@@ -388,7 +495,6 @@ inline geometry_msgs::msg::Point inverseTransformPoint(
   local_point.z = local_vec.z();
   return local_point;
 }
-
 
 inline double calcCurvature(
   const geometry_msgs::msg::Point & p1, const geometry_msgs::msg::Point & p2,
