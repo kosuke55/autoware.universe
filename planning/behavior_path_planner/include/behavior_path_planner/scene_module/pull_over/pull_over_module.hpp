@@ -35,10 +35,13 @@
 #include <utility>
 #include <vector>
 
+using nav_msgs::msg::OccupancyGrid;
+
 namespace behavior_path_planner
 {
 using autoware_auto_vehicle_msgs::msg::HazardLightsCommand;
 using geometry_msgs::msg::PoseArray;
+using visualization_msgs::msg::MarkerArray;
 struct PullOverParameters
 {
   double min_stop_distance;
@@ -131,13 +134,19 @@ private:
   bool isNearEndOfLane() const;
   bool isCurrentSpeedLow() const;
   bool hasFinishedPullOver() const;
+  void onOccupancyGrid(const OccupancyGrid::ConstSharedPtr msg);
+  bool researchGoal();
+
+  OccupancyGrid::ConstSharedPtr occupancy_grid_;
+  rclcpp::Subscription<OccupancyGrid>::SharedPtr occupancy_grid_sub_;
 
   rclcpp::Publisher<PoseStamped>::SharedPtr Cr_publisher_;
   rclcpp::Publisher<PoseStamped>::SharedPtr Cl_publisher_;
   rclcpp::Publisher<PoseStamped>::SharedPtr start_pose_publisher_;
   rclcpp::Publisher<PoseArray>::SharedPtr path_pose_array_pub_;
+  rclcpp::Publisher<MarkerArray>::SharedPtr parking_area_pub_;
 
-  ParallelParkingPlanner parallel_parking_planner_;  
+  ParallelParkingPlanner parallel_parking_planner_;
 };
 }  // namespace behavior_path_planner
 

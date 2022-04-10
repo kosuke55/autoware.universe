@@ -35,6 +35,7 @@ ament_auto_add_library(behavior_path_planner_node SHARED
   src/scene_module/pull_out/pull_out_module.cpp
   src/scene_module/pull_out/util.cpp
   src/parallel_parking_planner/parallel_parking_planner.cpp
+  src/occupancy_grid_map/occupancy_grid_map.cpp
 )
 
 target_link_libraries(behavior_path_planner_node

@@ -17,6 +17,7 @@
 #include "behavior_path_planner/behavior_path_planner_node.hpp"
 #include "behavior_path_planner/path_shifter/path_shifter.hpp"
 #include "behavior_path_planner/parallel_parking_planner/parallel_parking_planner.hpp"
+#include "behavior_path_planner/occupancy_grid_map/occupancy_grid_map.hpp"
 #include "behavior_path_planner/path_utilities.hpp"
 #include "behavior_path_planner/scene_module/avoidance/debug.hpp"
 #include "behavior_path_planner/scene_module/pull_over/util.hpp"
@@ -34,6 +35,16 @@
 #include <utility>
 #include <vector>
 
+using nav_msgs::msg::OccupancyGrid;
+using tier4_autoware_utils::transformPose;
+using tier4_autoware_utils::inverseTransformPose;
+using tier4_autoware_utils::translateLocal;
+
+using tier4_autoware_utils::createDefaultMarker;
+using tier4_autoware_utils::createMarkerColor;
+using tier4_autoware_utils::createMarkerScale;
+using tier4_autoware_utils::createPoint;
+
 namespace behavior_path_planner
 {
 PullOverModule::PullOverModule(
@@ -45,6 +56,17 @@ PullOverModule::PullOverModule(
   Cr_publisher_ = node.create_publisher<PoseStamped>("~/pull_over/debug/Cr", 1);
   start_pose_publisher_ = node.create_publisher<PoseStamped>("~/pull_over/debug/start_pose", 1);
   path_pose_array_pub_ = node.create_publisher<PoseArray>("~/pull_over/debug/path", 1);
+  parking_area_pub_ = node.create_publisher<MarkerArray>("~/pull_over/parking_area", 1);
+
+  using std::placeholders::_1;
+  occupancy_grid_sub_ = node.create_subscription<nav_msgs::msg::OccupancyGrid>(
+    "/perception/occupancy_grid_map/map", 1, std::bind(&PullOverModule::onOccupancyGrid, this, _1));
+    // "~/input/occupancy_grid", 1, std::bind(&BehaviorModuleOutput::onOccupancyGrid, this, _1));
+}
+
+void PullOverModule::onOccupancyGrid(const OccupancyGrid::ConstSharedPtr msg)
+{
+  occupancy_grid_ = msg;
 }
 
 BehaviorModuleOutput PullOverModule::run()
@@ -130,6 +152,61 @@ bool PullOverModule::isExecutionReady() const
   // return found_safe_path;
 }
 
+bool PullOverModule::researchGoal(){
+  const float serach_range = 50;
+  auto goal_pose = planner_data_->route_handler->getGoalPose();
+
+  CommonParam common_param;
+  common_param.vehicle_shape.length = planner_data_->parameters.vehicle_length;
+  common_param.vehicle_shape.width = planner_data_->parameters.vehicle_width;
+  common_param.vehicle_shape.base2back = planner_data_->parameters.base_link2rear;
+  common_param.theta_size = 360;
+  common_param.obstacle_threshold = 50;
+
+  OccupancyGridMap occupancy_grid_map(common_param);
+  occupancy_grid_map.setMap(*occupancy_grid_);
+
+  const Pose goal_pose_local = global2local(*occupancy_grid_, goal_pose);
+  float dx = 0;
+  while (dx < serach_range) {
+    Pose serach_pose = translateLocal(goal_pose_local, Eigen::Vector3d(dx, 0, 0));
+    if(occupancy_grid_map.detectCollision(pose2index(*occupancy_grid_, serach_pose, common_param.theta_size))){
+      break;
+    };
+    dx += 0.05;
+  }
+
+  // tmp debug
+  visualization_msgs::msg::MarkerArray msg;
+  rclcpp::Time current_time = planner_data_->route_handler->getRouteHeader().stamp;
+
+  auto marker = createDefaultMarker(
+    "map", current_time, "collision_polygons", 0, visualization_msgs::msg::Marker::LINE_STRIP,
+    createMarkerScale(0.05, 0.0, 0.0), createMarkerColor(0.0, 1.0, 0.0, 0.999));
+
+  // create debug area maker
+  auto p_left_front = translateLocal(goal_pose, Eigen::Vector3d(dx + planner_data_->parameters.base_link2front, planner_data_->parameters.vehicle_width / 2, 0)).position;
+  marker.points.push_back(createPoint(p_left_front.x, p_left_front.y, p_left_front.z));
+
+  auto p_right_front = translateLocal(goal_pose, Eigen::Vector3d(dx + planner_data_->parameters.base_link2front, -planner_data_->parameters.vehicle_width / 2, 0)).position;
+  marker.points.push_back(createPoint(p_right_front.x, p_right_front.y, p_right_front.z));
+
+  auto p_right_back = translateLocal(goal_pose, Eigen::Vector3d(dx - planner_data_->parameters.base_link2rear, -planner_data_->parameters.vehicle_width / 2, 0)).position;
+  marker.points.push_back(createPoint(p_right_back.x, p_right_back.y, p_right_back.z));
+
+  auto p_left_back = translateLocal(goal_pose, Eigen::Vector3d(dx - planner_data_->parameters.base_link2rear, planner_data_->parameters.vehicle_width / 2, 0)).position;
+  marker.points.push_back(createPoint(p_left_back.x, p_left_back.y, p_left_back.z));
+  marker.points.push_back(createPoint(p_left_front.x, p_left_front.y, p_left_front.z));
+
+  visualization_msgs::msg::MarkerArray marker_array;
+  marker_array.markers.push_back(marker);
+  parking_area_pub_->publish(marker_array);
+
+  return true;
+
+  // auto goal_pose_local = inverseTransformPose(goal_pose, occupancy_grid_->info.origin);
+}
+
 BT::NodeStatus PullOverModule::updateState()
 {
   RCLCPP_ERROR(getLogger(), "(%s):", __func__);
@@ -151,6 +228,7 @@ BT::NodeStatus PullOverModule::updateState()
 
 BehaviorModuleOutput PullOverModule::plan()
 {
+  auto res = researchGoal();
   RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   // auto self_pose = planner_data_->self_pose->pose;
   // auto goal_pose = planner_data_->route_handler->getGoalPose();
