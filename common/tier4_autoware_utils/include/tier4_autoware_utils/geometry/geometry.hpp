@@ -76,6 +76,22 @@ inline void doTransform(
   tf2::Vector3 v_out = t * v_in;
   toMsg(v_out, t_out);
 }
+
+template <>
+inline void doTransform(
+  const geometry_msgs::msg::Pose & t_in, geometry_msgs::msg::Pose & t_out,
+  const geometry_msgs::msg::TransformStamped & transform)
+{
+  tf2::Vector3 v;
+  fromMsg(t_in.position, v);
+  tf2::Quaternion r;
+  fromMsg(t_in.orientation, r);
+
+  tf2::Transform t;
+  fromMsg(transform.transform, t);
+  tf2::Transform v_out = t * tf2::Transform(r, v);
+  toMsg(v_out, t_out);
+}
 }  // namespace tf2
 
 namespace tier4_autoware_utils
