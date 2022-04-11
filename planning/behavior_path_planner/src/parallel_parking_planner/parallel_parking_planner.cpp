@@ -144,17 +144,17 @@ PathWithLaneId ParallelParkingPlanner::getCurrentPath()
   return paths_.at(current_path_idx_);
 }
 
-PathWithLaneId ParallelParkingPlanner::generate()
+PathWithLaneId ParallelParkingPlanner::plan(const Pose goal_pose)
 {
   paths_.clear();
   current_path_idx_ = 0;
-  const auto stright_path = getStraightPath();
+  const auto stright_path = getStraightPath(goal_pose);
 
-  return planOneTraial();
+  return planOneTraial(goal_pose);
 }
 
-Pose ParallelParkingPlanner::getStartPose(){
-  const auto goal_pose = planner_data_->route_handler->getGoalPose();
+Pose ParallelParkingPlanner::getStartPose(const Pose goal_pose){
+  // const auto goal_pose = planner_data_->route_handler->getGoalPose();
 
   auto current_lanes = util::getCurrentLanes(planner_data_);
   const auto arc_coordinates = lanelet::utils::getArcCoordinates(current_lanes, goal_pose);
@@ -166,11 +166,14 @@ Pose ParallelParkingPlanner::getStartPose(){
   return start_pose;
 }
 
-PathWithLaneId ParallelParkingPlanner::getStraightPath(){
+PathWithLaneId ParallelParkingPlanner::getStraightPath(const Pose goal_pose){
   // get stright path before parking.
-  const auto current_lanes = util::getCurrentLanes(planner_data_);
+  auto current_lanes = util::getCurrentLanes(planner_data_);
+  const auto next_lanes = planner_data_->route_handler->getNextLanelets(current_lanes.back());
 
-  const Pose start_pose = getStartPose();
+  current_lanes.push_back(next_lanes.front());
+
+  const Pose start_pose = getStartPose(goal_pose);
   const auto start_arc_position = lanelet::utils::getArcCoordinates(current_lanes, start_pose);
 
   const Pose current_pose = planner_data_->self_pose->pose;
@@ -185,23 +188,23 @@ PathWithLaneId ParallelParkingPlanner::getStraightPath(){
     current_lanes, common_params.drivable_area_resolution, common_params.vehicle_length,
     planner_data_);
 
-  path.points[path.points.size() - 1].point.longitudinal_velocity_mps = 0;
+  path.points.back().point.longitudinal_velocity_mps = 0;
 
   paths_.push_back(path);
 
   return path;
 }
 
-PathWithLaneId ParallelParkingPlanner::planOneTraial()
+PathWithLaneId ParallelParkingPlanner::planOneTraial(const Pose goal_pose)
 {
   // debug
-  start_pose_.pose = getStartPose();
+  start_pose_.pose = getStartPose(goal_pose);
   start_pose_.header =  planner_data_->route_handler->getRouteHeader();
 
   PathWithLaneId path;
-  const auto start_pose = getStartPose();
+  const auto start_pose = getStartPose(goal_pose);
   // const auto start_pose = planner_data_->self_pose->pose;
-  const auto goal_pose = planner_data_->route_handler->getGoalPose();
+  // const auto goal_pose = planner_data_->route_handler->getGoalPose();
 
   const float self_yaw = tf2::getYaw(start_pose.orientation);
   const float goal_yaw = tf2::getYaw(goal_pose.orientation);

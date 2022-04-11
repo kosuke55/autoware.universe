@@ -60,6 +60,7 @@ PullOverModule::PullOverModule(
   Cl_publisher_ = node.create_publisher<PoseStamped>("~/pull_over/debug/Cl", 1);
   Cr_publisher_ = node.create_publisher<PoseStamped>("~/pull_over/debug/Cr", 1);
   start_pose_publisher_ = node.create_publisher<PoseStamped>("~/pull_over/debug/start_pose", 1);
+  goal_pose_publisher_ = node.create_publisher<PoseStamped>("~/pull_over/debug/goal_pose", 1);
   path_pose_array_pub_ = node.create_publisher<PoseArray>("~/pull_over/debug/path", 1);
   parking_area_pub_ = node.create_publisher<MarkerArray>("~/pull_over/parking_area", 1);
 
@@ -190,13 +191,12 @@ Pose PullOverModule::getRefinedGoal(){
     planner_data_->route_handler->getShoulderLanelets(), planner_data_->self_pose->pose,
     &closest_shoulder_lanelet);
 
-  // const double lane_yaw = lanelet::utils::getLaneletAngle(goal_lane, goal_pose.position);
   Pose refined_goal_pose = lanelet::utils::getClosestCenterPose(closest_shoulder_lanelet, goal_pose.position);
-  // refined_goal_pose.orientation = createQuaternionFromYaw(lane_yaw);
+
   return refined_goal_pose;
 }
 
-bool PullOverModule::researchGoal(){
+Pose PullOverModule::researchGoal(){
   const float serach_range = 50;
   auto goal_pose = getRefinedGoal();
 
@@ -225,7 +225,7 @@ bool PullOverModule::researchGoal(){
     createParkingAreaMarker(goal_pose, translateLocal(goal_pose, Eigen::Vector3d(dx, 0, 0))));
   parking_area_pub_->publish(marker_array);
 
-  return true;
+  return goal_pose;
 
   // auto goal_pose_local = inverseTransformPose(goal_pose, occupancy_grid_->info.origin);
 }
@@ -251,8 +251,11 @@ BT::NodeStatus PullOverModule::updateState()
 
 BehaviorModuleOutput PullOverModule::plan()
 {
-  auto res = researchGoal();
   RCLCPP_ERROR(getLogger(), "(%s):", __func__);
+
+  Pose goal_pose = researchGoal();
+  goal_pose_.pose = goal_pose;
+  goal_pose_.header =  planner_data_->route_handler->getRouteHeader();
   // auto self_pose = planner_data_->self_pose->pose;
   // auto goal_pose = planner_data_->route_handler->getGoalPose();
   // const auto common_parameters = planner_data_->parameters;
@@ -283,6 +286,7 @@ BehaviorModuleOutput PullOverModule::plan()
     Cl_publisher_->publish(parallel_parking_planner_.Cl_);
     Cr_publisher_->publish(parallel_parking_planner_.Cr_);
     start_pose_publisher_->publish(parallel_parking_planner_.start_pose_);
+    goal_pose_publisher_->publish(goal_pose_);
     path_pose_array_pub_->publish(parallel_parking_planner_.path_pose_array_);
   }
 
@@ -380,8 +384,9 @@ void PullOverModule::updatePullOverStatus()
   status_.pull_over_path.path.header = planner_data_->route_handler->getRouteHeader();
 
   // とりあえずここでparral parkingのpathを生成する。
+  Pose goal_pose = researchGoal();
   parallel_parking_planner_.setParams(planner_data_);
-  PathWithLaneId path = parallel_parking_planner_.generate();
+  PathWithLaneId path = parallel_parking_planner_.plan(goal_pose);
 
   // Generate drivable area
   // {
