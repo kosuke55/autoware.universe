@@ -24,6 +24,7 @@
 #include <lanelet2_core/primitives/BasicRegulatoryElements.h>
 #include <lanelet2_traffic_rules/TrafficRules.h>
 #include <lanelet2_traffic_rules/TrafficRulesFactory.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 #include <algorithm>
 #include <limits>
@@ -594,6 +595,56 @@ bool isInLanelet(
     return true;
   }
   return false;
+}
+
+geometry_msgs::msg::Pose getClosestCenterPose(
+  const lanelet::ConstLanelet & lanelet, const geometry_msgs::msg::Point & search_point)
+{
+  lanelet::BasicPoint2d llt_search_point(search_point.x, search_point.y);
+  lanelet::ConstLineString3d segment = getClosestSegment(llt_search_point, lanelet.centerline());
+
+
+  // const float a = (segment.front().y() - segment.back().y()) / (segment.front().x() - segment.back().x());
+  // const float b =
+  //   (segment.back().y() * segment.front().x() - segment.back().x() * segment.front().y()) /
+  //   (segment.front().x() - segment.back().x());
+  // const float x = (a * (search_point.y - b) + search_point.x) / (std::pow(a, 2) + 1);
+  // const float y = a * (a * (search_point.y - b) + search_point.x) / (std::pow(a, 2) + 1) + b;
+
+
+  const Eigen::Vector2d direction((segment.back().basicPoint2d() - segment.front().basicPoint2d()).normalized());
+  const Eigen::Vector2d xf(segment.front().basicPoint2d());
+  const Eigen::Vector2d x(search_point.x, search_point.y);
+  std::cerr << "direction: \n" << direction << std::endl;
+  std::cerr << "xf: \n" << xf << std::endl;
+  std::cerr << "x: \n" << x << std::endl;
+  const Eigen::Vector2d p = xf + (x - xf).dot(direction) * direction;
+
+  // lanelet::BasicPoint3d llt_search_point(search_point.x, search_point.y, search_point.z);
+  // double min_dist = std::numeric_limits<double>::max();
+  // size_t min_idx = 0;
+  // for (size_t i = 0; i < lanelet.centerline().size(); ++i) {
+  //   const float dist = lanelet::geometry::distance(lanelet.centerline()[i], llt_search_point);
+  //   if (dist < min_dist) {
+  //     min_dist = dist;
+  //     min_idx = i;
+  //   }
+  // }
+
+  geometry_msgs::msg::Pose closest_pose;
+  // closest_pose.position.x = lanelet.centerline()[min_idx].x();
+  // closest_pose.position.y = lanelet.centerline()[min_idx].y();
+  closest_pose.position.x = p.x();
+  closest_pose.position.y = p.y();
+  closest_pose.position.z = search_point.z;
+  // closest_pose.position.z = lanelet.centerline()[min_idx].z();
+
+  const float lane_yaw = getLaneletAngle(lanelet, search_point);
+  tf2::Quaternion q;
+  q.setRPY(0, 0, lane_yaw);
+  closest_pose.orientation = tf2::toMsg(q);
+
+  return closest_pose;
 }
 
 }  // namespace utils

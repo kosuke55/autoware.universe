@@ -41,6 +41,7 @@ namespace behavior_path_planner
 {
 using autoware_auto_vehicle_msgs::msg::HazardLightsCommand;
 using geometry_msgs::msg::PoseArray;
+using visualization_msgs::msg::Marker;
 using visualization_msgs::msg::MarkerArray;
 struct PullOverParameters
 {
@@ -135,6 +136,8 @@ private:
   bool isCurrentSpeedLow() const;
   bool hasFinishedPullOver() const;
   void onOccupancyGrid(const OccupancyGrid::ConstSharedPtr msg);
+  Marker createParkingAreaMarker(const Pose back_pose, const Pose front_pose);
+  Pose getRefinedGoal();
   bool researchGoal();
 
   OccupancyGrid::ConstSharedPtr occupancy_grid_;

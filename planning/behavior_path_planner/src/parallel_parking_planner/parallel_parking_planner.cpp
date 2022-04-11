@@ -101,24 +101,24 @@ namespace behavior_path_planner
 //   max_steer_rad_ = tier4_autoware_utils::deg2rad(max_steer_deg_);
 // }
 
-lanelet::ConstLanelets ParallelParkingPlanner::getCurrentLanes() const
-{
-  const auto & route_handler = planner_data_->route_handler;
-  const auto current_pose = planner_data_->self_pose->pose;
-  const auto common_parameters = planner_data_->parameters;
+// lanelet::ConstLanelets ParallelParkingPlanner::getCurrentLanes() const
+// {
+//   const auto & route_handler = planner_data_->route_handler;
+//   const auto current_pose = planner_data_->self_pose->pose;
+//   const auto common_parameters = planner_data_->parameters;
 
-  lanelet::ConstLanelet current_lane;
-  if (!route_handler->getClosestLaneletWithinRoute(current_pose, &current_lane)) {
-    // RCLCPP_ERROR(getLogger(), "failed to find closest lanelet within route!!!");
-    std::cerr << "failed to find closest lanelet within route!!!" << std::endl;
-    return {};  // TODO(Horibe) what should be returned?
-  }
+//   lanelet::ConstLanelet current_lane;
+//   if (!route_handler->getClosestLaneletWithinRoute(current_pose, &current_lane)) {
+//     // RCLCPP_ERROR(getLogger(), "failed to find closest lanelet within route!!!");
+//     std::cerr << "failed to find closest lanelet within route!!!" << std::endl;
+//     return {};  // TODO(Horibe) what should be returned?
+//   }
 
-  // For current_lanes with desired length
-  return route_handler->getLaneletSequence(
-    current_lane, current_pose, common_parameters.backward_path_length,
-    common_parameters.forward_path_length);
-}
+//   // For current_lanes with desired length
+//   return route_handler->getLaneletSequence(
+//     current_lane, current_pose, common_parameters.backward_path_length,
+//     common_parameters.forward_path_length);
+// }
 
 PathWithLaneId ParallelParkingPlanner::getCurrentPath()
 {
@@ -156,7 +156,7 @@ PathWithLaneId ParallelParkingPlanner::generate()
 Pose ParallelParkingPlanner::getStartPose(){
   const auto goal_pose = planner_data_->route_handler->getGoalPose();
 
-  auto current_lanes = getCurrentLanes();
+  auto current_lanes = util::getCurrentLanes(planner_data_);
   const auto arc_coordinates = lanelet::utils::getArcCoordinates(current_lanes, goal_pose);
 
   const float dx =
@@ -168,7 +168,7 @@ Pose ParallelParkingPlanner::getStartPose(){
 
 PathWithLaneId ParallelParkingPlanner::getStraightPath(){
   // get stright path before parking.
-  const auto current_lanes = getCurrentLanes();
+  const auto current_lanes = util::getCurrentLanes(planner_data_);
 
   const Pose start_pose = getStartPose();
   const auto start_arc_position = lanelet::utils::getArcCoordinates(current_lanes, start_pose);

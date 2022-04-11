@@ -85,7 +85,7 @@ private:
       const bool is_left_turn);
     PathPointWithLaneId generateArcPathPoint(
       const Pose & center, const float radius, const float yaw, const bool is_left_turn);
-    lanelet::ConstLanelets getCurrentLanes() const;
+    // lanelet::ConstLanelets getCurrentLanes() const;
     Pose getStartPose();
     PathWithLaneId getStraightPath();
 };
