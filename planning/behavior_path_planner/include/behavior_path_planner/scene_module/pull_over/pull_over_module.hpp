@@ -84,6 +84,12 @@ struct PullOverStatus
   double start_distance;
 };
 
+struct PullOverArea
+{
+  Pose start_pose;
+  Pose end_pose;
+};
+
 class PullOverModule : public SceneModuleInterface
 {
 public:
@@ -136,7 +142,7 @@ private:
   bool isCurrentSpeedLow() const;
   bool hasFinishedPullOver() const;
   void onOccupancyGrid(const OccupancyGrid::ConstSharedPtr msg);
-  Marker createParkingAreaMarker(const Pose back_pose, const Pose front_pose);
+  Marker createParkingAreaMarker(const Pose back_pose, const Pose front_pose, const int32_t id);
   Pose getRefinedGoal();
   Pose researchGoal();
 
@@ -152,6 +158,7 @@ private:
 
   ParallelParkingPlanner parallel_parking_planner_;
   PoseStamped goal_pose_;
+  std::vector<PullOverArea> pull_over_areas_;
 };
 }  // namespace behavior_path_planner
 

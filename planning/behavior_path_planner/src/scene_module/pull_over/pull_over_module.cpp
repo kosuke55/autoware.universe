@@ -158,10 +158,10 @@ bool PullOverModule::isExecutionReady() const
   // return found_safe_path;
 }
 
-Marker PullOverModule::createParkingAreaMarker(const Pose back_pose, const Pose front_pose){
+Marker PullOverModule::createParkingAreaMarker(const Pose back_pose, const Pose front_pose, const int32_t id){
   Marker marker = createDefaultMarker(
-    "map", planner_data_->route_handler->getRouteHeader().stamp, "collision_polygons", 0,
-    visualization_msgs::msg::Marker::LINE_STRIP, createMarkerScale(0.05, 0.0, 0.0),
+    "map", planner_data_->route_handler->getRouteHeader().stamp, "collision_polygons", id,
+    visualization_msgs::msg::Marker::LINE_STRIP, createMarkerScale(0.1, 0.0, 0.0),
     createMarkerColor(0.0, 1.0, 0.0, 0.999));
 
   // create debug area maker
@@ -197,7 +197,8 @@ Pose PullOverModule::getRefinedGoal(){
 }
 
 Pose PullOverModule::researchGoal(){
-  const float serach_range = 50;
+  const float forward_serach_length = 20;
+  const float backward_search_length = 20;
   auto goal_pose = getRefinedGoal();
 
   CommonParam common_param;
@@ -211,18 +212,43 @@ Pose PullOverModule::researchGoal(){
   occupancy_grid_map.setMap(*occupancy_grid_);
 
   const Pose goal_pose_local = global2local(*occupancy_grid_, goal_pose);
-  float dx = 0;
-  while (dx < serach_range) {
-    Pose serach_pose = translateLocal(goal_pose_local, Eigen::Vector3d(dx, 0, 0));
-    if(occupancy_grid_map.detectCollision(pose2index(*occupancy_grid_, serach_pose, common_param.theta_size))){
+  float dx = -backward_search_length;
+  bool prev_is_collided = false;
+  pull_over_areas_.clear();
+  // PullOverArea pull_over_area;
+  // pull_over_area.start_pose = goal_pose;
+  Pose start_pose = translateLocal(goal_pose, Eigen::Vector3d(dx, 0, 0));
+  while (true) {
+    if (dx > forward_serach_length) {
+      Pose end_pose = translateLocal(goal_pose, Eigen::Vector3d(dx, 0, 0));
+      std::cerr << "area s: " << start_pose.position.x << " e: " << end_pose.position.x << std::endl;
+      pull_over_areas_.push_back(PullOverArea{start_pose, end_pose});
       break;
+    }
+    Pose serach_pose = translateLocal(goal_pose_local, Eigen::Vector3d(dx, 0, 0));
+    bool is_collided = occupancy_grid_map.detectCollision(
+      pose2index(*occupancy_grid_, serach_pose, common_param.theta_size));
+    if (!prev_is_collided && is_collided) {
+      Pose end_pose = translateLocal(goal_pose, Eigen::Vector3d(dx, 0, 0));
+      std::cerr << "area s: " << start_pose.position.x << " e: " << end_pose.position.x << std::endl;
+      pull_over_areas_.push_back(PullOverArea{start_pose, end_pose});
     };
+    if (prev_is_collided && !is_collided) {
+      start_pose = translateLocal(goal_pose, Eigen::Vector3d(dx, 0, 0));
+    };
+    prev_is_collided = is_collided;
     dx += 0.05;
   }
 
   MarkerArray marker_array;
-  marker_array.markers.push_back(
-    createParkingAreaMarker(goal_pose, translateLocal(goal_pose, Eigen::Vector3d(dx, 0, 0))));
+  std::cerr << "areas size: " << pull_over_areas_.size() << std::endl;
+  for (int32_t i = 0; i < pull_over_areas_.size(); i++) {
+    marker_array.markers.push_back(createParkingAreaMarker(
+      pull_over_areas_.at(i).start_pose, pull_over_areas_.at(i).end_pose, i));
+  }
+  // marker_array.markers.push_back(
+  //   createParkingAreaMarker(goal_pose, translateLocal(goal_pose, Eigen::Vector3d(dx, 0, 0))));
+
   parking_area_pub_->publish(marker_array);
 
   return goal_pose;
