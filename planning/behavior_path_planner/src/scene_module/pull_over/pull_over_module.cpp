@@ -45,6 +45,7 @@ using tier4_autoware_utils::createDefaultMarker;
 using tier4_autoware_utils::createMarkerColor;
 using tier4_autoware_utils::createMarkerScale;
 using tier4_autoware_utils::createPoint;
+using tier4_autoware_utils::calcDistance2d;
 
 // namespace bg = boost::geometry;
 // using Point = bg::model::d2::point_xy<double>;
@@ -221,8 +222,9 @@ Pose PullOverModule::researchGoal(){
   while (true) {
     if (dx > forward_serach_length) {
       Pose end_pose = translateLocal(goal_pose, Eigen::Vector3d(dx, 0, 0));
-      std::cerr << "area s: " << start_pose.position.x << " e: " << end_pose.position.x << std::endl;
-      pull_over_areas_.push_back(PullOverArea{start_pose, end_pose});
+      if (calcDistance2d(start_pose, end_pose) > planner_data_->parameters.vehicle_length) {
+        pull_over_areas_.push_back(PullOverArea{start_pose, end_pose});
+      }
       break;
     }
     Pose serach_pose = translateLocal(goal_pose_local, Eigen::Vector3d(dx, 0, 0));
@@ -230,8 +232,9 @@ Pose PullOverModule::researchGoal(){
       pose2index(*occupancy_grid_, serach_pose, common_param.theta_size));
     if (!prev_is_collided && is_collided) {
       Pose end_pose = translateLocal(goal_pose, Eigen::Vector3d(dx, 0, 0));
-      std::cerr << "area s: " << start_pose.position.x << " e: " << end_pose.position.x << std::endl;
-      pull_over_areas_.push_back(PullOverArea{start_pose, end_pose});
+      if (calcDistance2d(start_pose, end_pose) > planner_data_->parameters.vehicle_length) {
+        pull_over_areas_.push_back(PullOverArea{start_pose, end_pose});
+      }
     };
     if (prev_is_collided && !is_collided) {
       start_pose = translateLocal(goal_pose, Eigen::Vector3d(dx, 0, 0));
