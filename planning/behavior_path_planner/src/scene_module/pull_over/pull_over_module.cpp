@@ -200,7 +200,6 @@ Pose PullOverModule::getRefinedGoal(){
 Pose PullOverModule::researchGoal(){
   const float forward_serach_length = 20;
   const float backward_search_length = 20;
-  auto goal_pose = getRefinedGoal();
 
   CommonParam common_param;
   common_param.vehicle_shape.length = planner_data_->parameters.vehicle_length;
@@ -212,18 +211,18 @@ Pose PullOverModule::researchGoal(){
   OccupancyGridMap occupancy_grid_map(common_param);
   occupancy_grid_map.setMap(*occupancy_grid_);
 
+  auto goal_pose = getRefinedGoal();
   const Pose goal_pose_local = global2local(*occupancy_grid_, goal_pose);
   float dx = -backward_search_length;
   bool prev_is_collided = false;
   pull_over_areas_.clear();
-  // PullOverArea pull_over_area;
-  // pull_over_area.start_pose = goal_pose;
   Pose start_pose = translateLocal(goal_pose, Eigen::Vector3d(dx, 0, 0));
   while (true) {
     if (dx > forward_serach_length) {
       Pose end_pose = translateLocal(goal_pose, Eigen::Vector3d(dx, 0, 0));
       if (calcDistance2d(start_pose, end_pose) > planner_data_->parameters.vehicle_length) {
-        pull_over_areas_.push_back(PullOverArea{start_pose, end_pose});
+        pull_over_areas_.push_back(PullOverArea{
+          start_pose, end_pose, calcDistance2d(calcAveragePose(start_pose, end_pose), goal_pose)});
       }
       break;
     }
@@ -233,7 +232,8 @@ Pose PullOverModule::researchGoal(){
     if (!prev_is_collided && is_collided) {
       Pose end_pose = translateLocal(goal_pose, Eigen::Vector3d(dx, 0, 0));
       if (calcDistance2d(start_pose, end_pose) > planner_data_->parameters.vehicle_length) {
-        pull_over_areas_.push_back(PullOverArea{start_pose, end_pose});
+        pull_over_areas_.push_back(PullOverArea{
+          start_pose, end_pose, calcDistance2d(calcAveragePose(start_pose, end_pose), goal_pose)});
       }
     };
     if (prev_is_collided && !is_collided) {
@@ -243,20 +243,25 @@ Pose PullOverModule::researchGoal(){
     dx += 0.05;
   }
 
+  goal_candidates_.clear();
+  if (!occupancy_grid_map.detectCollision(
+        pose2index(*occupancy_grid_, goal_pose_local, common_param.theta_size))) {
+    goal_candidates_.push_back(goal_pose);
+  }
+
+  std::sort(pull_over_areas_.begin(), pull_over_areas_.end());
   MarkerArray marker_array;
-  std::cerr << "areas size: " << pull_over_areas_.size() << std::endl;
+  // std::cerr << "areas size: " << pull_over_areas_.size() << std::endl;
   for (int32_t i = 0; i < pull_over_areas_.size(); i++) {
     marker_array.markers.push_back(createParkingAreaMarker(
       pull_over_areas_.at(i).start_pose, pull_over_areas_.at(i).end_pose, i));
+    // std::cerr << "distance: " << pull_over_areas_.at(i).distance_from_goal << std::endl;
+    goal_candidates_.push_back(pull_over_areas_.at(i).center_pose);
   }
-  // marker_array.markers.push_back(
-  //   createParkingAreaMarker(goal_pose, translateLocal(goal_pose, Eigen::Vector3d(dx, 0, 0))));
 
   parking_area_pub_->publish(marker_array);
 
-  return goal_pose;
-
-  // auto goal_pose_local = inverseTransformPose(goal_pose, occupancy_grid_->info.origin);
+  return goal_candidates_.front();
 }
 
 BT::NodeStatus PullOverModule::updateState()

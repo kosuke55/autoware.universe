@@ -43,6 +43,7 @@ using autoware_auto_vehicle_msgs::msg::HazardLightsCommand;
 using geometry_msgs::msg::PoseArray;
 using visualization_msgs::msg::Marker;
 using visualization_msgs::msg::MarkerArray;
+using tier4_autoware_utils::calcAveragePose;
 struct PullOverParameters
 {
   double min_stop_distance;
@@ -88,6 +89,14 @@ struct PullOverArea
 {
   Pose start_pose;
   Pose end_pose;
+  float distance_from_goal;
+
+  Pose center_pose = calcAveragePose(start_pose, end_pose);
+
+  bool operator<(const PullOverArea & other) noexcept
+  {
+    return distance_from_goal < other.distance_from_goal;
+  }
 };
 
 class PullOverModule : public SceneModuleInterface
@@ -159,6 +168,7 @@ private:
   ParallelParkingPlanner parallel_parking_planner_;
   PoseStamped goal_pose_;
   std::vector<PullOverArea> pull_over_areas_;
+  std::vector<Pose> goal_candidates_;
 };
 }  // namespace behavior_path_planner
 
