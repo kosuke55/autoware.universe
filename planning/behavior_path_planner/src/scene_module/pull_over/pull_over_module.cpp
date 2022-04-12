@@ -159,23 +159,23 @@ bool PullOverModule::isExecutionReady() const
   // return found_safe_path;
 }
 
-Marker PullOverModule::createParkingAreaMarker(const Pose back_pose, const Pose front_pose, const int32_t id){
+Marker PullOverModule::createParkingAreaMarker(const Pose start_pose, const Pose end_pose, const int32_t id){
   Marker marker = createDefaultMarker(
     "map", planner_data_->route_handler->getRouteHeader().stamp, "collision_polygons", id,
     visualization_msgs::msg::Marker::LINE_STRIP, createMarkerScale(0.1, 0.0, 0.0),
     createMarkerColor(0.0, 1.0, 0.0, 0.999));
 
   // create debug area maker
-  auto p_left_front = translateLocal(front_pose, Eigen::Vector3d(planner_data_->parameters.base_link2front, planner_data_->parameters.vehicle_width / 2, 0)).position;
+  auto p_left_front = translateLocal(end_pose, Eigen::Vector3d(planner_data_->parameters.base_link2front, planner_data_->parameters.vehicle_width / 2, 0)).position;
   marker.points.push_back(createPoint(p_left_front.x, p_left_front.y, p_left_front.z));
 
-  auto p_right_front = translateLocal(front_pose, Eigen::Vector3d(planner_data_->parameters.base_link2front, -planner_data_->parameters.vehicle_width / 2, 0)).position;
+  auto p_right_front = translateLocal(end_pose, Eigen::Vector3d(planner_data_->parameters.base_link2front, -planner_data_->parameters.vehicle_width / 2, 0)).position;
   marker.points.push_back(createPoint(p_right_front.x, p_right_front.y, p_right_front.z));
 
-  auto p_right_back = translateLocal(back_pose, Eigen::Vector3d(-planner_data_->parameters.base_link2rear, -planner_data_->parameters.vehicle_width / 2, 0)).position;
+  auto p_right_back = translateLocal(start_pose, Eigen::Vector3d(-planner_data_->parameters.base_link2rear, -planner_data_->parameters.vehicle_width / 2, 0)).position;
   marker.points.push_back(createPoint(p_right_back.x, p_right_back.y, p_right_back.z));
 
-  auto p_left_back = translateLocal(back_pose, Eigen::Vector3d(-planner_data_->parameters.base_link2rear, planner_data_->parameters.vehicle_width / 2, 0)).position;
+  auto p_left_back = translateLocal(start_pose, Eigen::Vector3d(-planner_data_->parameters.base_link2rear, planner_data_->parameters.vehicle_width / 2, 0)).position;
   marker.points.push_back(createPoint(p_left_back.x, p_left_back.y, p_left_back.z));
   marker.points.push_back(createPoint(p_left_front.x, p_left_front.y, p_left_front.z));
 
@@ -206,7 +206,7 @@ Pose PullOverModule::researchGoal(){
   common_param.vehicle_shape.width = planner_data_->parameters.vehicle_width;
   common_param.vehicle_shape.base2back = planner_data_->parameters.base_link2rear;
   common_param.theta_size = 360;
-  common_param.obstacle_threshold = 50;
+  common_param.obstacle_threshold = 98;
 
   OccupancyGridMap occupancy_grid_map(common_param);
   occupancy_grid_map.setMap(*occupancy_grid_);
@@ -217,10 +217,22 @@ Pose PullOverModule::researchGoal(){
   bool prev_is_collided = false;
   pull_over_areas_.clear();
   Pose start_pose = translateLocal(goal_pose, Eigen::Vector3d(dx, 0, 0));
+  Pose end_pose = translateLocal(goal_pose, Eigen::Vector3d(forward_serach_length, 0, 0));
+  bool need_update_start_pose = true;
+  // bool need_update_start_pose = false;
   while (true) {
-    if (dx > forward_serach_length) {
-      Pose end_pose = translateLocal(goal_pose, Eigen::Vector3d(dx, 0, 0));
+    if (dx >= forward_serach_length) {
       if (calcDistance2d(start_pose, end_pose) > planner_data_->parameters.vehicle_length) {
+        end_pose = translateLocal(goal_pose, Eigen::Vector3d(dx, 0, 0));
+        if (!pull_over_areas_.empty()){
+        auto prev_area = pull_over_areas_.back();
+        if (
+          calcDistance2d(prev_area.end_pose, start_pose) <
+          planner_data_->parameters.vehicle_length + 0.1) {
+          pull_over_areas_.pop_back();
+          start_pose = prev_area.start_pose;
+        }
+        }
         pull_over_areas_.push_back(PullOverArea{
           start_pose, end_pose, calcDistance2d(calcAveragePose(start_pose, end_pose), goal_pose)});
       }
@@ -230,15 +242,27 @@ Pose PullOverModule::researchGoal(){
     bool is_collided = occupancy_grid_map.detectCollision(
       pose2index(*occupancy_grid_, serach_pose, common_param.theta_size));
     if (!prev_is_collided && is_collided) {
-      Pose end_pose = translateLocal(goal_pose, Eigen::Vector3d(dx, 0, 0));
       if (calcDistance2d(start_pose, end_pose) > planner_data_->parameters.vehicle_length) {
+        end_pose = translateLocal(goal_pose, Eigen::Vector3d(dx, 0, 0));
+        auto prev_area = pull_over_areas_.back();
+        if (
+          calcDistance2d(prev_area.end_pose, start_pose) <
+          planner_data_->parameters.vehicle_length + 0.1) {
+          pull_over_areas_.pop_back();
+          start_pose = prev_area.start_pose;
+        }
         pull_over_areas_.push_back(PullOverArea{
           start_pose, end_pose, calcDistance2d(calcAveragePose(start_pose, end_pose), goal_pose)});
       }
-    };
-    if (prev_is_collided && !is_collided) {
+    }
+
+    need_update_start_pose = calcDistance2d(start_pose, end_pose) < planner_data_->parameters.vehicle_length;
+    if ((prev_is_collided && !is_collided) || need_update_start_pose) {
       start_pose = translateLocal(goal_pose, Eigen::Vector3d(dx, 0, 0));
-    };
+      need_update_start_pose = false;
+
+      Pose start_pose_local =  inverseTransformPose(start_pose, goal_pose);
+    }
     prev_is_collided = is_collided;
     dx += 0.05;
   }
@@ -251,7 +275,7 @@ Pose PullOverModule::researchGoal(){
 
   std::sort(pull_over_areas_.begin(), pull_over_areas_.end());
   MarkerArray marker_array;
-  // std::cerr << "areas size: " << pull_over_areas_.size() << std::endl;
+  std::cerr << "areas size: " << pull_over_areas_.size() << std::endl;
   for (int32_t i = 0; i < pull_over_areas_.size(); i++) {
     marker_array.markers.push_back(createParkingAreaMarker(
       pull_over_areas_.at(i).start_pose, pull_over_areas_.at(i).end_pose, i));
@@ -277,12 +301,6 @@ BT::NodeStatus PullOverModule::updateState()
   return current_state_;
 }
 
-// void PullOverModule::publishTF(
-//   const std::string & child_frame_id, const geometry_msgs::msg::PoseStamped & pose_msg)
-// {
-//   tf2_broadcaster_.sendTransform(tier4_autoware_utils::pose2transform(pose_msg, child_frame_id));
-// }
-
 BehaviorModuleOutput PullOverModule::plan()
 {
   RCLCPP_ERROR(getLogger(), "(%s):", __func__);
@@ -290,19 +308,16 @@ BehaviorModuleOutput PullOverModule::plan()
   Pose goal_pose = researchGoal();
   goal_pose_.pose = goal_pose;
   goal_pose_.header =  planner_data_->route_handler->getRouteHeader();
-  // auto self_pose = planner_data_->self_pose->pose;
-  // auto goal_pose = planner_data_->route_handler->getGoalPose();
-  // const auto common_parameters = planner_data_->parameters;
+  goal_pose_publisher_->publish(goal_pose_);
 
-  // lanelet::ConstLanelet current_lane;
-  // planner_data_->route_handler->getClosestLaneletWithinRoute(self_pose, &current_lane);
+  parallel_parking_planner_.setParams(planner_data_);
+  parallel_parking_planner_.plan(goal_pose);
+  PathWithLaneId partial_path = parallel_parking_planner_.getCurrentPath();
 
-  // lanelet::ConstLanelet goal_lane;
-  // planner_data_->route_handler->getClosestLaneletWithinRoute(goal_pose, &goal_lane);
-
-  // ParallelParkingPlanner parallel_parking_planner;
-  // parallel_parking_planner.setParams(planner_data_);
-  PathWithLaneId path = parallel_parking_planner_.getCurrentPath();
+  Cl_publisher_->publish(parallel_parking_planner_.Cl_);
+  Cr_publisher_->publish(parallel_parking_planner_.Cr_);
+  path_pose_array_pub_->publish(parallel_parking_planner_.path_pose_array_);
+  start_pose_publisher_->publish(parallel_parking_planner_.start_pose_);  
 
   // Generate drivable area
   // {
@@ -313,19 +328,9 @@ BehaviorModuleOutput PullOverModule::plan()
   //     lanes, common_parameters.drivable_area_resolution, common_parameters.vehicle_length,
   //     planner_data_);
   // }
-  path.header = planner_data_->route_handler->getRouteHeader();
-
-  if (!path.points.empty()) {
-    status_.pull_over_path.path = path;
-    Cl_publisher_->publish(parallel_parking_planner_.Cl_);
-    Cr_publisher_->publish(parallel_parking_planner_.Cr_);
-    start_pose_publisher_->publish(parallel_parking_planner_.start_pose_);
-    goal_pose_publisher_->publish(goal_pose_);
-    path_pose_array_pub_->publish(parallel_parking_planner_.path_pose_array_);
-  }
 
   BehaviorModuleOutput output;
-  output.path = std::make_shared<PathWithLaneId>(path);
+  output.path = std::make_shared<PathWithLaneId>(partial_path);
   // output.path = std::make_shared<PathWithLaneId>(status_.pull_over_path.path);
 
   return output;
@@ -417,10 +422,11 @@ void PullOverModule::updatePullOverStatus()
 
   status_.pull_over_path.path.header = planner_data_->route_handler->getRouteHeader();
 
+  parallel_parking_planner_.clear();
   // とりあえずここでparral parkingのpathを生成する。
-  Pose goal_pose = researchGoal();
-  parallel_parking_planner_.setParams(planner_data_);
-  PathWithLaneId path = parallel_parking_planner_.plan(goal_pose);
+  // Pose goal_pose = researchGoal();
+  // parallel_parking_planner_.setParams(planner_data_);
+  // parallel_parking_planner_.plan(goal_pose);
 
   // Generate drivable area
   // {
@@ -432,12 +438,6 @@ void PullOverModule::updatePullOverStatus()
   //     planner_data_);
   // }
   // path.header = planner_data_->route_handler->getRouteHeader();
-
-  if (!path.points.empty()) {
-    Cl_publisher_->publish(parallel_parking_planner_.Cl_);
-    Cr_publisher_->publish(parallel_parking_planner_.Cr_);
-    path_pose_array_pub_->publish(parallel_parking_planner_.path_pose_array_);
-  }
 
 }
 

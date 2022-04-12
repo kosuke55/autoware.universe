@@ -96,30 +96,6 @@ PathWithLaneId concatePath(const PathWithLaneId path1, const PathWithLaneId path
 
 namespace behavior_path_planner
 {
-// ParallelParkingPlanner::ParallelParkingPlanner()
-// {
-//   max_steer_rad_ = tier4_autoware_utils::deg2rad(max_steer_deg_);
-// }
-
-// lanelet::ConstLanelets ParallelParkingPlanner::getCurrentLanes() const
-// {
-//   const auto & route_handler = planner_data_->route_handler;
-//   const auto current_pose = planner_data_->self_pose->pose;
-//   const auto common_parameters = planner_data_->parameters;
-
-//   lanelet::ConstLanelet current_lane;
-//   if (!route_handler->getClosestLaneletWithinRoute(current_pose, &current_lane)) {
-//     // RCLCPP_ERROR(getLogger(), "failed to find closest lanelet within route!!!");
-//     std::cerr << "failed to find closest lanelet within route!!!" << std::endl;
-//     return {};  // TODO(Horibe) what should be returned?
-//   }
-
-//   // For current_lanes with desired length
-//   return route_handler->getLaneletSequence(
-//     current_lane, current_pose, common_parameters.backward_path_length,
-//     common_parameters.forward_path_length);
-// }
-
 PathWithLaneId ParallelParkingPlanner::getCurrentPath()
 {
   const auto current_path = paths_.at(current_path_idx_);
@@ -130,10 +106,9 @@ PathWithLaneId ParallelParkingPlanner::getCurrentPath()
   const bool is_near_target =
     tier4_autoware_utils::calcDistance2d(current_target, self_pose) < th_arrived_distance_m;
 
-  const float ego_speed = std::abs(planner_data_->self_odometry->twist.twist.linear.x);
-
   const float th_stopped_velocity_mps = 0.1;
-  const bool is_stopped = std::abs(ego_speed) < th_stopped_velocity_mps;
+  const bool is_stopped =
+    std::abs(planner_data_->self_odometry->twist.twist.linear.x) < th_stopped_velocity_mps;
 
   if (is_near_target && is_stopped) {
     current_path_idx_ += 1;
@@ -144,18 +119,22 @@ PathWithLaneId ParallelParkingPlanner::getCurrentPath()
   return paths_.at(current_path_idx_);
 }
 
-PathWithLaneId ParallelParkingPlanner::plan(const Pose goal_pose)
-{
-  paths_.clear();
+void ParallelParkingPlanner::clear(){
   current_path_idx_ = 0;
-  const auto stright_path = getStraightPath(goal_pose);
+  paths_.clear();
+}
 
-  return planOneTraial(goal_pose);
+void ParallelParkingPlanner::plan(const Pose goal_pose)
+{
+  // plan path only when parking has not started
+  if(current_path_idx_ == 0){
+    paths_.clear();
+    getStraightPath(goal_pose);
+    planOneTraial(goal_pose);
+  }
 }
 
 Pose ParallelParkingPlanner::getStartPose(const Pose goal_pose){
-  // const auto goal_pose = planner_data_->route_handler->getGoalPose();
-
   auto current_lanes = util::getCurrentLanes(planner_data_);
   const auto arc_coordinates = lanelet::utils::getArcCoordinates(current_lanes, goal_pose);
 
@@ -166,7 +145,7 @@ Pose ParallelParkingPlanner::getStartPose(const Pose goal_pose){
   return start_pose;
 }
 
-PathWithLaneId ParallelParkingPlanner::getStraightPath(const Pose goal_pose){
+ void ParallelParkingPlanner::getStraightPath(const Pose goal_pose){
   // get stright path before parking.
   auto current_lanes = util::getCurrentLanes(planner_data_);
   const auto next_lanes = planner_data_->route_handler->getNextLanelets(current_lanes.back());
@@ -192,10 +171,9 @@ PathWithLaneId ParallelParkingPlanner::getStraightPath(const Pose goal_pose){
 
   paths_.push_back(path);
 
-  return path;
 }
 
-PathWithLaneId ParallelParkingPlanner::planOneTraial(const Pose goal_pose)
+void ParallelParkingPlanner::planOneTraial(const Pose goal_pose)
 {
   // debug
   start_pose_.pose = getStartPose(goal_pose);
@@ -239,7 +217,7 @@ PathWithLaneId ParallelParkingPlanner::planOneTraial(const Pose goal_pose)
                           (2 * (R_E_min_ + d_Cr_Einit * std::cos(alpha)));
   std::cerr << "R_Einit_l: " << R_Einit_l << std::endl;
   if (R_Einit_l <= 0) {
-    return path;
+    return;
   }
 
   const float steer_l = std::atan(common_params.wheel_base / R_Einit_l);
@@ -289,14 +267,6 @@ PathWithLaneId ParallelParkingPlanner::planOneTraial(const Pose goal_pose)
   path.header = planner_data_->route_handler->getRouteHeader();
   path_pose_array_ = PathWithLaneId2PoseArray(concat_path);
 
-  // geometry_msgs::msg::Transform transform_Cl;
-  // transform_Cl.translation.y = R_Einit_l;
-  // const auto Cl = transformPoint(fromMsg(start_pose.position), transform_Cl);
-  // Cl_.pose = self_pose;
-  // Cl_.pose.position = toMsg(Cl);
-  // Cl_.header = planner_data_->route_handler->getRouteHeader();
-
-  return concat_path;
 }
 
 PathWithLaneId ParallelParkingPlanner::generateArcPath(

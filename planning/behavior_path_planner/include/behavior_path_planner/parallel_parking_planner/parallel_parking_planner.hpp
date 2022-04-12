@@ -24,8 +24,8 @@
 #include <autoware_auto_perception_msgs/msg/predicted_objects.hpp>
 #include <autoware_auto_planning_msgs/msg/path_with_lane_id.hpp>
 #include <geometry_msgs/msg/point.hpp>
-#include <geometry_msgs/msg/pose_array.hpp>
 #include <geometry_msgs/msg/polygon.hpp>
+#include <geometry_msgs/msg/pose_array.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 
 #include <lanelet2_core/LaneletMap.h>
@@ -41,16 +41,15 @@ namespace behavior_path_planner
 using autoware_auto_planning_msgs::msg::PathPointWithLaneId;
 using autoware_auto_planning_msgs::msg::PathWithLaneId;
 using geometry_msgs::msg::Point;
-using geometry_msgs::msg::PoseArray;
 using geometry_msgs::msg::Pose;
+using geometry_msgs::msg::PoseArray;
 using geometry_msgs::msg::PoseStamped;
-using autoware_auto_planning_msgs::msg::PathWithLaneId;
 
 class ParallelParkingPlanner
 {
 public:
   // ParallelParkingPlanner();
-  PathWithLaneId plan(const Pose goal_pose);
+  void plan(const Pose goal_pose);
   void setParams(const std::shared_ptr<const PlannerData> & planner_data);
 
   // debug
@@ -60,10 +59,8 @@ public:
   // PoseArray debug_pose_array_;
   PoseArray path_pose_array_;
 
-  std::vector<PathWithLaneId> paths_;
-  size_t current_path_idx_ = 0;
-
   PathWithLaneId getCurrentPath();
+  void clear();
 
 private:
   // std::shared_ptr<PlannerData> planner_data_;
@@ -71,23 +68,21 @@ private:
   float max_steer_deg_ = 40.0;  // max steering angle [deg]
   float max_steer_rad_;
 
-  // struct GeometricParams
-  // {
-  //   float R_base_link_min;
-  //   float R_frontleft_l_min;
-  // } geometric_params_;
-    float R_E_min_; // base_link
-    float R_Bl_min_; // front_lef
+  float R_E_min_;   // base_link
+  float R_Bl_min_;  // front_lef
 
-    PathWithLaneId planOneTraial(const Pose goal_pose);
-    PathWithLaneId generateArcPath(
-      const Pose & center, const float radius, const float start_rad, float end_rad,
-      const bool is_left_turn);
-    PathPointWithLaneId generateArcPathPoint(
-      const Pose & center, const float radius, const float yaw, const bool is_left_turn);
-    // lanelet::ConstLanelets getCurrentLanes() const;
-    Pose getStartPose(const Pose goal_pose);
-    PathWithLaneId getStraightPath(const Pose goal_pose);
+  std::vector<PathWithLaneId> paths_;
+  size_t current_path_idx_ = 0;  
+
+  void planOneTraial(const Pose goal_pose);
+  PathWithLaneId generateArcPath(
+    const Pose & center, const float radius, const float start_rad, float end_rad,
+    const bool is_left_turn);
+  PathPointWithLaneId generateArcPathPoint(
+    const Pose & center, const float radius, const float yaw, const bool is_left_turn);
+  // lanelet::ConstLanelets getCurrentLanes() const;
+  Pose getStartPose(const Pose goal_pose);
+  void getStraightPath(const Pose goal_pose);
 };
 
 }  // namespace behavior_path_planner
