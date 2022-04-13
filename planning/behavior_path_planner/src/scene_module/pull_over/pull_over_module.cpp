@@ -217,51 +217,30 @@ Pose PullOverModule::researchGoal(){
   bool prev_is_collided = false;
   pull_over_areas_.clear();
   Pose start_pose = translateLocal(goal_pose, Eigen::Vector3d(dx, 0, 0));
-  Pose end_pose = translateLocal(goal_pose, Eigen::Vector3d(forward_serach_length, 0, 0));
-  bool need_update_start_pose = true;
-  // bool need_update_start_pose = false;
   while (true) {
-    if (dx >= forward_serach_length) {
-      if (calcDistance2d(start_pose, end_pose) > planner_data_->parameters.vehicle_length) {
-        end_pose = translateLocal(goal_pose, Eigen::Vector3d(dx, 0, 0));
-        if (!pull_over_areas_.empty()){
-        auto prev_area = pull_over_areas_.back();
-        if (
-          calcDistance2d(prev_area.end_pose, start_pose) <
-          planner_data_->parameters.vehicle_length + 0.1) {
-          pull_over_areas_.pop_back();
-          start_pose = prev_area.start_pose;
-        }
-        }
-        pull_over_areas_.push_back(PullOverArea{
-          start_pose, end_pose, calcDistance2d(calcAveragePose(start_pose, end_pose), goal_pose)});
-      }
-      break;
-    }
+    bool is_last_search = (dx >= forward_serach_length);
     Pose serach_pose = translateLocal(goal_pose_local, Eigen::Vector3d(dx, 0, 0));
     bool is_collided = occupancy_grid_map.detectCollision(
       pose2index(*occupancy_grid_, serach_pose, common_param.theta_size));
-    if (!prev_is_collided && is_collided) {
-      if (calcDistance2d(start_pose, end_pose) > planner_data_->parameters.vehicle_length) {
-        end_pose = translateLocal(goal_pose, Eigen::Vector3d(dx, 0, 0));
+    if (!prev_is_collided && is_collided || is_last_search) {
+      Pose end_pose = translateLocal(goal_pose, Eigen::Vector3d(dx, 0, 0));
+      if (!pull_over_areas_.empty()) {
         auto prev_area = pull_over_areas_.back();
+        // If the current area overlaps the previous area, merge them.
         if (
           calcDistance2d(prev_area.end_pose, start_pose) <
-          planner_data_->parameters.vehicle_length + 0.1) {
+          planner_data_->parameters.vehicle_length) {
           pull_over_areas_.pop_back();
           start_pose = prev_area.start_pose;
         }
-        pull_over_areas_.push_back(PullOverArea{
-          start_pose, end_pose, calcDistance2d(calcAveragePose(start_pose, end_pose), goal_pose)});
       }
+      pull_over_areas_.push_back(PullOverArea{
+        start_pose, end_pose, calcDistance2d(calcAveragePose(start_pose, end_pose), goal_pose)});
     }
+    if (is_last_search) break;
 
-    need_update_start_pose = calcDistance2d(start_pose, end_pose) < planner_data_->parameters.vehicle_length;
-    if ((prev_is_collided && !is_collided) || need_update_start_pose) {
+    if ((prev_is_collided && !is_collided)) {
       start_pose = translateLocal(goal_pose, Eigen::Vector3d(dx, 0, 0));
-      need_update_start_pose = false;
-
-      Pose start_pose_local =  inverseTransformPose(start_pose, goal_pose);
     }
     prev_is_collided = is_collided;
     dx += 0.05;
