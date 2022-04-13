@@ -168,10 +168,10 @@ bool OccupancyGridMap::detectCollision(const IndexXYT & base_index)
   return false;
 }
 
-bool OccupancyGridMap::hasObstacleOnTrajectory(
-  const geometry_msgs::msg::PoseArray & trajectory)
+bool OccupancyGridMap::hasObstacleOnPath(
+  const geometry_msgs::msg::PoseArray & path)
 {
-  for (const auto & pose : trajectory.poses) {
+  for (const auto & pose : path.poses) {
     const auto pose_local = global2local(costmap_, pose);
     const auto index = pose2index(costmap_, pose_local, common_param_.theta_size);
 

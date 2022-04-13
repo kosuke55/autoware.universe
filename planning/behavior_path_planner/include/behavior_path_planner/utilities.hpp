@@ -292,6 +292,8 @@ std::uint8_t getHighestProbLabel(const std::vector<ObjectClassification> & class
 
 lanelet::ConstLanelets getCurrentLanes(const std::shared_ptr<const PlannerData> & planner_data);
 
+PathWithLaneId concatePath(const PathWithLaneId path1, const PathWithLaneId path2);
+
 }  // namespace util
 }  // namespace behavior_path_planner
 

@@ -31,6 +31,8 @@
 
 using autoware_auto_planning_msgs::msg::PathWithLaneId;
 using behavior_path_planner::util::removeOverlappingPoints;
+using behavior_path_planner::util::concatePath;
+using behavior_path_planner::util::convertToGeometryPoseArray;
 using geometry_msgs::msg::Pose;
 using geometry_msgs::msg::PoseArray;
 using geometry_msgs::msg::PoseStamped;
@@ -46,53 +48,8 @@ using tier4_autoware_utils::Point2d;
 using tier4_autoware_utils::Point3d;
 using tier4_autoware_utils::pose2transform;
 using tier4_autoware_utils::toMsg;
-using tier4_autoware_utils::translateLocal;
-
-namespace
-{
-PoseArray PathWithLaneId2PoseArray(const PathWithLaneId & path)
-{
-  PoseArray pose_array;
-  pose_array.header = path.header;
-
-  for (const auto & point : path.points) {
-    pose_array.poses.push_back(point.point.pose);
-  }
-
-  return pose_array;
-}
-
-Pose transformPose(const Pose & pose, const TransformStamped & transform)
-{
-  PoseStamped transformed_pose;
-  PoseStamped orig_pose;
-  orig_pose.pose = pose;
-  tf2::doTransform(orig_pose, transformed_pose, transform);
-
-  return transformed_pose.pose;
-}
-
-Pose transformPose(const Pose & pose, const Transform & transform)
-{
-  TransformStamped transform_stamped;
-  transform_stamped.transform = transform;
-  PoseStamped transformed_pose;
-  PoseStamped orig_pose;
-  orig_pose.pose = pose;
-  tf2::doTransform(orig_pose, transformed_pose, transform_stamped);
-
-  return transformed_pose.pose;
-}
-
-PathWithLaneId concatePath(const PathWithLaneId path1, const PathWithLaneId path2)
-{
-  PathWithLaneId path = path1;
-  for (const auto & point : path2.points) {
-    path.points.push_back(point);
-  }
-  return path;
-}
-}  // namespace
+using tier4_autoware_utils::calcOffsetPose;
+using tier4_autoware_utils::transformPose;
 
 namespace behavior_path_planner
 {
@@ -140,7 +97,7 @@ Pose ParallelParkingPlanner::getStartPose(const Pose goal_pose){
 
   const float dx =
     2 * std::sqrt(std::pow(R_E_min_, 2) - std::pow(-arc_coordinates.distance / 2 + R_E_min_, 2));
-  Pose start_pose = translateLocal(goal_pose, Eigen::Vector3d(dx, -arc_coordinates.distance, 0));
+  Pose start_pose = calcOffsetPose(goal_pose, dx, -arc_coordinates.distance, 0);
 
   return start_pose;
 }
@@ -181,49 +138,33 @@ void ParallelParkingPlanner::planOneTraial(const Pose goal_pose)
 
   PathWithLaneId path;
   const auto start_pose = getStartPose(goal_pose);
-  // const auto start_pose = planner_data_->self_pose->pose;
-  // const auto goal_pose = planner_data_->route_handler->getGoalPose();
 
   const float self_yaw = tf2::getYaw(start_pose.orientation);
   const float goal_yaw = tf2::getYaw(goal_pose.orientation);
   const float psi = normalizeRadian(self_yaw - goal_yaw);
-  std::cerr << "self_yaw: " << self_yaw << "goal_yaw: " << goal_yaw << "psi: " << psi << std::endl;
   const auto common_params = planner_data_->parameters;
 
-  Pose Cr = translateLocal(goal_pose, Eigen::Vector3d(0, -R_E_min_, 0));
+  Pose Cr = calcOffsetPose(goal_pose, 0, -R_E_min_, 0);
   Cr_.pose = Cr;
   Cr_.header = planner_data_->route_handler->getRouteHeader();
   const float d_Cr_Einit = calcDistance2d(Cr, start_pose);
-  std::cerr << "R_E_min_: : " << R_E_min_ << std::endl;
-  std::cerr << "d_Cr_Einit: " << d_Cr_Einit << std::endl;
 
   geometry_msgs::msg::Point Cr_goalcoords = inverseTransformPoint(Cr.position, goal_pose);
   geometry_msgs::msg::Point self_point_goalcoords =
     inverseTransformPoint(start_pose.position, goal_pose);
-  std::cerr << "Cr_goalcoords: " << Cr_goalcoords.x << ", " << Cr_goalcoords.y << std::endl;
-  std::cerr << "self_point_goalcoords: " << self_point_goalcoords.x << ", "
-            << self_point_goalcoords.y << std::endl;
 
   const float alpha =
     M_PI_2 - psi + std::asin((self_point_goalcoords.y - Cr_goalcoords.y) / d_Cr_Einit);
-  std::cerr << "M_PI_2: " << M_PI_2 << " psi: " << psi
-            << " Cr_goalcoords.y - self_point_goalcoords.y / d_Cr_Einit "
-            << (Cr_goalcoords.y - self_point_goalcoords.y) / d_Cr_Einit
-            << " std::asin(Cr_goalcoords.y - self_point_goalcoords.y / d_Cr_Einit): "
-            << std::asin((Cr_goalcoords.y - self_point_goalcoords.y) / d_Cr_Einit) << std::endl;
-  std::cerr << "alpha: " << alpha << std::endl;
 
   const float R_Einit_l = (std::pow(d_Cr_Einit, 2) - std::pow(R_E_min_, 2)) /
                           (2 * (R_E_min_ + d_Cr_Einit * std::cos(alpha)));
-  std::cerr << "R_Einit_l: " << R_Einit_l << std::endl;
   if (R_Einit_l <= 0) {
     return;
   }
 
   const float steer_l = std::atan(common_params.wheel_base / R_Einit_l);
-  std::cerr << "steer_l: " << steer_l << std::endl;
 
-  Pose Cl = translateLocal(start_pose, Eigen::Vector3d(0, R_Einit_l, 0));
+  Pose Cl = calcOffsetPose(start_pose, 0, R_Einit_l, 0);
   Cl_.pose = Cl;
   Cl_.header = planner_data_->route_handler->getRouteHeader();
 
@@ -265,7 +206,7 @@ void ParallelParkingPlanner::planOneTraial(const Pose goal_pose)
   PathWithLaneId concat_path = concatePath(path_turn_right, path_turn_left);
 
   path.header = planner_data_->route_handler->getRouteHeader();
-  path_pose_array_ = PathWithLaneId2PoseArray(concat_path);
+  path_pose_array_ = convertToGeometryPoseArray(concat_path);
 
 }
 
@@ -320,7 +261,7 @@ PathPointWithLaneId ParallelParkingPlanner::generateArcPathPoint(
   pose_centercoords.orientation = tf2::toMsg(quat);
 
   PathPointWithLaneId p{};
-  p.point.pose = transformPose(pose_centercoords, pose2transform(center));
+  p.point.pose = transformPose(pose_centercoords, center);
   lanelet::ConstLanelet current_lane;
   planner_data_->route_handler->getClosestLaneletWithinRoute(p.point.pose, &current_lane);
   p.lane_ids.push_back(current_lane.id());

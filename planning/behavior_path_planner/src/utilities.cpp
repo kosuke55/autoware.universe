@@ -1798,5 +1798,15 @@ lanelet::ConstLanelets getCurrentLanes(const std::shared_ptr<const PlannerData> 
     current_lane, current_pose, common_parameters.backward_path_length,
     common_parameters.forward_path_length);
 }
+
+PathWithLaneId concatePath(const PathWithLaneId path1, const PathWithLaneId path2)
+{
+  PathWithLaneId path = path1;
+  for (const auto & point : path2.points) {
+    path.points.push_back(point);
+  }
+  return path;
+}
+
 }  // namespace util
 }  // namespace behavior_path_planner

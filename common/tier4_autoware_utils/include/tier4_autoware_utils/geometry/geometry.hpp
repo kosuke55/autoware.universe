@@ -478,43 +478,6 @@ inline geometry_msgs::msg::Pose inverseTransformPose(
   return inverseTransformPose(pose, tf2::toMsg(transform));
 }
 
-inline geometry_msgs::msg::Pose translateLocal(
-  const geometry_msgs::msg::Pose pose, const Eigen::Vector3d translate)
-{
-  const Eigen::Quaterniond q(
-    pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z);
-  const Eigen::Matrix3d R = q.normalized().toRotationMatrix();
-  const Eigen::Vector3d original_pos(pose.position.x, pose.position.y, pose.position.z);
-  const Eigen::Vector3d translated = original_pos + R * translate;
-
-  geometry_msgs::msg::Pose translated_pose = pose;
-  translated_pose.position.x = translated.x();
-  translated_pose.position.y = translated.y();
-  translated_pose.position.z = translated.z();
-
-  return translated_pose;
-}
-
-inline geometry_msgs::msg::Pose translateLocal(
-  const geometry_msgs::msg::Pose pose, const geometry_msgs::msg::Vector3 translate)
-{
-  return translateLocal(pose, Eigen::Vector3d(translate.x, translate.y, translate.z));
-}
-
-// Transform point in world coordinates to local coordinates
-inline Eigen::Vector3d inverseTransformPoint(
-  const Eigen::Vector3d point, const geometry_msgs::msg::Pose pose)
-{
-  const Eigen::Quaterniond q(
-    pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z);
-  const Eigen::Matrix3d R = q.normalized().toRotationMatrix();
-
-  const Eigen::Vector3d local_origin(pose.position.x, pose.position.y, pose.position.z);
-  const Eigen::Vector3d local_point = R.transpose() * point - R.transpose() * local_origin;
-
-  return local_point;
-}
-
 // Transform point in world coordinates to local coordinates
 inline geometry_msgs::msg::Point inverseTransformPoint(
   const geometry_msgs::msg::Point point, const geometry_msgs::msg::Pose pose)

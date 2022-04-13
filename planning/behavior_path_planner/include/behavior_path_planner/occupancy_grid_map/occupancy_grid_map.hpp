@@ -87,19 +87,27 @@ struct PlannerWaypoints
 class OccupancyGridMap
 {
 public:
-  explicit OccupancyGridMap(const CommonParam & common_param)
-  : common_param_(common_param)
-  {
+  // OccupancyGridMap(){}
+  // explicit OccupancyGridMap(const CommonParam & common_param)
+  // : common_param_(common_param)
+  // {
+  // }
+  void setParam(const CommonParam & common_param){
+    std::cerr << "set param1 "  << std::endl;
+    common_param_ = common_param;
+    std::cerr << "set param2 "  << std::endl;
   }
-  virtual void setMap(const nav_msgs::msg::OccupancyGrid & costmap);
+  CommonParam getParam() const { return common_param_; };
+  void setMap(const nav_msgs::msg::OccupancyGrid & costmap);
+  nav_msgs::msg::OccupancyGrid getMap() const { return costmap_; };
   void setVehicleShape(const VehicleShape & vehicle_shape)
   {
     common_param_.vehicle_shape = vehicle_shape;
   }
-  bool hasObstacleOnTrajectory(const geometry_msgs::msg::PoseArray & trajectory);
+  bool hasObstacleOnPath(const geometry_msgs::msg::PoseArray & path);
   const PlannerWaypoints & getWaypoints() const { return waypoints_; }
   bool detectCollision(const IndexXYT & base_index);
-  virtual ~OccupancyGridMap() {}
+  // virtual ~OccupancyGridMap() {}
 
 protected:
   void computeCollisionIndexes(int theta_index, std::vector<IndexXY> & indexes);

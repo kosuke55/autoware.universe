@@ -20,6 +20,7 @@
 #include "behavior_path_planner/scene_module/scene_module_interface.hpp"
 #include "behavior_path_planner/utilities.hpp"
 #include "behavior_path_planner/parallel_parking_planner/parallel_parking_planner.hpp"
+#include "behavior_path_planner/occupancy_grid_map/occupancy_grid_map.hpp"
 
 #include <lanelet2_extension/utility/message_conversion.hpp>
 #include <lanelet2_extension/utility/utilities.hpp>
@@ -151,11 +152,14 @@ private:
   bool isCurrentSpeedLow() const;
   bool hasFinishedPullOver() const;
   void onOccupancyGrid(const OccupancyGrid::ConstSharedPtr msg);
+  void updateOccupancyGrid();
   Marker createParkingAreaMarker(const Pose back_pose, const Pose front_pose, const int32_t id);
   Pose getRefinedGoal();
   Pose researchGoal();
 
   OccupancyGrid::ConstSharedPtr occupancy_grid_;
+  OccupancyGridMap occupancy_grid_map_;
+
   rclcpp::Subscription<OccupancyGrid>::SharedPtr occupancy_grid_sub_;
 
   rclcpp::Publisher<PoseStamped>::SharedPtr Cr_publisher_;
