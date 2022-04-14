@@ -151,7 +151,7 @@ void OccupancyGridMap::computeCollisionIndexes(
   }
 }
 
-bool OccupancyGridMap::detectCollision(const IndexXYT & base_index)
+bool OccupancyGridMap::detectCollision(const IndexXYT & base_index) const
 {
   const auto & coll_indexes_2d = coll_indexes_table_[base_index.theta];
   for (const auto & coll_index_2d : coll_indexes_2d) {
@@ -169,10 +169,25 @@ bool OccupancyGridMap::detectCollision(const IndexXYT & base_index)
 }
 
 bool OccupancyGridMap::hasObstacleOnPath(
-  const geometry_msgs::msg::PoseArray & path)
+  const geometry_msgs::msg::PoseArray & path) const
 {
   for (const auto & pose : path.poses) {
     const auto pose_local = global2local(costmap_, pose);
+    const auto index = pose2index(costmap_, pose_local, common_param_.theta_size);
+
+    if (detectCollision(index)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool OccupancyGridMap::hasObstacleOnPath(
+  const autoware_auto_planning_msgs::msg::PathWithLaneId & path) const
+{
+  for (const auto & p : path.points) {
+    const auto pose_local = global2local(costmap_, p.point.pose);
     const auto index = pose2index(costmap_, pose_local, common_param_.theta_size);
 
     if (detectCollision(index)) {

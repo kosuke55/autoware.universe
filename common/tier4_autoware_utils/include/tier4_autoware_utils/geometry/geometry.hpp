@@ -479,6 +479,20 @@ inline geometry_msgs::msg::Pose inverseTransformPose(
 }
 
 // Transform point in world coordinates to local coordinates
+inline Eigen::Vector3d inverseTransformPoint(
+  const Eigen::Vector3d point, const geometry_msgs::msg::Pose pose)
+{
+  const Eigen::Quaterniond q(
+    pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z);
+  const Eigen::Matrix3d R = q.normalized().toRotationMatrix();
+
+  const Eigen::Vector3d local_origin(pose.position.x, pose.position.y, pose.position.z);
+  const Eigen::Vector3d local_point = R.transpose() * point - R.transpose() * local_origin;
+
+  return local_point;
+}
+
+// Transform point in world coordinates to local coordinates
 inline geometry_msgs::msg::Point inverseTransformPoint(
   const geometry_msgs::msg::Point point, const geometry_msgs::msg::Pose pose)
 {

@@ -17,6 +17,7 @@
 
 #include <tier4_autoware_utils/geometry/geometry.hpp>
 
+#include <autoware_auto_planning_msgs/msg/path_with_lane_id.hpp>
 #include <geometry_msgs/msg/pose_array.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
 
@@ -92,10 +93,11 @@ public:
   // : common_param_(common_param)
   // {
   // }
-  void setParam(const CommonParam & common_param){
-    std::cerr << "set param1 "  << std::endl;
+  void setParam(const CommonParam & common_param)
+  {
+    std::cerr << "set param1 " << std::endl;
     common_param_ = common_param;
-    std::cerr << "set param2 "  << std::endl;
+    std::cerr << "set param2 " << std::endl;
   }
   CommonParam getParam() const { return common_param_; };
   void setMap(const nav_msgs::msg::OccupancyGrid & costmap);
@@ -104,14 +106,15 @@ public:
   {
     common_param_.vehicle_shape = vehicle_shape;
   }
-  bool hasObstacleOnPath(const geometry_msgs::msg::PoseArray & path);
+  bool hasObstacleOnPath(const geometry_msgs::msg::PoseArray & path) const;
+  bool hasObstacleOnPath(const autoware_auto_planning_msgs::msg::PathWithLaneId & path) const; 
   const PlannerWaypoints & getWaypoints() const { return waypoints_; }
-  bool detectCollision(const IndexXYT & base_index);
+  bool detectCollision(const IndexXYT & base_index) const;
   // virtual ~OccupancyGridMap() {}
 
 protected:
   void computeCollisionIndexes(int theta_index, std::vector<IndexXY> & indexes);
-  inline bool isOutOfRange(const IndexXYT & index)
+  inline bool isOutOfRange(const IndexXYT & index) const
   {
     if (index.x < 0 || static_cast<int>(costmap_.info.width) <= index.x) {
       return true;
@@ -121,7 +124,7 @@ protected:
     }
     return false;
   }
-  inline bool isObs(const IndexXYT & index)
+  inline bool isObs(const IndexXYT & index) const
   {
     // NOTE: Accessing by .at() instead makes 1.2 times slower here.
     // Also, boundary check is already done in isOutOfRange before calling this function.

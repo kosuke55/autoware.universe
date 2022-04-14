@@ -34,6 +34,9 @@
 #include <string>
 #include <vector>
 
+using tier4_autoware_utils::calcOffsetPose;
+using tier4_autoware_utils::inverseTransformPoint;
+
 namespace behavior_path_planner
 {
 namespace pull_over_utils
@@ -229,9 +232,18 @@ std::vector<PullOverPath> getPullOverPaths(
 
     const auto shift_end_idx = tier4_autoware_utils::findNearestIndex(
       shifted_path.path.points, reference_path2.points.front().point.pose);
+    // shifted_path.path.points = std::vector<PathPointWithLaneId>(0, *shift_end_idx + 1);
 
     const auto goal_idx =
       tier4_autoware_utils::findNearestIndex(shifted_path.path.points, route_handler.getGoalPose());
+    shifted_path.path.points.erase(
+      std::cbegin(shifted_path.path.points) + *goal_idx + 1, std::cend(shifted_path.path.points));
+
+    auto last_point_local = inverseTransformPoint(
+      route_handler.getGoalPose().position, shifted_path.path.points.back().point.pose);
+    auto *goal_point = &shifted_path.path.points.back();
+    goal_point->point.pose = calcOffsetPose(goal_point->point.pose, last_point_local.x, 0, 0);
+    // goal_point->point.pose = route_handler.getGoalPose();
 
     if (shift_end_idx && goal_idx) {
       const auto distance_pull_over_end_to_goal = tier4_autoware_utils::calcDistance2d(
@@ -289,6 +301,7 @@ std::vector<PullOverPath> selectValidPaths(
   const lanelet::routing::RoutingGraphContainer & overall_graphs, const Pose & current_pose,
   const bool isInGoalRouteSection, const Pose & goal_pose)
 {
+  std::cerr <<  __func__ << " path size " << paths.size() << std::endl;
   std::vector<PullOverPath> available_paths;
 
   for (const auto & path : paths) {
@@ -307,16 +320,16 @@ bool selectSafePath(
   const lanelet::ConstLanelets & target_lanes,
   const PredictedObjects::ConstSharedPtr & dynamic_objects, const Pose & current_pose,
   const Twist & current_twist, const double vehicle_width,
-  const PullOverParameters & ros_parameters, PullOverPath * selected_path)
+  const PullOverParameters & ros_parameters, const OccupancyGridMap & occupancy_grid_map, PullOverPath * selected_path)
 {
+  std::cerr <<  __func__ << " path size " << paths.size() << std::endl;
   for (const auto & path : paths) {
-    if (isPullOverPathSafe(
-          path.path, current_lanes, target_lanes, dynamic_objects, current_pose, current_twist,
-          vehicle_width, ros_parameters, true, path.acceleration)) {
+    if (!occupancy_grid_map.hasObstacleOnPath(path.path)) {
       *selected_path = path;
       return true;
     }
   }
+  std::cerr << "hasObstacle " << std::endl;
 
   // set first path for force pull over if no valid path found
   if (!paths.empty()) {

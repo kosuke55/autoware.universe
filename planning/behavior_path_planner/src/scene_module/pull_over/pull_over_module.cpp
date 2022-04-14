@@ -79,9 +79,10 @@ void PullOverModule::onOccupancyGrid(const OccupancyGrid::ConstSharedPtr msg)
 void PullOverModule::updateOccupancyGrid(){
   // need waiting for planner_data_
   CommonParam common_param;
-  common_param.vehicle_shape.length = planner_data_->parameters.vehicle_length;
-  common_param.vehicle_shape.width = planner_data_->parameters.vehicle_width;
-  common_param.vehicle_shape.base2back = planner_data_->parameters.base_link2rear;
+  const float margin = 1;
+  common_param.vehicle_shape.length = planner_data_->parameters.vehicle_length + margin;
+  common_param.vehicle_shape.width = planner_data_->parameters.vehicle_width + margin;
+  common_param.vehicle_shape.base2back = planner_data_->parameters.base_link2rear + margin / 2;
   common_param.theta_size = 360;
   common_param.obstacle_threshold = 98;
 
@@ -102,6 +103,7 @@ void PullOverModule::onEntry()
   RCLCPP_DEBUG(getLogger(), "PULL_OVER onEntry");
   RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   current_state_ = BT::NodeStatus::SUCCESS;
+  updateOccupancyGrid();
   updatePullOverStatus();
   // Get arclength to start lane change
   const auto current_pose = planner_data_->self_pose->pose;
@@ -298,10 +300,8 @@ BehaviorModuleOutput PullOverModule::plan()
   goal_pose_publisher_->publish(goal_pose_);
 
   PathWithLaneId path;
-  std::cerr << "status_.is_safe: " << status_.is_safe << std::endl;
-  if (status_.is_safe) {
-    path = status_.pull_over_path.path;
-  } else {
+  path = status_.pull_over_path.path;
+  if (occupancy_grid_map_.hasObstacleOnPath(path)) {
     parallel_parking_planner_.setParams(planner_data_);
     parallel_parking_planner_.plan(goal_pose);
     path = parallel_parking_planner_.getCurrentPath();
@@ -363,7 +363,7 @@ void PullOverModule::setParameters(const PullOverParameters & parameters)
 
 void PullOverModule::updatePullOverStatus()
 {
-  // RCLCPP_ERROR(getLogger(), "(%s):", __func__);
+  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   const auto & route_handler = planner_data_->route_handler;
   const auto common_parameters = planner_data_->parameters;
 
@@ -531,6 +531,7 @@ std::pair<bool, bool> PullOverModule::getSafePath(
 
   const auto current_lanes = getCurrentLanes();
 
+  std::cerr <<  __func__ << " pull_over_lanes size " << pull_over_lanes.size() << std::endl;
   if (!pull_over_lanes.empty()) {
     // find candidate paths
     const auto pull_over_paths = pull_over_utils::getPullOverPaths(
@@ -539,6 +540,7 @@ std::pair<bool, bool> PullOverModule::getSafePath(
 
     // get lanes used for detection
     lanelet::ConstLanelets check_lanes;
+    std::cerr <<  __func__ << " pull_over_paths size " << pull_over_paths.size() << std::endl;
     if (!pull_over_paths.empty()) {
       const auto & longest_path = pull_over_paths.front();
       // we want to see check_distance [m] behind vehicle so add lane changing length
@@ -554,13 +556,14 @@ std::pair<bool, bool> PullOverModule::getSafePath(
       current_pose, route_handler->isInGoalRouteSection(current_lanes.back()),
       route_handler->getGoalPose());
 
+    std::cerr <<  __func__ << " valid_paths size " << valid_paths.size() << std::endl;
     if (valid_paths.empty()) {
       return std::make_pair(false, false);
     }
     // select safe path
     bool found_safe_path = pull_over_utils::selectSafePath(
       valid_paths, current_lanes, check_lanes, planner_data_->dynamic_object, current_pose,
-      current_twist, common_parameters.vehicle_width, parameters_, &safe_path);
+      current_twist, common_parameters.vehicle_width, parameters_, occupancy_grid_map_, &safe_path);
     return std::make_pair(true, found_safe_path);
   }
   return std::make_pair(false, false);
