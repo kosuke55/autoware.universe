@@ -304,6 +304,8 @@ BehaviorModuleOutput PullOverModule::plan()
   goal_pose_.header =  planner_data_->route_handler->getRouteHeader();
   goal_pose_publisher_->publish(goal_pose_);
 
+  updatePullOverStatus();
+
   PathWithLaneId path;
   path = status_.pull_over_path.path;
   if (occupancy_grid_map_.hasObstacleOnPath(path)) {
@@ -535,6 +537,9 @@ std::pair<bool, bool> PullOverModule::getSafePath(
   const auto common_parameters = planner_data_->parameters;
 
   const auto current_lanes = getCurrentLanes();
+  if (!isLongEnough(current_lanes)) {
+    return std::make_pair(false, false);
+  }
 
   std::cerr <<  __func__ << " pull_over_lanes size " << pull_over_lanes.size() << std::endl;
   if (!pull_over_lanes.empty()) {
