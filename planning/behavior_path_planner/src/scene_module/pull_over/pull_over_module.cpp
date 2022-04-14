@@ -219,13 +219,18 @@ Pose PullOverModule::researchGoal(){
   const float backward_search_length = 20;
   const auto common_param = occupancy_grid_map_.getParam();
 
-  // Serch non collision areas around the goal
   auto goal_pose = getRefinedGoal();
-  const Pose goal_pose_local = global2local(occupancy_grid_map_.getMap(), goal_pose);
-  float dx = -backward_search_length;
+  const Pose current_pose = planner_data_->self_pose->pose;
+
+  // Ignore the areas behind the ego
+  const Pose goal2current = inverseTransformPose(current_pose, goal_pose);
+  float dx = std::max(-backward_search_length, static_cast<float>(goal2current.position.x));
+
   bool prev_is_collided = false;
   pull_over_areas_.clear();
+  const Pose goal_pose_local = global2local(occupancy_grid_map_.getMap(), goal_pose);
   Pose start_pose = calcOffsetPose(goal_pose, dx, 0, 0);
+  // Serch non collision areas around the goal
   while (true) {
     bool is_last_search = (dx >= forward_serach_length);
     Pose serach_pose = calcOffsetPose(goal_pose_local, dx, 0, 0);
@@ -294,7 +299,7 @@ BT::NodeStatus PullOverModule::updateState()
 BehaviorModuleOutput PullOverModule::plan()
 {
   // RCLCPP_ERROR(getLogger(), "(%s):", __func__);
-  Pose goal_pose = researchGoal();
+  const Pose goal_pose = researchGoal();
   goal_pose_.pose = goal_pose;
   goal_pose_.header =  planner_data_->route_handler->getRouteHeader();
   goal_pose_publisher_->publish(goal_pose_);
