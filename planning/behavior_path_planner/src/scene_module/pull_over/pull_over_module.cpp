@@ -223,11 +223,13 @@ Pose PullOverModule::researchGoal(){
   auto goal_pose = getRefinedGoal();
   const Pose current_pose = planner_data_->self_pose->pose;
 
-  // Ignore the areas behind the ego
+  // Ignore the areas behind the ego.
   const Pose goal2current = inverseTransformPose(current_pose, goal_pose);
   double dx = std::max(-backward_search_length, static_cast<double>(goal2current.position.x));
 
-  bool prev_is_collided = false;
+  // Avoid adding areas that are in conflict from the start.
+  bool prev_is_collided = true;
+
   pull_over_areas_.clear();
   const Pose goal_pose_local = global2local(occupancy_grid_map_.getMap(), goal_pose);
   Pose start_pose = calcOffsetPose(goal_pose, dx, 0, 0);
@@ -237,7 +239,8 @@ Pose PullOverModule::researchGoal(){
     Pose serach_pose = calcOffsetPose(goal_pose_local, dx, 0, 0);
     bool is_collided = occupancy_grid_map_.detectCollision(
       pose2index(occupancy_grid_map_.getMap(), serach_pose, common_param.theta_size), false);
-    if (!prev_is_collided && is_collided || is_last_search) {
+    // Add area when (1) chnage non-collision -> collison, (2) last serach without collision
+    if ((!prev_is_collided && is_collided) || (!is_collided && is_last_search)) {
       Pose end_pose = calcOffsetPose(goal_pose, dx, 0, 0);
       if (!pull_over_areas_.empty()) {
         auto prev_area = pull_over_areas_.back();
