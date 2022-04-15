@@ -53,6 +53,7 @@ DummyPerceptionPublisherNode::DummyPerceptionPublisherNode()
 
 void DummyPerceptionPublisherNode::timerCallback()
 {
+  std::cerr << __func__ << ":"<< __LINE__ << std::endl;
   // output msgs
   tier4_perception_msgs::msg::DetectedObjectsWithFeature output_dynamic_object_msg;
   geometry_msgs::msg::PoseStamped output_moved_object_pose;
@@ -68,27 +69,33 @@ void DummyPerceptionPublisherNode::timerCallback()
 
   std::string error;
   if (!tf_buffer_.canTransform("base_link", /*src*/ "map", tf2::TimePointZero, &error)) {
+    std::cerr << __func__ << ":"<< __LINE__ << std::endl;
     failed_tf_time = this->now();
     RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "map->base_link is not available yet");
     return;
   }
 
+  std::cerr << __func__ << ":"<< __LINE__ << std::endl;
   tf2::Transform tf_base_link2map;
   try {
     geometry_msgs::msg::TransformStamped ros_base_link2map;
     ros_base_link2map = tf_buffer_.lookupTransform(
       /*target*/ "base_link", /*src*/ "map", current_time, rclcpp::Duration::from_seconds(0.5));
     tf2::fromMsg(ros_base_link2map.transform, tf_base_link2map);
+    std::cerr << __func__ << ":"<< __LINE__ << std::endl;
   } catch (tf2::TransformException & ex) {
     RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "%s", ex.what());
+    std::cerr << __func__ << ":"<< __LINE__ << std::endl;
     return;
   }
 
   std::vector<pcl::PointCloud<pcl::PointXYZ>::Ptr> v_pointcloud;
   std::vector<size_t> delete_idxs;
   static std::uniform_real_distribution<> detection_successful_random(0.0, 1.0);
+  std::cerr << __func__ << ":" << __LINE__ << "size: " << objects_.size() << std::endl;
   for (size_t i = 0; i < objects_.size(); ++i) {
     if (detection_successful_rate_ < detection_successful_random(random_generator_)) {
+      std::cerr << __func__ << ":"<< __LINE__ << std::endl;
       continue;
     }
     const double std_dev_x = std::sqrt(objects_.at(i).initial_state.pose_covariance.covariance[0]);
@@ -161,6 +168,7 @@ void DummyPerceptionPublisherNode::timerCallback()
   }
   // delete
   for (int delete_idx = delete_idxs.size() - 1; 0 <= delete_idx; --delete_idx) {
+    std::cerr << __func__ << ":"<< __LINE__ << std::endl;
     objects_.erase(objects_.begin() + delete_idxs.at(delete_idx));
   }
 
@@ -193,6 +201,7 @@ void DummyPerceptionPublisherNode::timerCallback()
           RCLCPP_ERROR(get_logger(), "ray tracing failed");
         }
         if (grid_state == 1) {  // occluded
+          std::cerr << __func__ << ":"<< __LINE__ << std::endl;
           continue;
         } else {  // not occluded
           ray_traced_pointcloud_ptr->push_back(v_pointcloud.at(i)->at(j));
@@ -218,8 +227,10 @@ void DummyPerceptionPublisherNode::timerCallback()
 
   // publish
   pointcloud_pub_->publish(output_pointcloud_msg);
+  std::cerr << __func__ << ":"<< __LINE__ << std::endl;
   if (use_object_recognition_) {
     detected_object_with_feature_pub_->publish(output_dynamic_object_msg);
+    std::cerr << __func__ << ":"<< __LINE__ << std::endl;
   }
 }
 

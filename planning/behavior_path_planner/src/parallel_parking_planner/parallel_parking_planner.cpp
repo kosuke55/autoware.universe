@@ -69,12 +69,11 @@ PathWithLaneId ParallelParkingPlanner::getCurrentPath()
 
   if (is_near_target && is_stopped) {
     current_path_idx_ += 1;
-    rclcpp::Rate(1.0).sleep();
+    // rclcpp::Rate(1.0).sleep();
   }
   std::cerr << "before_min current_path_idx_: " << current_path_idx_ << std::endl;
   current_path_idx_ = std::min(current_path_idx_, paths_.size() - 1);
   std::cerr << "current_path_idx_: " << current_path_idx_ << std::endl;
-  
 
   return paths_.at(current_path_idx_);
 }
@@ -258,7 +257,7 @@ PathPointWithLaneId ParallelParkingPlanner::generateArcPathPoint(
   Pose pose_centercoords;
   pose_centercoords.position.x = radius * std::cos(yaw);
   pose_centercoords.position.y = radius * std::sin(yaw);
-  pose_centercoords.position.z = center.position.z;
+  // pose_centercoords.position.z = center.position.z;
 
   tf2::Quaternion quat;
   if (is_left_turn) {
@@ -272,6 +271,16 @@ PathPointWithLaneId ParallelParkingPlanner::generateArcPathPoint(
   p.point.pose = transformPose(pose_centercoords, center);
   lanelet::ConstLanelet current_lane;
   planner_data_->route_handler->getClosestLaneletWithinRoute(p.point.pose, &current_lane);
+
+  double min_distance = std::numeric_limits<double>::max();
+  for (const auto pt : current_lane.centerline3d()) {
+    const double distance = calcDistance2d(p.point.pose, pt);
+    if (distance < min_distance) {
+      min_distance = distance;
+      p.point.pose.position.z = pt.z();
+    }
+  }
+
   p.lane_ids.push_back(current_lane.id());
 
   return p;
