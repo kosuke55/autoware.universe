@@ -49,6 +49,7 @@ class ParallelParkingPlanner
 {
 public:
   // ParallelParkingPlanner();
+  bool isParking() const;
   void plan(const Pose goal_pose);
   void setParams(const std::shared_ptr<const PlannerData> & planner_data);
 

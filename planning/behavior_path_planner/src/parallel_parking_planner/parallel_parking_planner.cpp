@@ -59,7 +59,7 @@ PathWithLaneId ParallelParkingPlanner::getCurrentPath()
   const auto current_target = current_path.points.back();
   const auto self_pose = planner_data_->self_pose->pose;
 
-  const float th_arrived_distance_m = 1.0;
+  const float th_arrived_distance_m = 0.5;
   const bool is_near_target =
     tier4_autoware_utils::calcDistance2d(current_target, self_pose) < th_arrived_distance_m;
 
@@ -71,20 +71,28 @@ PathWithLaneId ParallelParkingPlanner::getCurrentPath()
     current_path_idx_ += 1;
     rclcpp::Rate(1.0).sleep();
   }
+  std::cerr << "before_min current_path_idx_: " << current_path_idx_ << std::endl;
   current_path_idx_ = std::min(current_path_idx_, paths_.size() - 1);
+  std::cerr << "current_path_idx_: " << current_path_idx_ << std::endl;
+  
 
   return paths_.at(current_path_idx_);
 }
 
 void ParallelParkingPlanner::clear(){
+  std::cerr << "clear : " << current_path_idx_ << std::endl;
   current_path_idx_ = 0;
   paths_.clear();
+}
+
+bool ParallelParkingPlanner::isParking() const {
+  return current_path_idx_ > 0;
 }
 
 void ParallelParkingPlanner::plan(const Pose goal_pose)
 {
   // plan path only when parking has not started
-  if(current_path_idx_ == 0){
+  if(!isParking()){
     paths_.clear();
     getStraightPath(goal_pose);
     planOneTraial(goal_pose);

@@ -93,12 +93,7 @@ public:
   // : common_param_(common_param)
   // {
   // }
-  void setParam(const CommonParam & common_param)
-  {
-    std::cerr << "set param1 " << std::endl;
-    common_param_ = common_param;
-    std::cerr << "set param2 " << std::endl;
-  }
+  void setParam(const CommonParam & common_param){common_param_ = common_param;};
   CommonParam getParam() const { return common_param_; };
   void setMap(const nav_msgs::msg::OccupancyGrid & costmap);
   nav_msgs::msg::OccupancyGrid getMap() const { return costmap_; };

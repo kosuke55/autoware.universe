@@ -90,7 +90,7 @@ struct PullOverArea
 {
   Pose start_pose;
   Pose end_pose;
-  float distance_from_goal;
+  double distance_from_goal;
 
   Pose center_pose = calcAveragePose(start_pose, end_pose);
 

@@ -79,7 +79,7 @@ void PullOverModule::onOccupancyGrid(const OccupancyGrid::ConstSharedPtr msg)
 void PullOverModule::updateOccupancyGrid(){
   // need waiting for planner_data_
   CommonParam common_param;
-  const float margin = 0;
+  const double margin = 0;
   common_param.vehicle_shape.length = planner_data_->parameters.vehicle_length + margin;
   common_param.vehicle_shape.width = planner_data_->parameters.vehicle_width + margin;
   common_param.vehicle_shape.base2back = planner_data_->parameters.base_link2rear + margin / 2;
@@ -101,10 +101,11 @@ BehaviorModuleOutput PullOverModule::run()
 void PullOverModule::onEntry()
 {
   RCLCPP_DEBUG(getLogger(), "PULL_OVER onEntry");
-  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
+  // RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   current_state_ = BT::NodeStatus::SUCCESS;
   updateOccupancyGrid();
   updatePullOverStatus();
+  parallel_parking_planner_.clear();
   // Get arclength to start lane change
   const auto current_pose = planner_data_->self_pose->pose;
   const auto arclength_start =
@@ -123,7 +124,7 @@ void PullOverModule::onExit()
 
 bool PullOverModule::isExecutionRequested() const
 {
-  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
+  // RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   if (current_state_ == BT::NodeStatus::RUNNING) {
     return true;
   }
@@ -215,8 +216,8 @@ Pose PullOverModule::getRefinedGoal(){
 }
 
 Pose PullOverModule::researchGoal(){
-  const float forward_serach_length = 20;
-  const float backward_search_length = 20;
+  const double forward_serach_length = 20;
+  const double backward_search_length = 20;
   const auto common_param = occupancy_grid_map_.getParam();
 
   auto goal_pose = getRefinedGoal();
@@ -224,7 +225,7 @@ Pose PullOverModule::researchGoal(){
 
   // Ignore the areas behind the ego
   const Pose goal2current = inverseTransformPose(current_pose, goal_pose);
-  float dx = std::max(-backward_search_length, static_cast<float>(goal2current.position.x));
+  double dx = std::max(-backward_search_length, static_cast<double>(goal2current.position.x));
 
   bool prev_is_collided = false;
   pull_over_areas_.clear();
@@ -307,6 +308,7 @@ BehaviorModuleOutput PullOverModule::plan()
   updatePullOverStatus();
 
   PathWithLaneId path;
+  std::cerr << "is_safe: " << status_.is_safe << std::endl;
   if (status_.is_safe) {
     path = status_.pull_over_path.path;
   } else {
@@ -339,7 +341,7 @@ BehaviorModuleOutput PullOverModule::plan()
 
 PathWithLaneId PullOverModule::planCandidate() const
 {
-  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
+  // RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   // Get lane change lanes
   const auto current_lanes = getCurrentLanes();
   const auto pull_over_lanes = getPullOverLanes(current_lanes);
@@ -356,7 +358,7 @@ PathWithLaneId PullOverModule::planCandidate() const
 
 BehaviorModuleOutput PullOverModule::planWaitingApproval()
 {
-  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
+  // RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   BehaviorModuleOutput out;
   out.path = std::make_shared<PathWithLaneId>(getReferencePath());
   out.path_candidate = std::make_shared<PathWithLaneId>(planCandidate());
@@ -365,13 +367,13 @@ BehaviorModuleOutput PullOverModule::planWaitingApproval()
 
 void PullOverModule::setParameters(const PullOverParameters & parameters)
 {
-  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
+  // RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   parameters_ = parameters;
 }
 
 void PullOverModule::updatePullOverStatus()
 {
-  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
+  // RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   const auto & route_handler = planner_data_->route_handler;
   const auto common_parameters = planner_data_->parameters;
 
@@ -423,7 +425,7 @@ void PullOverModule::updatePullOverStatus()
 
   status_.pull_over_path.path.header = planner_data_->route_handler->getRouteHeader();
 
-  parallel_parking_planner_.clear();
+  // parallel_parking_planner_.clear();
   // とりあえずここでparral parkingのpathを生成する。
   // Pose goal_pose = researchGoal();
   // parallel_parking_planner_.setParams(planner_data_);
@@ -479,7 +481,7 @@ PathWithLaneId PullOverModule::getReferencePath() const
 
 lanelet::ConstLanelets PullOverModule::getCurrentLanes() const
 {
-  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
+  // RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   const auto & route_handler = planner_data_->route_handler;
   const auto current_pose = planner_data_->self_pose->pose;
   const auto common_parameters = planner_data_->parameters;
@@ -529,7 +531,7 @@ std::pair<bool, bool> PullOverModule::getSafePath(
   const lanelet::ConstLanelets & pull_over_lanes, const double check_distance,
   PullOverPath & safe_path) const
 {
-  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
+  // RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   std::vector<PullOverPath> valid_paths;
 
   const auto & route_handler = planner_data_->route_handler;
