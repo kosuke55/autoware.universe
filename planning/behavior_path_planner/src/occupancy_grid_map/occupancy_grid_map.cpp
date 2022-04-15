@@ -151,7 +151,8 @@ void OccupancyGridMap::computeCollisionIndexes(
   }
 }
 
-bool OccupancyGridMap::detectCollision(const IndexXYT & base_index) const
+bool OccupancyGridMap::detectCollision(
+  const IndexXYT & base_index, const bool check_out_of_range) const
 {
   const auto & coll_indexes_2d = coll_indexes_table_[base_index.theta];
   for (const auto & coll_index_2d : coll_indexes_2d) {
@@ -160,22 +161,24 @@ bool OccupancyGridMap::detectCollision(const IndexXYT & base_index) const
     // must slide to current base position
     coll_index.x += base_index.x;
     coll_index.y += base_index.y;
-
-    if (isOutOfRange(coll_index) || isObs(coll_index)) {
-      return true;
+    if (check_out_of_range) {
+      if (isOutOfRange(coll_index) || isObs(coll_index)) return true;
+    } else {
+      if (isOutOfRange(coll_index)) return false;
+      if (isObs(coll_index)) return true;
     }
   }
   return false;
 }
 
 bool OccupancyGridMap::hasObstacleOnPath(
-  const geometry_msgs::msg::PoseArray & path) const
+  const geometry_msgs::msg::PoseArray & path, const bool check_out_of_range) const
 {
   for (const auto & pose : path.poses) {
     const auto pose_local = global2local(costmap_, pose);
     const auto index = pose2index(costmap_, pose_local, common_param_.theta_size);
 
-    if (detectCollision(index)) {
+    if (detectCollision(index, check_out_of_range)) {
       return true;
     }
   }
@@ -184,13 +187,14 @@ bool OccupancyGridMap::hasObstacleOnPath(
 }
 
 bool OccupancyGridMap::hasObstacleOnPath(
-  const autoware_auto_planning_msgs::msg::PathWithLaneId & path) const
+  const autoware_auto_planning_msgs::msg::PathWithLaneId & path,
+  const bool check_out_of_range) const
 {
   for (const auto & p : path.points) {
     const auto pose_local = global2local(costmap_, p.point.pose);
     const auto index = pose2index(costmap_, pose_local, common_param_.theta_size);
 
-    if (detectCollision(index)) {
+    if (detectCollision(index, check_out_of_range)) {
       return true;
     }
   }

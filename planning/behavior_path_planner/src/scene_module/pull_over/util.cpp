@@ -324,7 +324,7 @@ bool selectSafePath(
 {
   std::cerr <<  __func__ << " path size " << paths.size() << std::endl;
   for (const auto & path : paths) {
-    if (!occupancy_grid_map.hasObstacleOnPath(path.path)) {
+    if (!occupancy_grid_map.hasObstacleOnPath(path.path, false)) {
       *selected_path = path;
       return true;
     }

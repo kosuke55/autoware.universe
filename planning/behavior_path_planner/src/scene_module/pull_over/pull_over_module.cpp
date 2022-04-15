@@ -79,7 +79,7 @@ void PullOverModule::onOccupancyGrid(const OccupancyGrid::ConstSharedPtr msg)
 void PullOverModule::updateOccupancyGrid(){
   // need waiting for planner_data_
   CommonParam common_param;
-  const float margin = 1;
+  const float margin = 0;
   common_param.vehicle_shape.length = planner_data_->parameters.vehicle_length + margin;
   common_param.vehicle_shape.width = planner_data_->parameters.vehicle_width + margin;
   common_param.vehicle_shape.base2back = planner_data_->parameters.base_link2rear + margin / 2;
@@ -235,7 +235,7 @@ Pose PullOverModule::researchGoal(){
     bool is_last_search = (dx >= forward_serach_length);
     Pose serach_pose = calcOffsetPose(goal_pose_local, dx, 0, 0);
     bool is_collided = occupancy_grid_map_.detectCollision(
-      pose2index(occupancy_grid_map_.getMap(), serach_pose, common_param.theta_size));
+      pose2index(occupancy_grid_map_.getMap(), serach_pose, common_param.theta_size), false);
     if (!prev_is_collided && is_collided || is_last_search) {
       Pose end_pose = calcOffsetPose(goal_pose, dx, 0, 0);
       if (!pull_over_areas_.empty()) {
@@ -263,7 +263,7 @@ Pose PullOverModule::researchGoal(){
   // If init goal does not collide, add it to candidates.
   goal_candidates_.clear();
   if (!occupancy_grid_map_.detectCollision(
-        pose2index(occupancy_grid_map_.getMap(), goal_pose_local, common_param.theta_size))) {
+        pose2index(occupancy_grid_map_.getMap(), goal_pose_local, common_param.theta_size), false)) {
     goal_candidates_.push_back(goal_pose);
   }
 
@@ -307,8 +307,9 @@ BehaviorModuleOutput PullOverModule::plan()
   updatePullOverStatus();
 
   PathWithLaneId path;
-  path = status_.pull_over_path.path;
-  if (occupancy_grid_map_.hasObstacleOnPath(path)) {
+  if (status_.is_safe) {
+    path = status_.pull_over_path.path;
+  } else {
     parallel_parking_planner_.setParams(planner_data_);
     parallel_parking_planner_.plan(goal_pose);
     path = parallel_parking_planner_.getCurrentPath();
