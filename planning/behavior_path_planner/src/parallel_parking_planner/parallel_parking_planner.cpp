@@ -19,6 +19,7 @@
 #include "tier4_autoware_utils/geometry/geometry.hpp"
 
 #include <interpolation/spline_interpolation.hpp>
+#include <lanelet2_extension/utility/message_conversion.hpp>
 #include <lanelet2_extension/utility/utilities.hpp>
 #include <tier4_autoware_utils/tier4_autoware_utils.hpp>
 
@@ -30,15 +31,16 @@
 #include <vector>
 
 using autoware_auto_planning_msgs::msg::PathWithLaneId;
-using behavior_path_planner::util::removeOverlappingPoints;
 using behavior_path_planner::util::concatePath;
 using behavior_path_planner::util::convertToGeometryPoseArray;
+using behavior_path_planner::util::removeOverlappingPoints;
 using geometry_msgs::msg::Pose;
 using geometry_msgs::msg::PoseArray;
 using geometry_msgs::msg::PoseStamped;
 using geometry_msgs::msg::Transform;
 using geometry_msgs::msg::TransformStamped;
 using tier4_autoware_utils::calcDistance2d;
+using tier4_autoware_utils::calcOffsetPose;
 using tier4_autoware_utils::calcSignedArcLength;
 using tier4_autoware_utils::deg2rad;
 using tier4_autoware_utils::fromMsg;
@@ -48,7 +50,6 @@ using tier4_autoware_utils::Point2d;
 using tier4_autoware_utils::Point3d;
 using tier4_autoware_utils::pose2transform;
 using tier4_autoware_utils::toMsg;
-using tier4_autoware_utils::calcOffsetPose;
 using tier4_autoware_utils::transformPose;
 
 namespace behavior_path_planner
@@ -78,27 +79,27 @@ PathWithLaneId ParallelParkingPlanner::getCurrentPath()
   return paths_.at(current_path_idx_);
 }
 
-void ParallelParkingPlanner::clear(){
+void ParallelParkingPlanner::clear()
+{
   std::cerr << "clear : " << current_path_idx_ << std::endl;
   current_path_idx_ = 0;
   paths_.clear();
 }
 
-bool ParallelParkingPlanner::isParking() const {
-  return current_path_idx_ > 0;
-}
+bool ParallelParkingPlanner::isParking() const { return current_path_idx_ > 0; }
 
 void ParallelParkingPlanner::plan(const Pose goal_pose)
 {
   // plan path only when parking has not started
-  if(!isParking()){
+  if (!isParking()) {
     paths_.clear();
     getStraightPath(goal_pose);
     planOneTraial(goal_pose);
   }
 }
 
-Pose ParallelParkingPlanner::getStartPose(const Pose goal_pose){
+Pose ParallelParkingPlanner::getStartPose(const Pose goal_pose)
+{
   auto current_lanes = util::getCurrentLanes(planner_data_);
   const auto arc_coordinates = lanelet::utils::getArcCoordinates(current_lanes, goal_pose);
 
@@ -109,7 +110,8 @@ Pose ParallelParkingPlanner::getStartPose(const Pose goal_pose){
   return start_pose;
 }
 
- void ParallelParkingPlanner::getStraightPath(const Pose goal_pose){
+void ParallelParkingPlanner::getStraightPath(const Pose goal_pose)
+{
   // get stright path before parking.
   auto current_lanes = util::getCurrentLanes(planner_data_);
   const auto next_lanes = planner_data_->route_handler->getNextLanelets(current_lanes.back());
@@ -134,14 +136,13 @@ Pose ParallelParkingPlanner::getStartPose(const Pose goal_pose){
   path.points.back().point.longitudinal_velocity_mps = 0;
 
   paths_.push_back(path);
-
 }
 
 void ParallelParkingPlanner::planOneTraial(const Pose goal_pose)
 {
   // debug
   start_pose_.pose = getStartPose(goal_pose);
-  start_pose_.header =  planner_data_->route_handler->getRouteHeader();
+  start_pose_.header = planner_data_->route_handler->getRouteHeader();
 
   PathWithLaneId path;
   const auto start_pose = getStartPose(goal_pose);
@@ -214,7 +215,6 @@ void ParallelParkingPlanner::planOneTraial(const Pose goal_pose)
 
   path.header = planner_data_->route_handler->getRouteHeader();
   path_pose_array_ = convertToGeometryPoseArray(concat_path);
-
 }
 
 PathWithLaneId ParallelParkingPlanner::generateArcPath(
@@ -272,9 +272,11 @@ PathPointWithLaneId ParallelParkingPlanner::generateArcPathPoint(
   lanelet::ConstLanelet current_lane;
   planner_data_->route_handler->getClosestLaneletWithinRoute(p.point.pose, &current_lane);
 
+  // Use z of lanelet closest point
   double min_distance = std::numeric_limits<double>::max();
   for (const auto pt : current_lane.centerline3d()) {
-    const double distance = calcDistance2d(p.point.pose, pt);
+    const double distance =
+      calcDistance2d(p.point.pose, lanelet::utils::conversion::toGeomMsgPt(pt));
     if (distance < min_distance) {
       min_distance = distance;
       p.point.pose.position.z = pt.z();
