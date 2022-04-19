@@ -220,6 +220,13 @@ Pose PullOverModule::getRefinedGoal(){
 
   Pose refined_goal_pose = lanelet::utils::getClosestCenterPose(closest_shoulder_lanelet, goal_pose.position);
 
+  const double distance_to_left_bound =
+    util::getDistanceToShoulderBoundary(planner_data_->route_handler->getShoulderLanelets(), refined_goal_pose);
+  const double offset_from_center_line = distance_to_left_bound +
+                                         planner_data_->parameters.vehicle_width / 2 +
+                                         parameters_.margin_from_boundary;
+  refined_goal_pose = calcOffsetPose(refined_goal_pose, 0, -offset_from_center_line, 0);
+
   return refined_goal_pose;
 }
 
@@ -247,7 +254,7 @@ Pose PullOverModule::researchGoal(){
     Pose serach_pose = calcOffsetPose(goal_pose_local, dx, 0, 0);
     bool is_collided = occupancy_grid_map_.detectCollision(
       pose2index(occupancy_grid_map_.getMap(), serach_pose, common_param.theta_size), false);
-    // Add area when (1) chnage non-collision -> collison, (2) last serach without collision
+    // Add area when (1) chnage non-collision -> collison or (2) last serach without collision
     if ((!prev_is_collided && is_collided) || (!is_collided && is_last_search)) {
       Pose end_pose = calcOffsetPose(goal_pose, dx, 0, 0);
       if (!pull_over_areas_.empty()) {
