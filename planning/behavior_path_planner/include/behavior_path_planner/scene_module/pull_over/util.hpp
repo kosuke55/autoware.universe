@@ -46,8 +46,8 @@ bool isPathInLanelets(
   const lanelet::ConstLanelets & target_lanelets);
 std::vector<PullOverPath> getPullOverPaths(
   const RouteHandler & route_handler, const lanelet::ConstLanelets & original_lanelets,
-  const lanelet::ConstLanelets & target_lanelets, const Pose & pose, const Twist & twist,
-  const BehaviorPathPlannerParameters & common_parameter,
+  const lanelet::ConstLanelets & target_lanelets, const Pose & pose, const Pose & goal_pose,
+  const Twist & twist, const BehaviorPathPlannerParameters & common_parameter,
   const behavior_path_planner::PullOverParameters & parameter);
 
 std::vector<PullOverPath> selectValidPaths(

@@ -63,7 +63,7 @@ void PathShifter::setShiftPoints(const std::vector<ShiftPoint> & points)
 bool PathShifter::generate(
   ShiftedPath * shifted_path, const bool offset_back, const SHIFT_TYPE type)
 {
-  RCLCPP_ERROR(logger_, "PathShifter::generate start!");
+  RCLCPP_DEBUG_STREAM(logger_, "PathShifter::generate start!");
 
   // Guard
   if (reference_path_.points.empty()) {

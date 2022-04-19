@@ -77,7 +77,7 @@ bool isPathInLanelets(
 
 std::vector<PullOverPath> getPullOverPaths(
   const RouteHandler & route_handler, const lanelet::ConstLanelets & original_lanelets,
-  const lanelet::ConstLanelets & target_lanelets, const Pose & pose,
+  const lanelet::ConstLanelets & target_lanelets, const Pose & current_pose, const Pose & goal_pose,
   [[maybe_unused]] const Twist & twist, const BehaviorPathPlannerParameters & common_parameter,
   const PullOverParameters & parameter)
 {
@@ -102,7 +102,7 @@ std::vector<PullOverPath> getPullOverPaths(
     std::abs(maximum_lateral_jerk - minimum_lateral_jerk) / pull_over_sampling_num;
 
   double distance_to_shoulder_lane_boundary =
-    util::getDistanceToShoulderBoundary(route_handler.getShoulderLanelets(), pose);
+    util::getDistanceToShoulderBoundary(route_handler.getShoulderLanelets(), current_pose);
   double offset_from_current_pose =
     distance_to_shoulder_lane_boundary + common_parameter.vehicle_width / 2 + margin;
 
@@ -119,8 +119,8 @@ std::vector<PullOverPath> getPullOverPaths(
     double straight_distance;
     {
       const auto arc_position_goal =
-        lanelet::utils::getArcCoordinates(original_lanelets, route_handler.getGoalPose());
-      const auto arc_position_pose = lanelet::utils::getArcCoordinates(original_lanelets, pose);
+        lanelet::utils::getArcCoordinates(original_lanelets, goal_pose);
+      const auto arc_position_pose = lanelet::utils::getArcCoordinates(original_lanelets, current_pose);
       straight_distance = arc_position_goal.length - after_pull_over_straight_distance -
                           pull_over_distance - arc_position_pose.length;
       // if (straight_distance < before_pull_over_straight_distance) {
@@ -134,7 +134,7 @@ std::vector<PullOverPath> getPullOverPaths(
     PathWithLaneId reference_path2;
     {
       const auto arc_position_goal =
-        lanelet::utils::getArcCoordinates(target_lanelets, route_handler.getGoalPose());
+        lanelet::utils::getArcCoordinates(target_lanelets, goal_pose);
       double s_start = arc_position_goal.length - after_pull_over_straight_distance;
       double s_end = arc_position_goal.length;
       s_end = std::max(s_end, s_start + std::numeric_limits<double>::epsilon());
@@ -143,7 +143,7 @@ std::vector<PullOverPath> getPullOverPaths(
 
     PathWithLaneId reference_path1;
     {
-      const auto arc_position = lanelet::utils::getArcCoordinates(original_lanelets, pose);
+      const auto arc_position = lanelet::utils::getArcCoordinates(original_lanelets, current_pose);
       const auto arc_position_ref2_front = lanelet::utils::getArcCoordinates(
         original_lanelets, reference_path2.points.front().point.pose);
       const double s_start = arc_position.length - backward_path_length;
@@ -235,15 +235,15 @@ std::vector<PullOverPath> getPullOverPaths(
     // shifted_path.path.points = std::vector<PathPointWithLaneId>(0, *shift_end_idx + 1);
 
     const auto goal_idx =
-      tier4_autoware_utils::findNearestIndex(shifted_path.path.points, route_handler.getGoalPose());
+      tier4_autoware_utils::findNearestIndex(shifted_path.path.points, goal_pose);
     shifted_path.path.points.erase(
       std::cbegin(shifted_path.path.points) + *goal_idx + 1, std::cend(shifted_path.path.points));
 
     auto last_point_local = inverseTransformPoint(
-      route_handler.getGoalPose().position, shifted_path.path.points.back().point.pose);
+      goal_pose.position, shifted_path.path.points.back().point.pose);
     auto *goal_point = &shifted_path.path.points.back();
     goal_point->point.pose = calcOffsetPose(goal_point->point.pose, last_point_local.x, 0, 0);
-    // goal_point->point.pose = route_handler.getGoalPose();
+    // goal_point->point.pose = goal_pose;
 
     if (shift_end_idx && goal_idx) {
       const auto distance_pull_over_end_to_goal = tier4_autoware_utils::calcDistance2d(

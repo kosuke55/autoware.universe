@@ -1799,13 +1799,38 @@ lanelet::ConstLanelets getCurrentLanes(const std::shared_ptr<const PlannerData> 
     common_parameters.forward_path_length);
 }
 
-PathWithLaneId concatePath(const PathWithLaneId path1, const PathWithLaneId path2)
+lanelet::ConstLanelets getExtendedCurrentLanes(const std::shared_ptr<const PlannerData> & planner_data)
 {
-  PathWithLaneId path = path1;
-  for (const auto & point : path2.points) {
-    path.points.push_back(point);
+  const auto & route_handler = planner_data->route_handler;
+  const auto current_pose = planner_data->self_pose->pose;
+  const auto common_parameters = planner_data->parameters;
+
+  lanelet::ConstLanelet current_lane;
+  if (!route_handler->getClosestLaneletWithinRoute(current_pose, &current_lane)) {
+    // RCLCPP_ERROR(getLogger(), "failed to find closest lanelet within route!!!");
+    std::cerr << "failed to find closest lanelet within route!!!" << std::endl;
+    return {};  // TODO(Horibe) what should be returned?
   }
-  return path;
+
+  // For current_lanes with desired length
+  auto current_lanes =  route_handler->getLaneletSequence(
+    current_lane, current_pose, common_parameters.backward_path_length,
+    common_parameters.forward_path_length);
+
+  // Add next_lanes
+  const auto next_lanes = route_handler->getNextLanelets(current_lanes.back());
+  if(!next_lanes.empty()){
+    current_lanes.insert(current_lanes.end(), next_lanes.begin(), next_lanes.end());
+  }
+
+  // Add prev_lane
+  lanelet::ConstLanelets prev_lanes;
+  if (route_handler->getPreviousLaneletsWithinRoute(
+        current_lanes.front(), &prev_lanes)) {
+    current_lanes.insert(current_lanes.begin(), prev_lanes.begin(), prev_lanes.end());
+  }
+
+  return current_lanes;
 }
 
 }  // namespace util

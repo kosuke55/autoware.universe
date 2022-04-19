@@ -80,15 +80,17 @@ private:
 
   std::unique_ptr<LaneDepartureChecker> lane_departure_checker_;
 
-  void planOneTraial(const Pose goal_pose, const double start_pose_offset);
+  void planOneTraial(
+    const Pose goal_pose, const double start_pose_offset, const lanelet::ConstLanelets lanes);
   PathWithLaneId generateArcPath(
     const Pose & center, const float radius, const float start_rad, float end_rad,
     const bool is_left_turn);
   PathPointWithLaneId generateArcPathPoint(
     const Pose & center, const float radius, const float yaw, const bool is_left_turn);
-  // lanelet::ConstLanelets getCurrentLanes() const;
-  Pose getStartPose(const Pose goal_pose, const double start_pose_offset);
-  void getStraightPath(const Pose goal_pose, const double start_pose_offset);
+  Pose getStartPose(
+    const Pose goal_pose, const double start_pose_offset);
+  void getStraightPath(
+    const Pose goal_pose, const double start_pose_offset, const lanelet::ConstLanelets lanes);
 };
 
 }  // namespace behavior_path_planner

@@ -129,10 +129,10 @@ private:
   double check_distance_ = 100.0;
 
   PathWithLaneId getReferencePath() const;
-  lanelet::ConstLanelets getCurrentLanes() const;
+  // lanelet::ConstLanelets getCurrentLanes() const;
   lanelet::ConstLanelets getPullOverLanes(const lanelet::ConstLanelets & current_lanes) const;
   std::pair<bool, bool> getSafePath(
-    const lanelet::ConstLanelets & pull_over_lanes, const double check_distance,
+    const lanelet::ConstLanelets & pull_over_lanes, const double check_distance, const Pose goal_pose,
     PullOverPath & safe_path) const;
   TurnSignalInfo getTurnSignalAndDistance(const PathWithLaneId & path) const;
 
@@ -171,7 +171,7 @@ private:
   rclcpp::Publisher<MarkerArray>::SharedPtr parking_area_pub_;
 
   ParallelParkingPlanner parallel_parking_planner_;
-  PoseStamped goal_pose_;
+  Pose goal_pose_;
   std::vector<PullOverArea> pull_over_areas_;
   std::vector<Pose> goal_candidates_;
 

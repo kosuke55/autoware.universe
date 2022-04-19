@@ -133,7 +133,7 @@ bool PullOverModule::isExecutionRequested() const
   lanelet::Lanelet closest_shoulder_lanelet;
   bool goal_is_in_shoulder_lane = false;
   const auto goal_pose = planner_data_->route_handler->getGoalPose();
-  const auto current_lanes = getCurrentLanes();
+  const auto current_lanes = util::getExtendedCurrentLanes(planner_data_);
 
   if (lanelet::utils::query::getClosestLanelet(
         planner_data_->route_handler->getShoulderLanelets(), goal_pose,
@@ -166,7 +166,7 @@ bool PullOverModule::isExecutionReady() const
 
   return true;
 
-  // const auto current_lanes = getCurrentLanes();
+  // const auto current_lanes = util::getExtendedCurrentLanes(planner_data_);
   // const auto pull_over_lanes = getPullOverLanes(current_lanes);
 
   // Find pull_over path
@@ -232,8 +232,9 @@ Pose PullOverModule::researchGoal(){
   const Pose current_pose = planner_data_->self_pose->pose;
 
   // Ignore the areas behind the ego.
-  const Pose goal2current = inverseTransformPose(current_pose, goal_pose);
-  double dx = std::max(-backward_search_length, static_cast<double>(goal2current.position.x));
+  // const Pose goal2current = inverseTransformPose(current_pose, goal_pose);
+  // double dx = std::max(-backward_search_length, static_cast<double>(goal2current.position.x));
+  double dx = -backward_search_length;
 
   // Avoid adding areas that are in conflict from the start.
   bool prev_is_collided = true;
@@ -287,10 +288,18 @@ Pose PullOverModule::researchGoal(){
     marker_array.markers.push_back(createParkingAreaMarker(
       pull_over_areas_.at(i).start_pose, pull_over_areas_.at(i).end_pose, i));
     // std::cerr << "distance: " << pull_over_areas_.at(i).distance_from_goal << std::endl;
+    // Ignore the goal behind the ego.
+    const Pose current2goal =
+      inverseTransformPose(pull_over_areas_.at(i).center_pose, current_pose);
+    if (current2goal.position.x < 0) {
+      continue;
+    }
+    std::cerr << "candidates push_back: " << std::endl;
     goal_candidates_.push_back(pull_over_areas_.at(i).center_pose);
   }
 
   parking_area_pub_->publish(marker_array);
+  std::cerr << "candidates size: " << goal_candidates_.size() << std::endl;
 
   return goal_candidates_.front();
 }
@@ -312,11 +321,13 @@ BehaviorModuleOutput PullOverModule::plan()
 {
   // RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   const Pose goal_pose = researchGoal();
-  goal_pose_.pose = goal_pose;
-  goal_pose_.header =  planner_data_->route_handler->getRouteHeader();
-  goal_pose_publisher_->publish(goal_pose_);
+  PoseStamped goal_pose_stamped;
+  goal_pose_stamped.pose = goal_pose;
+  goal_pose_stamped.header =  planner_data_->route_handler->getRouteHeader();
+  goal_pose_stamped.header = occupancy_grid_->header;
+  goal_pose_publisher_->publish(goal_pose_stamped);
 
-  const auto current_lanes = getCurrentLanes();
+  const auto current_lanes = util::getExtendedCurrentLanes(planner_data_);
   const auto pull_over_lanes = getPullOverLanes(current_lanes);
   const auto target_lanes = lanelet::utils::concatenateLanelets(current_lanes, pull_over_lanes);
 
@@ -357,14 +368,14 @@ PathWithLaneId PullOverModule::planCandidate() const
 {
   // RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   // Get lane change lanes
-  const auto current_lanes = getCurrentLanes();
+  const auto current_lanes = util::getExtendedCurrentLanes(planner_data_);
   const auto pull_over_lanes = getPullOverLanes(current_lanes);
 
   // Find lane change path
   bool found_valid_path, found_safe_path;
   PullOverPath selected_path;
   std::tie(found_valid_path, found_safe_path) =
-    getSafePath(pull_over_lanes, check_distance_, selected_path);
+    getSafePath(pull_over_lanes, check_distance_, goal_pose_, selected_path);
   selected_path.path.header = planner_data_->route_handler->getRouteHeader();
 
   return selected_path.path;
@@ -375,6 +386,7 @@ BehaviorModuleOutput PullOverModule::planWaitingApproval()
   // RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   BehaviorModuleOutput out;
   out.path = std::make_shared<PathWithLaneId>(getReferencePath());
+  goal_pose_ = researchGoal(); // planCnadidateがconstだからここでgoal_pose_をメンバ変数に持つ
   out.path_candidate = std::make_shared<PathWithLaneId>(planCandidate());
   return out;
 }
@@ -385,13 +397,14 @@ void PullOverModule::setParameters(const PullOverParameters & parameters)
   parameters_ = parameters;
 }
 
+// これが実質シフトパス生成の関数になってる。
 void PullOverModule::updatePullOverStatus()
 {
   // RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   const auto & route_handler = planner_data_->route_handler;
   const auto common_parameters = planner_data_->parameters;
 
-  const auto current_lanes = getCurrentLanes();
+  const auto current_lanes = util::getExtendedCurrentLanes(planner_data_);
   status_.current_lanes = current_lanes;
 
   lanelet::ConstLanelet target_shoulder_lane;
@@ -411,8 +424,9 @@ void PullOverModule::updatePullOverStatus()
   // Find pull_over path
   bool found_valid_path, found_safe_path;
   PullOverPath selected_path;
+  const Pose goal_pose = researchGoal();
   std::tie(found_valid_path, found_safe_path) =
-    getSafePath(pull_over_lanes, check_distance_, selected_path);
+    getSafePath(pull_over_lanes, check_distance_, goal_pose, selected_path);
 
   // Update status
   status_.is_safe = found_safe_path;
@@ -471,7 +485,7 @@ PathWithLaneId PullOverModule::getReferencePath() const
   // Set header
   reference_path.header = route_handler->getRouteHeader();
 
-  const auto current_lanes = getCurrentLanes();
+  const auto current_lanes = util::getExtendedCurrentLanes(planner_data_);
 
   if (current_lanes.empty()) {
     return reference_path;
@@ -491,25 +505,6 @@ PathWithLaneId PullOverModule::getReferencePath() const
     planner_data_);
 
   return reference_path;
-}
-
-lanelet::ConstLanelets PullOverModule::getCurrentLanes() const
-{
-  // RCLCPP_ERROR(getLogger(), "(%s):", __func__);
-  const auto & route_handler = planner_data_->route_handler;
-  const auto current_pose = planner_data_->self_pose->pose;
-  const auto common_parameters = planner_data_->parameters;
-
-  lanelet::ConstLanelet current_lane;
-  if (!route_handler->getClosestLaneletWithinRoute(current_pose, &current_lane)) {
-    RCLCPP_ERROR(getLogger(), "failed to find closest lanelet within route!!!");
-    return {};  // TODO(Horibe) what should be returned?
-  }
-
-  // For current_lanes with desired length
-  return route_handler->getLaneletSequence(
-    current_lane, current_pose, common_parameters.backward_path_length,
-    common_parameters.forward_path_length);
 }
 
 lanelet::ConstLanelets PullOverModule::getPullOverLanes(
@@ -542,7 +537,7 @@ lanelet::ConstLanelets PullOverModule::getPullOverLanes(
 }
 
 std::pair<bool, bool> PullOverModule::getSafePath(
-  const lanelet::ConstLanelets & pull_over_lanes, const double check_distance,
+  const lanelet::ConstLanelets & pull_over_lanes, const double check_distance, const Pose goal_pose,
   PullOverPath & safe_path) const
 {
   // RCLCPP_ERROR(getLogger(), "(%s):", __func__);
@@ -553,7 +548,7 @@ std::pair<bool, bool> PullOverModule::getSafePath(
   const auto current_twist = planner_data_->self_odometry->twist.twist;
   const auto common_parameters = planner_data_->parameters;
 
-  const auto current_lanes = getCurrentLanes();
+  const auto current_lanes = util::getExtendedCurrentLanes(planner_data_);
   if (!isLongEnough(current_lanes)) {
     return std::make_pair(false, false);
   }
@@ -562,12 +557,12 @@ std::pair<bool, bool> PullOverModule::getSafePath(
   if (!pull_over_lanes.empty()) {
     // find candidate paths
     const auto pull_over_paths = pull_over_utils::getPullOverPaths(
-      *route_handler, current_lanes, pull_over_lanes, current_pose, current_twist,
+      *route_handler, current_lanes, pull_over_lanes, current_pose, goal_pose, current_twist,
       common_parameters, parameters_);
 
     // get lanes used for detection
     lanelet::ConstLanelets check_lanes;
-    std::cerr <<  __func__ << " pull_over_paths size " << pull_over_paths.size() << std::endl;
+    // std::cerr <<  __func__ << " pull_over_paths size " << pull_over_paths.size() << std::endl;
     if (!pull_over_paths.empty()) {
       const auto & longest_path = pull_over_paths.front();
       // we want to see check_distance [m] behind vehicle so add lane changing length
@@ -580,10 +575,9 @@ std::pair<bool, bool> PullOverModule::getSafePath(
     // select valid path
     valid_paths = pull_over_utils::selectValidPaths(
       pull_over_paths, current_lanes, check_lanes, *route_handler->getOverallGraphPtr(),
-      current_pose, route_handler->isInGoalRouteSection(current_lanes.back()),
-      route_handler->getGoalPose());
+      current_pose, route_handler->isInGoalRouteSection(current_lanes.back()), goal_pose);
 
-    std::cerr <<  __func__ << " valid_paths size " << valid_paths.size() << std::endl;
+    // std::cerr <<  __func__ << " valid_paths size " << valid_paths.size() << std::endl;
     if (valid_paths.empty()) {
       return std::make_pair(false, false);
     }
@@ -675,7 +669,7 @@ bool PullOverModule::hasFinishedPullOver() const
       planner_data_->route_handler->getShoulderLanelets(), planner_data_->self_pose->pose,
       &closest_shoulder_lanelet) &&
     car_is_on_goal && car_is_stopping) {
-    const auto road_lanes = getCurrentLanes();
+    const auto road_lanes = util::getExtendedCurrentLanes(planner_data_);
 
     // check if goal pose is in shoulder lane and distance is long enough for pull out
     // if (isLongEnough(road_lanes)) {
