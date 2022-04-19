@@ -86,13 +86,8 @@ PathWithLaneId ParallelParkingPlanner::getCurrentPath()
 PathWithLaneId ParallelParkingPlanner::getFullPath()
 {
   PathWithLaneId path{};
-  if (paths_.size() > 0) {
-    path = paths_.front();
-    if (paths_.size() > 1) {
-      for (size_t i = 1; i < paths_.size(); i++) {
-        path = concatePath(path, paths_.at(i));
-      }
-    }
+  for (const auto & p: paths_){
+    path.points.insert(path.points.begin(), p.points.begin(), p.points.end());
   }
   return path;
 }
