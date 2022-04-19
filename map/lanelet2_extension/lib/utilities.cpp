@@ -621,5 +621,15 @@ geometry_msgs::msg::Pose getClosestCenterPose(
   return closest_pose;
 }
 
+ConstLanelets concatenateLanelets(
+  const ConstLanelets & lanelets_a, const ConstLanelets & lanelets_b)
+{
+  ConstLanelets lanelets = lanelets_a;
+  for (const auto & llt : lanelets_b) {
+    lanelets.push_back(llt);
+  }
+  return lanelets;
+}
+
 }  // namespace utils
 }  // namespace lanelet

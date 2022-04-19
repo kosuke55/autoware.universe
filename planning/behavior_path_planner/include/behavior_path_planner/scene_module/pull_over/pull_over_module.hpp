@@ -15,17 +15,18 @@
 #ifndef BEHAVIOR_PATH_PLANNER__SCENE_MODULE__PULL_OVER__PULL_OVER_MODULE_HPP_
 #define BEHAVIOR_PATH_PLANNER__SCENE_MODULE__PULL_OVER__PULL_OVER_MODULE_HPP_
 
+#include "behavior_path_planner/occupancy_grid_map/occupancy_grid_map.hpp"
+#include "behavior_path_planner/parallel_parking_planner/parallel_parking_planner.hpp"
 #include "behavior_path_planner/path_shifter/path_shifter.hpp"
 #include "behavior_path_planner/scene_module/pull_over/pull_over_path.hpp"
 #include "behavior_path_planner/scene_module/scene_module_interface.hpp"
 #include "behavior_path_planner/utilities.hpp"
-#include "behavior_path_planner/parallel_parking_planner/parallel_parking_planner.hpp"
-#include "behavior_path_planner/occupancy_grid_map/occupancy_grid_map.hpp"
 
+
+#include <lane_departure_checker/lane_departure_checker_node.hpp>
 #include <lanelet2_extension/utility/message_conversion.hpp>
 #include <lanelet2_extension/utility/utilities.hpp>
 #include <vehicle_info_util/vehicle_info_util.hpp>
-
 #include <autoware_auto_planning_msgs/msg/path_with_lane_id.hpp>
 #include <autoware_auto_vehicle_msgs/msg/hazard_lights_command.hpp>
 
@@ -42,9 +43,11 @@ namespace behavior_path_planner
 {
 using autoware_auto_vehicle_msgs::msg::HazardLightsCommand;
 using geometry_msgs::msg::PoseArray;
+using tier4_autoware_utils::calcAveragePose;
 using visualization_msgs::msg::Marker;
 using visualization_msgs::msg::MarkerArray;
-using tier4_autoware_utils::calcAveragePose;
+using lane_departure_checker::LaneDepartureChecker;
+
 struct PullOverParameters
 {
   double min_stop_distance;
@@ -116,13 +119,15 @@ public:
   PathWithLaneId planCandidate() const override;
   void onEntry() override;
   void onExit() override;
-  // void publishTF(const std::string & child_frame_id, const geometry_msgs::msg::PoseStamped & pose_msg);
+  // void publishTF(const std::string & child_frame_id, const geometry_msgs::msg::PoseStamped &
+  // pose_msg);
 
   void setParameters(const PullOverParameters & parameters);
 
 private:
   PullOverParameters parameters_;
   PullOverStatus status_;
+  rclcpp::Node * node_;
 
   double pull_over_lane_length_ = 200.0;
   double check_distance_ = 100.0;
@@ -157,6 +162,8 @@ private:
   Pose getRefinedGoal();
   Pose researchGoal();
 
+  std::unique_ptr<LaneDepartureChecker> lane_departure_checker_;
+
   OccupancyGrid::ConstSharedPtr occupancy_grid_;
   OccupancyGridMap occupancy_grid_map_;
 
@@ -173,6 +180,9 @@ private:
   PoseStamped goal_pose_;
   std::vector<PullOverArea> pull_over_areas_;
   std::vector<Pose> goal_candidates_;
+
+  vehicle_info_util::VehicleInfo vehicle_info_;
+  std::shared_ptr<vehicle_info_util::VehicleInfo> vehicle_info_ptr_;
 };
 }  // namespace behavior_path_planner
 

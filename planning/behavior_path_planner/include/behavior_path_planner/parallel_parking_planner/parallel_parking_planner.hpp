@@ -50,7 +50,7 @@ class ParallelParkingPlanner
 public:
   // ParallelParkingPlanner();
   bool isParking() const;
-  void plan(const Pose goal_pose);
+  void plan(const Pose goal_pose, const double start_pose_offset);
   void setParams(const std::shared_ptr<const PlannerData> & planner_data);
 
   // debug
@@ -61,6 +61,7 @@ public:
   PoseArray path_pose_array_;
 
   PathWithLaneId getCurrentPath();
+  PathWithLaneId getFullPath();
   void clear();
 
 private:
@@ -73,17 +74,17 @@ private:
   float R_Bl_min_;  // front_lef
 
   std::vector<PathWithLaneId> paths_;
-  size_t current_path_idx_ = 0;  
+  size_t current_path_idx_ = 0;
 
-  void planOneTraial(const Pose goal_pose);
+  void planOneTraial(const Pose goal_pose, const double start_pose_offset);
   PathWithLaneId generateArcPath(
     const Pose & center, const float radius, const float start_rad, float end_rad,
     const bool is_left_turn);
   PathPointWithLaneId generateArcPathPoint(
     const Pose & center, const float radius, const float yaw, const bool is_left_turn);
   // lanelet::ConstLanelets getCurrentLanes() const;
-  Pose getStartPose(const Pose goal_pose);
-  void getStraightPath(const Pose goal_pose);
+  Pose getStartPose(const Pose goal_pose,  const double start_pose_offset);
+  void getStraightPath(const Pose goal_pose, const double start_pose_offset);
 };
 
 }  // namespace behavior_path_planner
