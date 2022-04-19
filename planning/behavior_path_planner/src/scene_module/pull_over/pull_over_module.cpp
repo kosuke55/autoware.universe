@@ -47,8 +47,6 @@ using tier4_autoware_utils::createMarkerScale;
 using tier4_autoware_utils::createPoint;
 using tier4_autoware_utils::calcDistance2d;
 
-using vehicle_info_util::VehicleInfoUtil;
-
 // namespace bg = boost::geometry;
 // using Point = bg::model::d2::point_xy<double>;
 // using Polygon = bg::model::polygon<Point>;
@@ -57,9 +55,7 @@ namespace behavior_path_planner
 {
 PullOverModule::PullOverModule(
   const std::string & name, rclcpp::Node & node, const PullOverParameters & parameters)
-: SceneModuleInterface{name, node},
-  parameters_{parameters},
-  vehicle_info_(vehicle_info_util::VehicleInfoUtil(node).getVehicleInfo())
+: SceneModuleInterface{name, node}, parameters_{parameters}
 {
   approval_handler_.waitApproval();
   Cl_publisher_ = node.create_publisher<PoseStamped>("~/pull_over/debug/Cl", 1);
@@ -74,7 +70,6 @@ PullOverModule::PullOverModule(
     "/perception/occupancy_grid_map/map", 1, std::bind(&PullOverModule::onOccupancyGrid, this, _1));
     // "~/input/occupancy_grid", 1, std::bind(&BehaviorModuleOutput::onOccupancyGrid, this, _1));
 
-  lane_departure_checker_ = std::make_unique<LaneDepartureChecker>();  
 }
 
 void PullOverModule::onOccupancyGrid(const OccupancyGrid::ConstSharedPtr msg)
@@ -111,8 +106,6 @@ void PullOverModule::onEntry()
   current_state_ = BT::NodeStatus::SUCCESS;
   updateOccupancyGrid();
   updatePullOverStatus();
-  vehicle_info_ptr_ = std::make_shared<vehicle_info_util::VehicleInfo>(vehicle_info_);
-  lane_departure_checker_->setVehicleInfo(vehicle_info_);
   parallel_parking_planner_.clear();
   // Get arclength to start lane change
   const auto current_pose = planner_data_->self_pose->pose;
@@ -335,23 +328,9 @@ BehaviorModuleOutput PullOverModule::plan()
     path = status_.pull_over_path.path;
   } else {
     parallel_parking_planner_.setParams(planner_data_);
-    parallel_parking_planner_.plan(goal_pose, 0);
+    parallel_parking_planner_.plan(goal_pose, target_lanes);
     path = parallel_parking_planner_.getCurrentPath();
-
-    std::cerr << "start finding path in lane "  << std::endl;
-    for (double dx = 0; dx < 20; dx += 1) {
-      parallel_parking_planner_.clear();
-      parallel_parking_planner_.plan(goal_pose, dx);
-      if (!lane_departure_checker_->checkPathWillLeaveLane(
-            target_lanes, parallel_parking_planner_.getFullPath())) {
-        std::cerr << "Path is in lane, dx: " << dx << std::endl;
-        break;
-      }
-      std::cerr << "dx: " << dx << std::endl;
-    }
-    path = parallel_parking_planner_.getFullPath(); // for debug
-    // path = parallel_parking_planner_.getCurrentPath();
-
+    // path = parallel_parking_planner_.getFullPath();  // for debug
     Cl_publisher_->publish(parallel_parking_planner_.Cl_);
     Cr_publisher_->publish(parallel_parking_planner_.Cr_);
     path_pose_array_pub_->publish(parallel_parking_planner_.path_pose_array_);
@@ -370,7 +349,6 @@ BehaviorModuleOutput PullOverModule::plan()
 
   BehaviorModuleOutput output;
   output.path = std::make_shared<PathWithLaneId>(path);
-  // output.path = std::make_shared<PathWithLaneId>(status_.pull_over_path.path);
 
   return output;
 }

@@ -18,6 +18,7 @@
 #include "behavior_path_planner/data_manager.hpp"
 #include "behavior_path_planner/parameters.hpp"
 
+#include <lane_departure_checker/lane_departure_checker_node.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <tier4_autoware_utils/ros/marker_helper.hpp>
 
@@ -44,13 +45,14 @@ using geometry_msgs::msg::Point;
 using geometry_msgs::msg::Pose;
 using geometry_msgs::msg::PoseArray;
 using geometry_msgs::msg::PoseStamped;
+using lane_departure_checker::LaneDepartureChecker;
 
 class ParallelParkingPlanner
 {
 public:
-  // ParallelParkingPlanner();
+  ParallelParkingPlanner();
   bool isParking() const;
-  void plan(const Pose goal_pose, const double start_pose_offset);
+  void plan(const Pose goal_pose, lanelet::ConstLanelets lanes);
   void setParams(const std::shared_ptr<const PlannerData> & planner_data);
 
   // debug
@@ -76,6 +78,8 @@ private:
   std::vector<PathWithLaneId> paths_;
   size_t current_path_idx_ = 0;
 
+  std::unique_ptr<LaneDepartureChecker> lane_departure_checker_;
+
   void planOneTraial(const Pose goal_pose, const double start_pose_offset);
   PathWithLaneId generateArcPath(
     const Pose & center, const float radius, const float start_rad, float end_rad,
@@ -83,7 +87,7 @@ private:
   PathPointWithLaneId generateArcPathPoint(
     const Pose & center, const float radius, const float yaw, const bool is_left_turn);
   // lanelet::ConstLanelets getCurrentLanes() const;
-  Pose getStartPose(const Pose goal_pose,  const double start_pose_offset);
+  Pose getStartPose(const Pose goal_pose, const double start_pose_offset);
   void getStraightPath(const Pose goal_pose, const double start_pose_offset);
 };
 

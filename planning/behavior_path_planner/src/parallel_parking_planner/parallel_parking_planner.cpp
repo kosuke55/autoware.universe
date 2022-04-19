@@ -54,6 +54,11 @@ using tier4_autoware_utils::transformPose;
 
 namespace behavior_path_planner
 {
+ParallelParkingPlanner::ParallelParkingPlanner()
+{
+  lane_departure_checker_ = std::make_unique<LaneDepartureChecker>();
+}
+
 PathWithLaneId ParallelParkingPlanner::getCurrentPath()
 {
   const auto current_path = paths_.at(current_path_idx_);
@@ -81,11 +86,16 @@ PathWithLaneId ParallelParkingPlanner::getCurrentPath()
 
 PathWithLaneId ParallelParkingPlanner::getFullPath()
 {
- PathWithLaneId path = paths_.front();
- for (size_t i = 1; i < paths_.size() - 1; i++) {  // todo remove -1
-   path = concatePath(path, paths_.at(i));
- }
- return path;
+  PathWithLaneId path{};
+  if (paths_.size() > 0) {
+    path = paths_.front();
+    if (paths_.size() > 1) {
+      for (size_t i = 1; i < paths_.size(); i++) {
+        path = concatePath(path, paths_.at(i));
+      }
+    }
+  }
+  return path;
 }
 
 void ParallelParkingPlanner::clear()
@@ -97,13 +107,23 @@ void ParallelParkingPlanner::clear()
 
 bool ParallelParkingPlanner::isParking() const { return current_path_idx_ > 0; }
 
-void ParallelParkingPlanner::plan(const Pose goal_pose, const double start_pose_offset)
+void ParallelParkingPlanner::plan(const Pose goal_pose, lanelet::ConstLanelets lanes)
 {
-  // plan path only when parking has not started
   if (!isParking()) {
-    paths_.clear();
-    getStraightPath(goal_pose, start_pose_offset);
-    planOneTraial(goal_pose, start_pose_offset);
+    // plan path only when parking has not started
+    const double max_start_pose_offset = 20;
+    const double start_pose_offset_resolution = 0.5;
+    std::cerr << "start finding path in lane " << std::endl;
+    for (double dx = 0; dx < max_start_pose_offset; dx += start_pose_offset_resolution) {
+      paths_.clear();
+      getStraightPath(goal_pose, dx);
+      planOneTraial(goal_pose, dx);
+      if (!lane_departure_checker_->checkPathWillLeaveLane(lanes, getFullPath())) {
+        std::cerr << "Path is in lane, dx: " << dx << std::endl;
+        break;
+      }
+      std::cerr << "dx: " << dx << std::endl;
+    }
   }
 }
 
@@ -266,7 +286,6 @@ PathPointWithLaneId ParallelParkingPlanner::generateArcPathPoint(
   Pose pose_centercoords;
   pose_centercoords.position.x = radius * std::cos(yaw);
   pose_centercoords.position.y = radius * std::sin(yaw);
-  // pose_centercoords.position.z = center.position.z;
 
   tf2::Quaternion quat;
   if (is_left_turn) {
@@ -299,8 +318,8 @@ PathPointWithLaneId ParallelParkingPlanner::generateArcPathPoint(
 
 void ParallelParkingPlanner::setParams(const std::shared_ptr<const PlannerData> & planner_data)
 {
-  // planner_data_ = std::make_shared<PlannerData>();
   planner_data_ = planner_data;
+  lane_departure_checker_->setVehicleInfo(planner_data_->parameters.vehicle_info);
   auto common_params = planner_data_->parameters;
   max_steer_rad_ = deg2rad(max_steer_deg_);
 

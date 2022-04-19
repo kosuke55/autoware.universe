@@ -22,8 +22,6 @@
 #include "behavior_path_planner/scene_module/scene_module_interface.hpp"
 #include "behavior_path_planner/utilities.hpp"
 
-
-#include <lane_departure_checker/lane_departure_checker_node.hpp>
 #include <lanelet2_extension/utility/message_conversion.hpp>
 #include <lanelet2_extension/utility/utilities.hpp>
 #include <vehicle_info_util/vehicle_info_util.hpp>
@@ -46,8 +44,6 @@ using geometry_msgs::msg::PoseArray;
 using tier4_autoware_utils::calcAveragePose;
 using visualization_msgs::msg::Marker;
 using visualization_msgs::msg::MarkerArray;
-using lane_departure_checker::LaneDepartureChecker;
-
 struct PullOverParameters
 {
   double min_stop_distance;
@@ -162,8 +158,6 @@ private:
   Pose getRefinedGoal();
   Pose researchGoal();
 
-  std::unique_ptr<LaneDepartureChecker> lane_departure_checker_;
-
   OccupancyGrid::ConstSharedPtr occupancy_grid_;
   OccupancyGridMap occupancy_grid_map_;
 
@@ -181,8 +175,6 @@ private:
   std::vector<PullOverArea> pull_over_areas_;
   std::vector<Pose> goal_candidates_;
 
-  vehicle_info_util::VehicleInfo vehicle_info_;
-  std::shared_ptr<vehicle_info_util::VehicleInfo> vehicle_info_ptr_;
 };
 }  // namespace behavior_path_planner
 

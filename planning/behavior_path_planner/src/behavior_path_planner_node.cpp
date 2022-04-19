@@ -170,6 +170,7 @@ BehaviorPathPlannerParameters BehaviorPathPlannerNode::getCommonParam()
 
   // vehicle info
   const auto vehicle_info = VehicleInfoUtil(*this).getVehicleInfo();
+  p.vehicle_info = vehicle_info;
   p.vehicle_width = vehicle_info.vehicle_width_m;
   p.vehicle_length = vehicle_info.vehicle_length_m;
   p.wheel_tread = vehicle_info.wheel_tread_m;
