@@ -99,6 +99,16 @@ struct PullOverArea
   }
 };
 
+struct GoalCandidate{
+  Pose goal_pose;
+  double distance_from_original_goal;
+
+  bool operator<(const GoalCandidate & other) noexcept
+  {
+    return distance_from_original_goal < other.distance_from_original_goal;
+  }
+};
+
 class PullOverModule : public SceneModuleInterface
 {
 public:
@@ -146,7 +156,7 @@ private:
   bool isInLane(
     const lanelet::ConstLanelet & candidate_lanelet,
     const tier4_autoware_utils::LinearRing2d & vehicle_footprint) const;
-  bool isLongEnough(const lanelet::ConstLanelets & lanelets) const;
+  bool isLongEnough(const lanelet::ConstLanelets & lanelets, const double margin) const;
   bool isSafe() const;
   bool isLaneBlocked(const lanelet::ConstLanelets & lanes) const;
   bool isNearEndOfLane() const;
@@ -171,9 +181,8 @@ private:
   rclcpp::Publisher<MarkerArray>::SharedPtr parking_area_pub_;
 
   ParallelParkingPlanner parallel_parking_planner_;
-  Pose goal_pose_;
   std::vector<PullOverArea> pull_over_areas_;
-  std::vector<Pose> goal_candidates_;
+  std::vector<GoalCandidate> goal_candidates_;
 
 };
 }  // namespace behavior_path_planner
