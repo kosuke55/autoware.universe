@@ -80,7 +80,7 @@ private:
 
   std::unique_ptr<LaneDepartureChecker> lane_departure_checker_;
 
-  void planOneTraial(
+  bool planOneTraial(
     const Pose goal_pose, const double start_pose_offset, const lanelet::ConstLanelets lanes);
   PathWithLaneId generateArcPath(
     const Pose & center, const float radius, const float start_rad, float end_rad,

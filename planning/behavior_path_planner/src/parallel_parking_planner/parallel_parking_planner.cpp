@@ -112,11 +112,11 @@ void ParallelParkingPlanner::plan(const Pose goal_pose, const lanelet::ConstLane
     for (double dx = 0; dx < max_start_pose_offset; dx += start_pose_offset_resolution) {
       paths_.clear();
       getStraightPath(goal_pose, dx, lanes);
-      planOneTraial(goal_pose, dx, lanes);
-      if (!lane_departure_checker_->checkPathWillLeaveLane(lanes, getFullPath())) {
-        std::cerr << "Path is in lane, dx: " << dx << std::endl;
-        break;
-      }
+      if (planOneTraial(goal_pose, dx, lanes)) break;
+      // if (!lane_departure_checker_->checkPathWillLeaveLane(lanes, getFullPath())) {
+      //   std::cerr << "Path is in lane, dx: " << dx << std::endl;
+      //   break;
+      // }
       std::cerr << "dx: " << dx << std::endl;
     }
     auto chrono_end = std::chrono::system_clock::now();
@@ -163,7 +163,7 @@ void ParallelParkingPlanner::getStraightPath(
   paths_.push_back(path);
 }
 
-void ParallelParkingPlanner::planOneTraial(
+bool ParallelParkingPlanner::planOneTraial(
   const Pose goal_pose, const double start_pose_offset, const lanelet::ConstLanelets lanes)
 {
   // debug
@@ -193,7 +193,17 @@ void ParallelParkingPlanner::planOneTraial(
   const float R_Einit_l = (std::pow(d_Cr_Einit, 2) - std::pow(R_E_min_, 2)) /
                           (2 * (R_E_min_ + d_Cr_Einit * std::cos(alpha)));
   if (R_Einit_l <= 0) {
-    return;
+    return false;
+  }
+
+  // If start_pose is prallel to goal_pose, we can know front-right's lateral deviation,
+  // so detect lane departure.
+  const float R_front_left =
+    std::hypot(R_Einit_l + common_params.vehicle_width / 2, common_params.base_link2front);
+  const float lateral_deviation = R_front_left - R_Einit_l;
+  const double distance_to_right_bound = util::getDistanceToRightBoundary(lanes, start_pose);
+  if (distance_to_right_bound < lateral_deviation) {
+    return false;
   }
 
   const float steer_l = std::atan(common_params.wheel_base / R_Einit_l);
@@ -226,6 +236,8 @@ void ParallelParkingPlanner::planOneTraial(
 
   path.header = planner_data_->route_handler->getRouteHeader();
   path_pose_array_ = convertToGeometryPoseArray(concat_path);
+
+  return true;
 }
 
 PathWithLaneId ParallelParkingPlanner::generateArcPath(

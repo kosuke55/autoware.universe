@@ -258,6 +258,8 @@ PathPointWithLaneId insertStopPoint(double length, PathWithLaneId * path);
 
 double getDistanceToShoulderBoundary(
   const lanelet::ConstLanelets & shoulder_lanelets, const Pose & pose);
+double getDistanceToRightBoundary(
+  const lanelet::ConstLanelets & lanelets, const Pose & pose);
 
 // misc
 
