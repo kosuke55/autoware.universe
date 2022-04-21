@@ -75,13 +75,13 @@ bool isPathInLanelets(
   return true;
 }
 
-std::vector<PullOverPath> getPullOverPaths(
+std::vector<ShiftParkingPath> getShiftParkingPaths(
   const RouteHandler & route_handler, const lanelet::ConstLanelets & original_lanelets,
   const lanelet::ConstLanelets & target_lanelets, const Pose & current_pose, const Pose & goal_pose,
   [[maybe_unused]] const Twist & twist, const BehaviorPathPlannerParameters & common_parameter,
   const PullOverParameters & parameter)
 {
-  std::vector<PullOverPath> candidate_paths;
+  std::vector<ShiftParkingPath> candidate_paths;
 
   if (original_lanelets.empty() || target_lanelets.empty()) {
     return candidate_paths;
@@ -110,7 +110,7 @@ std::vector<PullOverPath> getPullOverPaths(
        lateral_jerk += jerk_resolution) {
     PathShifter path_shifter;
     ShiftedPath shifted_path;
-    PullOverPath candidate_path;
+    ShiftParkingPath candidate_path;
 
     double pull_over_distance = path_shifter.calcLongitudinalDistFromJerk(
       abs(offset_from_current_pose), lateral_jerk, minimum_pull_over_velocity);
@@ -295,14 +295,14 @@ std::vector<PullOverPath> getPullOverPaths(
   return candidate_paths;
 }
 
-std::vector<PullOverPath> selectValidPaths(
-  const std::vector<PullOverPath> & paths, const lanelet::ConstLanelets & current_lanes,
+std::vector<ShiftParkingPath> selectValidPaths(
+  const std::vector<ShiftParkingPath> & paths, const lanelet::ConstLanelets & current_lanes,
   const lanelet::ConstLanelets & target_lanes,
   const lanelet::routing::RoutingGraphContainer & overall_graphs, const Pose & current_pose,
   const bool isInGoalRouteSection, const Pose & goal_pose)
 {
   std::cerr <<  __func__ << " path size " << paths.size() << std::endl;
-  std::vector<PullOverPath> available_paths;
+  std::vector<ShiftParkingPath> available_paths;
 
   for (const auto & path : paths) {
     if (hasEnoughDistance(
@@ -316,11 +316,11 @@ std::vector<PullOverPath> selectValidPaths(
 }
 
 bool selectSafePath(
-  const std::vector<PullOverPath> & paths, const lanelet::ConstLanelets & current_lanes,
+  const std::vector<ShiftParkingPath> & paths, const lanelet::ConstLanelets & current_lanes,
   const lanelet::ConstLanelets & target_lanes,
   const PredictedObjects::ConstSharedPtr & dynamic_objects, const Pose & current_pose,
   const Twist & current_twist, const double vehicle_width,
-  const PullOverParameters & ros_parameters, const OccupancyGridMap & occupancy_grid_map, PullOverPath * selected_path)
+  const PullOverParameters & ros_parameters, const OccupancyGridMap & occupancy_grid_map, ShiftParkingPath * selected_path)
 {
   std::cerr <<  __func__ << " path size " << paths.size() << std::endl;
   for (const auto & path : paths) {
@@ -341,7 +341,7 @@ bool selectSafePath(
 }
 
 bool hasEnoughDistance(
-  const PullOverPath & path, const lanelet::ConstLanelets & current_lanes,
+  const ShiftParkingPath & path, const lanelet::ConstLanelets & current_lanes,
   [[maybe_unused]] const lanelet::ConstLanelets & target_lanes, const Pose & current_pose,
   const bool isInGoalRouteSection, const Pose & goal_pose,
   [[maybe_unused]] const lanelet::routing::RoutingGraphContainer & overall_graphs)
@@ -373,7 +373,7 @@ bool hasEnoughDistance(
   return true;
 }
 
-bool isPullOverPathSafe(
+bool isShiftParkingPathSafe(
   const PathWithLaneId & path, const lanelet::ConstLanelets & current_lanes,
   const lanelet::ConstLanelets & target_lanes,
   const PredictedObjects::ConstSharedPtr & dynamic_objects, const Pose & current_pose,

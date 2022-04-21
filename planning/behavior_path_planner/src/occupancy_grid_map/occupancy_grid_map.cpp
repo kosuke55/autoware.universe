@@ -111,6 +111,7 @@ void OccupancyGridMap::setMap(const nav_msgs::msg::OccupancyGrid & costmap)
   is_obstacle_table_ = is_obstacle_table;
 
   // construct collision indexes table
+  coll_indexes_table_.clear();
   for (int i = 0; i < common_param_.theta_size; i++) {
     std::vector<IndexXY> indexes_2d;
     computeCollisionIndexes(i, indexes_2d);

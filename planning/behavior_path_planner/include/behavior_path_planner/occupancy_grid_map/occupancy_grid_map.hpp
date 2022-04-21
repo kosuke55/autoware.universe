@@ -88,7 +88,7 @@ struct PlannerWaypoints
 class OccupancyGridMap
 {
 public:
-  // OccupancyGridMap(){}
+  OccupancyGridMap(){}
   // explicit OccupancyGridMap(const CommonParam & common_param)
   // : common_param_(common_param)
   // {
@@ -108,7 +108,7 @@ public:
     const bool check_out_of_range) const;
   const PlannerWaypoints & getWaypoints() const { return waypoints_; }
   bool detectCollision(const IndexXYT & base_index, const bool check_out_of_range) const;
-  // virtual ~OccupancyGridMap() {}
+  virtual ~OccupancyGridMap() {}
 
 protected:
   void computeCollisionIndexes(int theta_index, std::vector<IndexXY> & indexes);

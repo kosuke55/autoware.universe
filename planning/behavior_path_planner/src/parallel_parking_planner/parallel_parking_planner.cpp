@@ -87,7 +87,7 @@ PathWithLaneId ParallelParkingPlanner::getFullPath()
 {
   PathWithLaneId path{};
   for (const auto & p: paths_){
-    path.points.insert(path.points.begin(), p.points.begin(), p.points.end());
+    path.points.insert(path.points.end(), p.points.begin(), p.points.end());
   }
   return path;
 }
@@ -107,8 +107,7 @@ void ParallelParkingPlanner::plan(const Pose goal_pose, const lanelet::ConstLane
     // plan path only when parking has not started
     const double max_start_pose_offset = 20;
     const double start_pose_offset_resolution = 0.5;
-    std::cerr << "start finding path in lane " << std::endl;
-    auto chrono_start = std::chrono::system_clock::now();
+
     for (double dx = 0; dx < max_start_pose_offset; dx += start_pose_offset_resolution) {
       paths_.clear();
       getStraightPath(goal_pose, dx, lanes);
@@ -117,10 +116,8 @@ void ParallelParkingPlanner::plan(const Pose goal_pose, const lanelet::ConstLane
       //   std::cerr << "Path is in lane, dx: " << dx << std::endl;
       //   break;
       // }
-      std::cerr << "dx: " << dx << std::endl;
+      // std::cerr << "dx: " << dx << std::endl;
     }
-    auto chrono_end = std::chrono::system_clock::now();
-    std::cout << "Elapsed time find path in lane:" << std::chrono::duration_cast<std::chrono::milliseconds>(chrono_end - chrono_start).count() << "[ms]" << std::endl;
   }
 }
 

@@ -73,16 +73,16 @@ struct PullOverParameters
   double hazard_on_threshold_vel;
 };
 
-struct PullOverStatus
+struct ShiftParkingStatus
 {
-  PathWithLaneId lane_follow_path;
-  PullOverPath pull_over_path;
-  lanelet::ConstLanelets current_lanes;
-  lanelet::ConstLanelets pull_over_lanes;
-  std::vector<uint64_t> lane_follow_lane_ids;
-  std::vector<uint64_t> pull_over_lane_ids;
+  // PathWithLaneId lane_follow_path;
+  ShiftParkingPath path;
+  // lanelet::ConstLanelets current_lanes;
+  // lanelet::ConstLanelets pull_over_lanes;
+  // std::vector<uint64_t> lane_follow_lane_ids;
+  // std::vector<uint64_t> pull_over_lane_ids;
   bool is_safe;
-  double start_distance;
+  // double start_distance;
 };
 
 struct PullOverArea
@@ -132,7 +132,8 @@ public:
 
 private:
   PullOverParameters parameters_;
-  PullOverStatus status_;
+  // ShiftParkingStatus shift_parking_satus_;
+  ShiftParkingPath shift_parking_path_;
   rclcpp::Node * node_;
 
   double pull_over_lane_length_ = 200.0;
@@ -143,7 +144,7 @@ private:
   lanelet::ConstLanelets getPullOverLanes(const lanelet::ConstLanelets & current_lanes) const;
   std::pair<bool, bool> getSafePath(
     const lanelet::ConstLanelets & pull_over_lanes, const double check_distance, const Pose goal_pose,
-    PullOverPath & safe_path) const;
+    ShiftParkingPath & safe_path) const;
   TurnSignalInfo getTurnSignalAndDistance(const PathWithLaneId & path) const;
 
   // turn signal
@@ -152,14 +153,14 @@ private:
     const double & velocity, const double & hazard_on_threshold_dis,
     const double & hazard_on_threshold_vel, const double & base_link2front) const;
 
-  void updatePullOverStatus();
+  bool planShiftPath();
   bool isInLane(
     const lanelet::ConstLanelet & candidate_lanelet,
     const tier4_autoware_utils::LinearRing2d & vehicle_footprint) const;
   bool isLongEnough(const lanelet::ConstLanelets & lanelets, const double margin) const;
-  bool isSafe() const;
-  bool isLaneBlocked(const lanelet::ConstLanelets & lanes) const;
-  bool isNearEndOfLane() const;
+  // bool isSafe() const;
+  // bool isLaneBlocked(const lanelet::ConstLanelets & lanes) const;
+  // bool isNearEndOfLane() const;
   bool isCurrentSpeedLow() const;
   bool hasFinishedPullOver() const;
   void onOccupancyGrid(const OccupancyGrid::ConstSharedPtr msg);
@@ -183,6 +184,7 @@ private:
   ParallelParkingPlanner parallel_parking_planner_;
   std::vector<PullOverArea> pull_over_areas_;
   std::vector<GoalCandidate> goal_candidates_;
+  Pose modified_goal_pose_;
 
 };
 }  // namespace behavior_path_planner
