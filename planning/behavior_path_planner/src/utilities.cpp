@@ -1840,14 +1840,16 @@ lanelet::ConstLanelets getExtendedCurrentLanes(const std::shared_ptr<const Plann
   // Add next_lanes
   const auto next_lanes = route_handler->getNextLanelets(current_lanes.back());
   if(!next_lanes.empty()){
-    current_lanes.insert(current_lanes.end(), next_lanes.begin(), next_lanes.end());
+    // TODO(kosuke55) which lane should be added?
+    current_lanes.push_back(next_lanes.front());
   }
 
   // Add prev_lane
   lanelet::ConstLanelets prev_lanes;
   if (route_handler->getPreviousLaneletsWithinRoute(
         current_lanes.front(), &prev_lanes)) {
-    current_lanes.insert(current_lanes.begin(), prev_lanes.begin(), prev_lanes.end());
+    // TODO(kosuke55) which lane should be added?
+    current_lanes.insert(current_lanes.begin(), 1, prev_lanes.front());
   }
 
   return current_lanes;
