@@ -82,8 +82,8 @@ BehaviorModuleOutput PullOverModule::run()
 
 void PullOverModule::onEntry()
 {
-  RCLCPP_DEBUG(getLogger(), "PULL_OVER onEntry");
-  // RCLCPP_ERROR(getLogger(), "(%s):", __func__);
+  // RCLCPP_DEBUG(getLogger(), "PULL_OVER onEntry");
+  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   current_state_ = BT::NodeStatus::SUCCESS;
 
   CommonParam common_param;
@@ -94,21 +94,16 @@ void PullOverModule::onEntry()
   common_param.theta_size = 360;
   common_param.obstacle_threshold = 90;
   occupancy_grid_map_.setParam(common_param);
-  updateOccupancyGrid();
-  // updatePullOverStatus();
-  const auto output = plan();
-  // parallel_parking_planner_.clear();
-  // Get arclength to start lane change
-  const auto current_pose = planner_data_->self_pose->pose;
-  // const auto arclength_start =
-  //   lanelet::utils::getArcCoordinates(status_.pull_over_lanes, current_pose);
-  // status_.start_distance = arclength_start.length;
+
+  parallel_parking_planner_.clear();
+
   approval_handler_.waitApproval();
 }
 
 void PullOverModule::onExit()
 {
-  RCLCPP_DEBUG(getLogger(), "PULL_OVER onExit");
+  // RCLCPP_DEBUG(getLogger(), "PULL_OVER onExit");
+  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   approval_handler_.clearWaitApproval();
   current_state_ = BT::NodeStatus::IDLE;
   // RCLCPP_ERROR(getLogger(), "(%s):", __func__);
@@ -333,7 +328,7 @@ BT::NodeStatus PullOverModule::updateState()
 
 BehaviorModuleOutput PullOverModule::plan()
 {
-  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
+  // RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   modified_goal_pose_ = researchGoal();
   const auto current_lanes = util::getExtendedCurrentLanes(planner_data_);
   const auto pull_over_lanes = getPullOverLanes(current_lanes);
@@ -454,7 +449,7 @@ void PullOverModule::setParameters(const PullOverParameters & parameters)
 
 bool PullOverModule::planShiftPath()
 {
-  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
+  // RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   const auto & route_handler = planner_data_->route_handler;
   const auto common_parameters = planner_data_->parameters;
 
@@ -671,7 +666,8 @@ bool PullOverModule::hasFinishedPullOver() const
   const auto current_pose = planner_data_->self_pose->pose;
   // const auto goal_pose = planner_data_->route_handler->getGoalPose();
   const bool car_is_on_goal =
-    calcDistance2d(current_pose, modified_goal_pose_) < parameters_.pull_over_finish_judge_buffer;
+    calcDistance2d(current_pose, modified_goal_pose_)  < 0.1;
+    // < parameters_.pull_over_finish_judge_buffer;
   // const auto arclength_current =
   //   lanelet::utils::getArcCoordinates(status_.pull_over_lanes, current_pose);
   // const auto arclength_goal = lanelet::utils::getArcCoordinates(status_.pull_over_lanes,
