@@ -1,4 +1,4 @@
-// Copyright 2020 Tier IV, Inc.
+// Copyright 2022 TIER IV, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,18 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "dummy_diag_publisher/dummy_diag_publisher_node.hpp"
+#ifndef PREPROCESS_KERNEL_HPP_
+#define PREPROCESS_KERNEL_HPP_
 
-#include <rclcpp/rclcpp.hpp>
+#include <cuda.h>
+#include <cuda_runtime_api.h>
 
-#include <memory>
-
-int main(int argc, char * argv[])
+namespace centerpoint
 {
-  rclcpp::init(argc, argv);
-  auto node = std::make_shared<DummyDiagPublisherNode>();
-  rclcpp::spin(node);
-  rclcpp::shutdown();
+cudaError_t generateFeatures_launch(
+  const float * voxel_features, const float * voxel_num_points, const int * coords,
+  const std::size_t num_voxels, float * features, cudaStream_t stream);
 
-  return 0;
-}
+}  // namespace centerpoint
+
+#endif  // PREPROCESS_KERNEL_HPP_
