@@ -68,7 +68,7 @@ PathWithLaneId ParallelParkingPlanner::getCurrentPath()
   const bool is_near_target =
     tier4_autoware_utils::calcDistance2d(current_target, self_pose) < th_arrived_distance_m;
 
-  const float th_stopped_velocity_mps = 0.1;
+  const float th_stopped_velocity_mps = 0.01;
   const bool is_stopped =
     std::abs(planner_data_->self_odometry->twist.twist.linear.x) < th_stopped_velocity_mps;
 

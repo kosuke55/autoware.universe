@@ -109,7 +109,7 @@ void PullOverModule::onEntry()
   updateOccupancyGrid();
   // updatePullOverStatus();
   const auto output = plan();
-  parallel_parking_planner_.clear();
+  // parallel_parking_planner_.clear();
   // Get arclength to start lane change
   const auto current_pose = planner_data_->self_pose->pose;
   // const auto arclength_start =
@@ -367,7 +367,7 @@ BehaviorModuleOutput PullOverModule::plan()
       parallel_parking_planner_.setParams(planner_data_);
       parallel_parking_planner_.plan(modified_goal_pose_, target_lanes);
       const auto full_path = parallel_parking_planner_.getFullPath();
-      std::cerr << "i: " << i << ":, pathsize: "<< full_path.points.size() << std::endl;
+      // std::cerr << "i: " << i << ":, pathsize: "<< full_path.points.size() << std::endl;
       if (!occupancy_grid_map_.hasObstacleOnPath(full_path, false)) {
         found_safe_path = true;
         path = parallel_parking_planner_.getCurrentPath();
