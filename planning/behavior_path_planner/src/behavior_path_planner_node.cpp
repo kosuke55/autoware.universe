@@ -696,6 +696,7 @@ void BehaviorPathPlannerNode::onPerception(const PredictedObjects::ConstSharedPt
 }
 void BehaviorPathPlannerNode::onOccupancyGrid(const OccupancyGrid::ConstSharedPtr msg)
 {
+  std::lock_guard<std::mutex> lock(mutex_pd_);
   planner_data_->occupancy_grid = msg;
 }
 void BehaviorPathPlannerNode::onExternalApproval(const ApprovalMsg::ConstSharedPtr msg)
