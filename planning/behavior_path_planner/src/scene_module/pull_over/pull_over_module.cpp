@@ -64,24 +64,12 @@ PullOverModule::PullOverModule(
   goal_pose_publisher_ = node.create_publisher<PoseStamped>("~/pull_over/debug/goal_pose", 1);
   path_pose_array_pub_ = node.create_publisher<PoseArray>("~/pull_over/debug/path", 1);
   parking_area_pub_ = node.create_publisher<MarkerArray>("~/pull_over/parking_area", 1);
-
-  using std::placeholders::_1;
-  occupancy_grid_sub_ = node.create_subscription<nav_msgs::msg::OccupancyGrid>(
-    "/perception/occupancy_grid_map/map", rclcpp::QoS{1}.best_effort(), std::bind(&PullOverModule::onOccupancyGrid, this, _1));
-    // "~/input/occupancy_grid", 1, std::bind(&BehaviorModuleOutput::onOccupancyGrid, this, _1));
-
-}
-
-void PullOverModule::onOccupancyGrid(const OccupancyGrid::ConstSharedPtr msg)
-{
-  occupancy_grid_ = msg;
-  std::cerr << "sub occgrid " << msg->header.stamp.sec << std::endl;
 }
 
 // This function is needed for waiting for planner_data_
 void PullOverModule::updateOccupancyGrid(){
-  occupancy_grid_map_.setMap(*occupancy_grid_);
-  std::cerr << "update occgrid " << occupancy_grid_->header.stamp.sec << std::endl;
+  occupancy_grid_map_.setMap(*(planner_data_->occupancy_grid));
+  std::cerr << "update occgrid " << planner_data_->occupancy_grid->header.stamp.sec << std::endl;
 }
 
 BehaviorModuleOutput PullOverModule::run()

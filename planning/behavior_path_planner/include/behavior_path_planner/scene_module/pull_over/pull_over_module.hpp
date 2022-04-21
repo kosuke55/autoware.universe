@@ -163,13 +163,11 @@ private:
   // bool isNearEndOfLane() const;
   bool isCurrentSpeedLow() const;
   bool hasFinishedPullOver() const;
-  void onOccupancyGrid(const OccupancyGrid::ConstSharedPtr msg);
   void updateOccupancyGrid();
   Marker createParkingAreaMarker(const Pose back_pose, const Pose front_pose, const int32_t id);
   Pose getRefinedGoal();
   Pose researchGoal();
 
-  OccupancyGrid::ConstSharedPtr occupancy_grid_;
   OccupancyGridMap occupancy_grid_map_;
 
   rclcpp::Subscription<OccupancyGrid>::SharedPtr occupancy_grid_sub_;

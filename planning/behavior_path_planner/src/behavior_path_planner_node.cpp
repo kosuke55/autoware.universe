@@ -51,6 +51,8 @@ BehaviorPathPlannerNode::BehaviorPathPlannerNode(const rclcpp::NodeOptions & nod
     "~/input/odometry", 1, std::bind(&BehaviorPathPlannerNode::onVelocity, this, _1));
   perception_subscriber_ = create_subscription<PredictedObjects>(
     "~/input/perception", 1, std::bind(&BehaviorPathPlannerNode::onPerception, this, _1));
+  occupancy_grid_subscriber_ = create_subscription<OccupancyGrid>(
+    "/perception/occupancy_grid_map/map", 1, std::bind(&BehaviorPathPlannerNode::onOccupancyGrid, this, _1));  // todo: chnage to ~/input
   external_approval_subscriber_ = create_subscription<ApprovalMsg>(
     "~/input/external_approval", 1,
     std::bind(&BehaviorPathPlannerNode::onExternalApproval, this, _1));
@@ -649,6 +651,10 @@ void BehaviorPathPlannerNode::onVelocity(const Odometry::ConstSharedPtr msg)
 void BehaviorPathPlannerNode::onPerception(const PredictedObjects::ConstSharedPtr msg)
 {
   planner_data_->dynamic_object = msg;
+}
+void BehaviorPathPlannerNode::onOccupancyGrid(const OccupancyGrid::ConstSharedPtr msg)
+{
+  planner_data_->occupancy_grid = msg;
 }
 void BehaviorPathPlannerNode::onExternalApproval(const ApprovalMsg::ConstSharedPtr msg)
 {
