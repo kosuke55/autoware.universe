@@ -73,15 +73,24 @@ struct PullOverParameters
   double hazard_on_threshold_vel;
 };
 
-struct ShiftParkingStatus
+
+enum PathType {
+    NONE = 0,
+    SHIFT,
+    ARC_BACK,
+};
+
+struct PUllOverStatus
 {
   // PathWithLaneId lane_follow_path;
-  ShiftParkingPath path;
+  PathWithLaneId path;
+  bool has_decided = false;
+  int path_type = PathType::NONE;
   // lanelet::ConstLanelets current_lanes;
   // lanelet::ConstLanelets pull_over_lanes;
   // std::vector<uint64_t> lane_follow_lane_ids;
   // std::vector<uint64_t> pull_over_lane_ids;
-  bool is_safe;
+  bool is_safe = false;
   // double start_distance;
 };
 
@@ -183,6 +192,8 @@ private:
   std::vector<PullOverArea> pull_over_areas_;
   std::vector<GoalCandidate> goal_candidates_;
   Pose modified_goal_pose_;
+
+  PUllOverStatus status_;
 
 };
 }  // namespace behavior_path_planner

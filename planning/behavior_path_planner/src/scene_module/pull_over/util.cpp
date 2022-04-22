@@ -106,7 +106,7 @@ std::vector<ShiftParkingPath> getShiftParkingPaths(
   double offset_from_current_pose =
     distance_to_shoulder_lane_boundary + common_parameter.vehicle_width / 2 + margin;
 
-  for (double lateral_jerk = 0.5; lateral_jerk <= maximum_lateral_jerk;
+  for (double lateral_jerk = minimum_lateral_jerk; lateral_jerk <= maximum_lateral_jerk;
        lateral_jerk += jerk_resolution) {
     PathShifter path_shifter;
     ShiftedPath shifted_path;
