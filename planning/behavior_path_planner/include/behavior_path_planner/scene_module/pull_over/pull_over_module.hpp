@@ -25,6 +25,7 @@
 #include <lanelet2_extension/utility/message_conversion.hpp>
 #include <lanelet2_extension/utility/utilities.hpp>
 #include <vehicle_info_util/vehicle_info_util.hpp>
+
 #include <autoware_auto_planning_msgs/msg/path_with_lane_id.hpp>
 #include <autoware_auto_vehicle_msgs/msg/hazard_lights_command.hpp>
 
@@ -73,43 +74,29 @@ struct PullOverParameters
   double hazard_on_threshold_vel;
 };
 
-
 enum PathType {
-    NONE = 0,
-    SHIFT,
-    ARC_FORWARD,
-    ARC_BACK,
+  NONE = 0,
+  SHIFT,
+  ARC_FORWARD,
+  ARC_BACK,
 };
 
 struct PUllOverStatus
 {
-  // PathWithLaneId lane_follow_path;
   PathWithLaneId path;
   bool has_decided = false;
   int path_type = PathType::NONE;
-  // lanelet::ConstLanelets current_lanes;
-  // lanelet::ConstLanelets pull_over_lanes;
-  // std::vector<uint64_t> lane_follow_lane_ids;
-  // std::vector<uint64_t> pull_over_lane_ids;
   bool is_safe = false;
-  // double start_distance;
 };
 
 struct PullOverArea
 {
   Pose start_pose;
   Pose end_pose;
-  double distance_from_goal;
-
-  Pose center_pose = calcAveragePose(start_pose, end_pose);
-
-  bool operator<(const PullOverArea & other) noexcept
-  {
-    return distance_from_goal < other.distance_from_goal;
-  }
 };
 
-struct GoalCandidate{
+struct GoalCandidate
+{
   Pose goal_pose;
   double distance_from_original_goal;
 
@@ -135,26 +122,38 @@ public:
   PathWithLaneId planCandidate() const override;
   void onEntry() override;
   void onExit() override;
-  // void publishTF(const std::string & child_frame_id, const geometry_msgs::msg::PoseStamped &
-  // pose_msg);
 
   void setParameters(const PullOverParameters & parameters);
 
 private:
   PullOverParameters parameters_;
-  // ShiftParkingStatus shift_parking_satus_;
   ShiftParkingPath shift_parking_path_;
   rclcpp::Node * node_;
 
   double pull_over_lane_length_ = 200.0;
   double check_distance_ = 100.0;
 
+  rclcpp::Subscription<OccupancyGrid>::SharedPtr occupancy_grid_sub_;
+  rclcpp::Publisher<PoseStamped>::SharedPtr Cr_pub_;
+  rclcpp::Publisher<PoseStamped>::SharedPtr Cl_pub_;
+  rclcpp::Publisher<PoseStamped>::SharedPtr start_pose_pub_;
+  rclcpp::Publisher<PoseStamped>::SharedPtr goal_pose_pub_;
+  rclcpp::Publisher<PoseArray>::SharedPtr path_pose_array_pub_;
+  rclcpp::Publisher<MarkerArray>::SharedPtr parking_area_pub_;
+
+  PUllOverStatus status_;
+  OccupancyGridMap occupancy_grid_map_;
+  std::vector<PullOverArea> pull_over_areas_;
+  Pose modified_goal_pose_;
+  std::vector<GoalCandidate> goal_candidates_;
+  ParallelParkingPlanner parallel_parking_planner_;
+
   PathWithLaneId getReferencePath() const;
   // lanelet::ConstLanelets getCurrentLanes() const;
   lanelet::ConstLanelets getPullOverLanes(const lanelet::ConstLanelets & current_lanes) const;
   std::pair<bool, bool> getSafePath(
-    const lanelet::ConstLanelets & pull_over_lanes, const double check_distance, const Pose goal_pose,
-    ShiftParkingPath & safe_path) const;
+    const lanelet::ConstLanelets & pull_over_lanes, const double check_distance,
+    const Pose goal_pose, ShiftParkingPath & safe_path) const;
   TurnSignalInfo getTurnSignalAndDistance(const PathWithLaneId & path) const;
 
   // turn signal
@@ -164,35 +163,14 @@ private:
     const double & hazard_on_threshold_vel, const double & base_link2front) const;
 
   bool planShiftPath();
-  bool isInLane(
-    const lanelet::ConstLanelet & candidate_lanelet,
-    const tier4_autoware_utils::LinearRing2d & vehicle_footprint) const;
   bool isLongEnough(const lanelet::ConstLanelets & lanelets, const double buffer = 0) const;
-  bool isCurrentSpeedLow() const;
   bool hasFinishedPullOver() const;
   void updateOccupancyGrid();
-  Marker createParkingAreaMarker(const Pose back_pose, const Pose front_pose, const int32_t id);
   Pose getRefinedGoal();
-  Pose researchGoal();
-
-  OccupancyGridMap occupancy_grid_map_;
-
-  rclcpp::Subscription<OccupancyGrid>::SharedPtr occupancy_grid_sub_;
-
-  rclcpp::Publisher<PoseStamped>::SharedPtr Cr_publisher_;
-  rclcpp::Publisher<PoseStamped>::SharedPtr Cl_publisher_;
-  rclcpp::Publisher<PoseStamped>::SharedPtr start_pose_publisher_;
-  rclcpp::Publisher<PoseStamped>::SharedPtr goal_pose_publisher_;
-  rclcpp::Publisher<PoseArray>::SharedPtr path_pose_array_pub_;
-  rclcpp::Publisher<MarkerArray>::SharedPtr parking_area_pub_;
-
-  ParallelParkingPlanner parallel_parking_planner_;
-  std::vector<PullOverArea> pull_over_areas_;
-  std::vector<GoalCandidate> goal_candidates_;
-  Pose modified_goal_pose_;
-
-  PUllOverStatus status_;
-
+  void researchGoal();
+  // debug
+  Marker createParkingAreaMarker(const Pose back_pose, const Pose front_pose, const int32_t id);
+  void publishDebugData();
 };
 }  // namespace behavior_path_planner
 

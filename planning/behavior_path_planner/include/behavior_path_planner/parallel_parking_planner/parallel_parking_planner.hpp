@@ -50,35 +50,28 @@ using lane_departure_checker::LaneDepartureChecker;
 class ParallelParkingPlanner
 {
 public:
-  ParallelParkingPlanner();
   bool isParking() const;
   void plan(const Pose goal_pose, lanelet::ConstLanelets lanes, const bool is_forward);
   void setParams(const std::shared_ptr<const PlannerData> & planner_data);
-
-  // debug
-  PoseStamped Cr_;
-  PoseStamped Cl_;
-  PoseStamped start_pose_;
-  // PoseArray debug_pose_array_;
-  PoseArray path_pose_array_;
-
   PathWithLaneId getCurrentPath();
   PathWithLaneId getFullPath();
   void clear();
 
-private:
-  // std::shared_ptr<PlannerData> planner_data_;
-  std::shared_ptr<const PlannerData> planner_data_;
-  float max_steer_deg_ = 40.0;  // max steering angle [deg]
-  float max_steer_rad_;
+  // debug
+  PoseStamped getCr() { return Cr_; };
+  PoseStamped getCl() { return Cl_; };
+  PoseStamped getStartPose() { return start_pose_; };
+  PoseArray getPathPoseArray() { return path_pose_array_; };
 
+private:
+  std::shared_ptr<const PlannerData> planner_data_;
+  float max_steer_deg_ = 40.0;  // max steering angle [deg]. todo: use new vehicle info
+  float max_steer_rad_;
   float R_E_min_;   // base_link
-  float R_Bl_min_;  // front_lef
+  float R_Bl_min_;  // front_left
 
   std::vector<PathWithLaneId> paths_;
   size_t current_path_idx_ = 0;
-
-  std::unique_ptr<LaneDepartureChecker> lane_departure_checker_;
 
   bool planOneTraial(
     const Pose goal_pose, const double start_pose_offset, const double R_E_r,
@@ -95,8 +88,13 @@ private:
   void getStraightPath(
     const Pose goal_pose, const double start_pose_offset, const double R_E_r,
     const bool is_forward);
-};
 
+  // debug data
+  PoseStamped Cr_;
+  PoseStamped Cl_;
+  PoseStamped start_pose_;
+  PoseArray path_pose_array_;
+};
 }  // namespace behavior_path_planner
 
 #endif  // BEHAVIOR_PATH_PLANNER__PARALLEL_PARKING_HPP_
