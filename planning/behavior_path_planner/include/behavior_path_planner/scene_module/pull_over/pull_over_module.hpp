@@ -77,6 +77,7 @@ struct PullOverParameters
 enum PathType {
     NONE = 0,
     SHIFT,
+    ARC_FORWARD,
     ARC_BACK,
 };
 
@@ -166,10 +167,7 @@ private:
   bool isInLane(
     const lanelet::ConstLanelet & candidate_lanelet,
     const tier4_autoware_utils::LinearRing2d & vehicle_footprint) const;
-  bool isLongEnough(const lanelet::ConstLanelets & lanelets, const double margin) const;
-  // bool isSafe() const;
-  // bool isLaneBlocked(const lanelet::ConstLanelets & lanes) const;
-  // bool isNearEndOfLane() const;
+  bool isLongEnough(const lanelet::ConstLanelets & lanelets, const double buffer = 0) const;
   bool isCurrentSpeedLow() const;
   bool hasFinishedPullOver() const;
   void updateOccupancyGrid();

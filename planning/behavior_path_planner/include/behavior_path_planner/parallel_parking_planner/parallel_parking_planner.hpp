@@ -52,7 +52,7 @@ class ParallelParkingPlanner
 public:
   ParallelParkingPlanner();
   bool isParking() const;
-  void plan(const Pose goal_pose, lanelet::ConstLanelets lanes);
+  void plan(const Pose goal_pose, lanelet::ConstLanelets lanes, const bool is_forward);
   void setParams(const std::shared_ptr<const PlannerData> & planner_data);
 
   // debug
@@ -81,16 +81,20 @@ private:
   std::unique_ptr<LaneDepartureChecker> lane_departure_checker_;
 
   bool planOneTraial(
-    const Pose goal_pose, const double start_pose_offset, const lanelet::ConstLanelets lanes);
+    const Pose goal_pose, const double start_pose_offset, const double R_E_r,
+    const lanelet::ConstLanelets lanes, const bool is_forward);
   PathWithLaneId generateArcPath(
     const Pose & center, const float radius, const float start_rad, float end_rad,
-    const bool is_left_turn);
+    const bool is_left_turn, const bool is_forward);
   PathPointWithLaneId generateArcPathPoint(
-    const Pose & center, const float radius, const float yaw, const bool is_left_turn);
+    const Pose & center, const float radius, const float yaw, const bool is_left_turn,
+    const bool is_forward);
   Pose getStartPose(
-    const Pose goal_pose, const double start_pose_offset);
+    const Pose goal_pose, const double start_pose_offset, const double R_E_r,
+    const bool is_forward);
   void getStraightPath(
-    const Pose goal_pose, const double start_pose_offset, const lanelet::ConstLanelets lanes);
+    const Pose goal_pose, const double start_pose_offset, const double R_E_r,
+    const bool is_forward);
 };
 
 }  // namespace behavior_path_planner

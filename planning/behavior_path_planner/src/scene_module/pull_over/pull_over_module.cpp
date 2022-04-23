@@ -87,7 +87,7 @@ void PullOverModule::onEntry()
   current_state_ = BT::NodeStatus::SUCCESS;
 
   CommonParam common_param;
-  const double margin = 0;
+  const double margin = 1;
   common_param.vehicle_shape.length = planner_data_->parameters.vehicle_length + margin;
   common_param.vehicle_shape.width = planner_data_->parameters.vehicle_width + margin;
   common_param.vehicle_shape.base2back = planner_data_->parameters.base_link2rear + margin / 2;
@@ -139,7 +139,7 @@ bool PullOverModule::isExecutionRequested() const
     }
   }
 
-  return goal_is_in_shoulder_lane;
+  return goal_is_in_shoulder_lane && isLongEnough(current_lanes);
 }
 
 bool PullOverModule::isExecutionReady() const { return true; }
@@ -290,6 +290,8 @@ BT::NodeStatus PullOverModule::updateState()
 
 BehaviorModuleOutput PullOverModule::plan()
 {
+  parallel_parking_planner_.path_pose_array_.poses.clear();
+
   // RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   const auto current_lanes = util::getExtendedCurrentLanes(planner_data_);
   const auto pull_over_lanes = getPullOverLanes(current_lanes);
@@ -300,56 +302,71 @@ BehaviorModuleOutput PullOverModule::plan()
   if (status_.path_type == PathType::SHIFT && !isLongEnough(current_lanes, 5)) {
     status_.has_decided = true;
   }
-  else if (
+  // isLongEnough is for SHIFT, but it is also enoght for ARC_FORWARD.
+  else if (status_.path_type == PathType::ARC_FORWARD && !isLongEnough(current_lanes)) {
+    std::cerr << "Deciede: " << std::endl;
+    status_.has_decided = true;
+  } else if (
     status_.path_type == PathType::ARC_BACK &&
     inverseTransformPose(modified_goal_pose_, planner_data_->self_pose->pose).position.x < 0) {
     status_.has_decided = true;
   }
 
-  if (status_.has_decided) {  // Use decided path
-    if (status_.path_type == PathType::ARC_BACK) {
+  // Use decided path
+  if (status_.has_decided) {
+    std::cerr << "has decieded: " << std::endl;
+    if (status_.path_type == PathType::ARC_FORWARD || status_.path_type == PathType::ARC_BACK) {
+      std::cerr << "get cuurent path: " << std::endl;
       status_.path = parallel_parking_planner_.getCurrentPath();
     }
-  } else {  // Replane
+  }
+  // Replane
+  else {
     status_.path_type = PathType::NONE;
     status_.is_safe = false;
     for (const auto goal_candidate : goal_candidates_) {
+      if (status_.is_safe) break;
       modified_goal_pose_ = goal_candidate.goal_pose;
       if (isLongEnough(current_lanes, 5) && planShiftPath()) {
         // shift parking path already confirm safe in it's own function.
         status_.path = shift_parking_path_.path;
         status_.path_type = PathType::SHIFT;
         status_.is_safe = true;
-        break;
       } else {
-        parallel_parking_planner_.setParams(planner_data_);
-        parallel_parking_planner_.plan(modified_goal_pose_, target_lanes);
-        const auto full_path = parallel_parking_planner_.getFullPath();
-        if (!occupancy_grid_map_.hasObstacleOnPath(full_path, false)) {
-          status_.path = parallel_parking_planner_.getCurrentPath();
-          status_.path_type = PathType::ARC_BACK;
-          status_.is_safe = true;
-          // TODO: move to parallel_parking.
-          Cl_publisher_->publish(parallel_parking_planner_.Cl_);
-          Cr_publisher_->publish(parallel_parking_planner_.Cr_);
-          path_pose_array_pub_->publish(parallel_parking_planner_.path_pose_array_);
-          start_pose_publisher_->publish(parallel_parking_planner_.start_pose_);
-          break;
+        // Generate arc forward path then arc backward path.
+        for (const auto is_forward : {true, false}) {
+          parallel_parking_planner_.setParams(planner_data_);
+          parallel_parking_planner_.plan(modified_goal_pose_, target_lanes, is_forward);
+          const auto full_path = parallel_parking_planner_.getFullPath();
+          if (!occupancy_grid_map_.hasObstacleOnPath(full_path, is_forward)) {
+            std::cerr << "is_forward: " << is_forward << std::endl;
+            status_.path = parallel_parking_planner_.getCurrentPath();
+            status_.path_type = is_forward ? PathType::ARC_FORWARD : PathType::ARC_BACK;
+            status_.is_safe = true;
+            break;
+          }
         }
       }
     }
   }
 
-  if(status_.is_safe){
-    PoseStamped goal_pose_stamped;
-    goal_pose_stamped.header = planner_data_->route_handler->getRouteHeader();
-    goal_pose_stamped.pose = modified_goal_pose_;
-    goal_pose_publisher_->publish(goal_pose_stamped);
-  }
+  // TODO: move to parallel_parking.
+  Cl_publisher_->publish(parallel_parking_planner_.Cl_);
+  Cr_publisher_->publish(parallel_parking_planner_.Cr_);
+  path_pose_array_pub_->publish(parallel_parking_planner_.path_pose_array_);
+  start_pose_publisher_->publish(parallel_parking_planner_.start_pose_);
+
+  PoseStamped goal_pose_stamped;
+  goal_pose_stamped.header = planner_data_->route_handler->getRouteHeader();
+  goal_pose_stamped.pose = modified_goal_pose_;
+  goal_pose_publisher_->publish(goal_pose_stamped);
 
   BehaviorModuleOutput output;
   output.path = status_.is_safe ? std::make_shared<PathWithLaneId>(status_.path)
                                 : std::make_shared<PathWithLaneId>(getReferencePath());
+
+  std::cerr << "path_type: " << status_.path_type << std::endl;
+  std::cerr << "safe: " << status_.is_safe << std::endl;
 
   return output;
 }
@@ -364,6 +381,12 @@ BehaviorModuleOutput PullOverModule::planWaitingApproval()
   BehaviorModuleOutput out;
   out.path = std::make_shared<PathWithLaneId>(getReferencePath());
   out.path_candidate = std::make_shared<PathWithLaneId>(*(plan().path));
+  if (
+    status_.is_safe &&
+    (status_.path_type == PathType::ARC_FORWARD || status_.path_type == PathType::ARC_BACK)) {
+    out.path_candidate =
+      std::make_shared<PathWithLaneId>(parallel_parking_planner_.getFullPath());
+  }
   return out;
 }
 
@@ -525,7 +548,7 @@ std::pair<bool, bool> PullOverModule::getSafePath(
   return std::make_pair(false, false);
 }
 
-bool PullOverModule::isLongEnough(const lanelet::ConstLanelets & lanelets, const double margin) const
+bool PullOverModule::isLongEnough(const lanelet::ConstLanelets & lanelets, const double buffer) const
 {
   // RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   PathShifter path_shifter;
@@ -551,7 +574,7 @@ bool PullOverModule::isLongEnough(const lanelet::ConstLanelets & lanelets, const
   // const double distance_to_goal = util::getSignedDistance(current_pose, goal_pose, lanelets);
   const double distance_to_goal = std::abs(util::getSignedDistance(current_pose, modified_goal_pose_, lanelets));
 
-  return distance_to_goal > pull_over_total_distance_min + margin;
+  return distance_to_goal > pull_over_total_distance_min + buffer;
 }
 
 bool PullOverModule::isCurrentSpeedLow() const

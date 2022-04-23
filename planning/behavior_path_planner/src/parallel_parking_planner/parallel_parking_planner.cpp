@@ -76,9 +76,9 @@ PathWithLaneId ParallelParkingPlanner::getCurrentPath()
     current_path_idx_ += 1;
     // rclcpp::Rate(1.0).sleep();
   }
-  std::cerr << "before_min current_path_idx_: " << current_path_idx_ << std::endl;
   current_path_idx_ = std::min(current_path_idx_, paths_.size() - 1);
-  std::cerr << "current_path_idx_: " << current_path_idx_ << std::endl;
+  std::cerr << "current_path_idx_: " << current_path_idx_ << " / " << paths_.size() - 1
+            << std::endl;
 
   return paths_.at(current_path_idx_);
 }
@@ -101,53 +101,78 @@ void ParallelParkingPlanner::clear()
 
 bool ParallelParkingPlanner::isParking() const { return current_path_idx_ > 0; }
 
-void ParallelParkingPlanner::plan(const Pose goal_pose, const lanelet::ConstLanelets lanes)
+void ParallelParkingPlanner::plan(
+  const Pose goal_pose, const lanelet::ConstLanelets lanes, const bool is_forward)
 {
+  const auto common_params = planner_data_->parameters;
+  // plan path only when parking has not started
   if (!isParking()) {
-    // plan path only when parking has not started
-    const double max_start_pose_offset = 20;
-    const double start_pose_offset_resolution = 0.5;
-
-    for (double dx = 0; dx < max_start_pose_offset; dx += start_pose_offset_resolution) {
-      paths_.clear();
-      getStraightPath(goal_pose, dx, lanes);
-      if (planOneTraial(goal_pose, dx, lanes)) break;
-      // if (!lane_departure_checker_->checkPathWillLeaveLane(lanes, getFullPath())) {
-      //   std::cerr << "Path is in lane, dx: " << dx << std::endl;
-      //   break;
-      // }
-      // std::cerr << "dx: " << dx << std::endl;
+    if (is_forward) {
+      // When turning forward to the right, the front left goes out,
+      // so reduce the steer angle at that time.
+      for (double steer = max_steer_rad_; steer > 0.05; steer -= 0.05) {
+        paths_.clear();
+        const double R_E_r = common_params.wheel_base / std::tan(steer);
+        getStraightPath(goal_pose, 0, R_E_r, is_forward);
+        // Find path witout lane departure
+        if (planOneTraial(goal_pose, 0, R_E_r, lanes, is_forward)) break; 
+      }
+    } else {
+      // When turning backward to the left, the front right goes out,
+      // so make the parking start point in front(same to Equivalent to reducing the steer angle).
+      for (double dx = 0; dx < 20; dx += 0.5) {
+        paths_.clear();
+        getStraightPath(goal_pose, dx, R_E_min_, is_forward);
+        // Find path witout lane departure
+        if (planOneTraial(goal_pose, dx, R_E_min_, lanes, is_forward)) break;
+      }
     }
   }
 }
 
-Pose ParallelParkingPlanner::getStartPose(const Pose goal_pose, const double start_pose_offset)
+Pose ParallelParkingPlanner::getStartPose(
+  const Pose goal_pose, const double start_pose_offset, const double R_E_r, const bool is_forward)
 {
-  auto current_lanes = util::getExtendedCurrentLanes(planner_data_);
+  // Not use shoulder lanes.
+  // auto current_lanes = util::getExtendedCurrentLanes(planner_data_);
+  auto current_lanes = util::getCurrentLanes(planner_data_);
   const auto arc_coordinates = lanelet::utils::getArcCoordinates(current_lanes, goal_pose);
 
   const float dx =
-    2 * std::sqrt(std::pow(R_E_min_, 2) - std::pow(-arc_coordinates.distance / 2 + R_E_min_, 2));
-  Pose start_pose = calcOffsetPose(goal_pose, dx + start_pose_offset, -arc_coordinates.distance, 0);
+    2 * std::sqrt(std::pow(R_E_r, 2) - std::pow(-arc_coordinates.distance / 2 + R_E_r, 2));
+
+  Pose start_pose;
+  if (is_forward) {
+    start_pose = calcOffsetPose(goal_pose, -dx + start_pose_offset, -arc_coordinates.distance, 0);
+  } else {
+    start_pose = calcOffsetPose(goal_pose, dx + start_pose_offset, -arc_coordinates.distance, 0);
+  }
 
   return start_pose;
 }
 
 void ParallelParkingPlanner::getStraightPath(
-  const Pose goal_pose, const double start_pose_offset, const lanelet::ConstLanelets lanes)
+  const Pose goal_pose, const double start_pose_offset, const double R_E_r,
+  const bool is_forward)
 {
   // get stright path before parking.
 
-  auto current_lanes = util::getExtendedCurrentLanes(planner_data_);
+  // Not use shoulder lanes.
+  auto current_lanes = util::getCurrentLanes(planner_data_);
 
-  const Pose start_pose = getStartPose(goal_pose, start_pose_offset);
+  const Pose start_pose = getStartPose(goal_pose, start_pose_offset, R_E_r, is_forward);
+
+  // debug
+  start_pose_.pose = getStartPose(goal_pose, start_pose_offset, R_E_r, is_forward);
+  start_pose_.header = planner_data_->route_handler->getRouteHeader();
+
   const auto start_arc_position = lanelet::utils::getArcCoordinates(current_lanes, start_pose);
 
   const Pose current_pose = planner_data_->self_pose->pose;
   const auto crrent_arc_position = lanelet::utils::getArcCoordinates(current_lanes, current_pose);
 
   auto path = planner_data_->route_handler->getCenterLinePath(
-    current_lanes, crrent_arc_position.length, start_arc_position.length);
+    current_lanes, crrent_arc_position.length, start_arc_position.length, true);
   path.header = planner_data_->route_handler->getRouteHeader();
 
   const auto common_params = planner_data_->parameters;
@@ -160,22 +185,24 @@ void ParallelParkingPlanner::getStraightPath(
   paths_.push_back(path);
 }
 
+
 bool ParallelParkingPlanner::planOneTraial(
-  const Pose goal_pose, const double start_pose_offset, const lanelet::ConstLanelets lanes)
+  const Pose goal_pose, const double start_pose_offset,  const double R_E_r,
+  const lanelet::ConstLanelets lanes, const bool is_forward)
 {
   // debug
-  start_pose_.pose = getStartPose(goal_pose, start_pose_offset);
-  start_pose_.header = planner_data_->route_handler->getRouteHeader();
+  // start_pose_.pose = getStartPose(goal_pose, start_pose_offset, R_E_r, is_forward);
+  // start_pose_.header = planner_data_->route_handler->getRouteHeader();
+  path_pose_array_.poses.clear();
 
-  PathWithLaneId path;
-  const auto start_pose = getStartPose(goal_pose, start_pose_offset);
+  const auto start_pose = getStartPose(goal_pose, start_pose_offset, R_E_r, is_forward);
 
   const float self_yaw = tf2::getYaw(start_pose.orientation);
   const float goal_yaw = tf2::getYaw(goal_pose.orientation);
   const float psi = normalizeRadian(self_yaw - goal_yaw);
   const auto common_params = planner_data_->parameters;
 
-  Pose Cr = calcOffsetPose(goal_pose, 0, -R_E_min_, 0);
+  Pose Cr = calcOffsetPose(goal_pose, 0, -R_E_r, 0);
   Cr_.pose = Cr;
   Cr_.header = planner_data_->route_handler->getRouteHeader();
   const float d_Cr_Einit = calcDistance2d(Cr, start_pose);
@@ -187,41 +214,55 @@ bool ParallelParkingPlanner::planOneTraial(
   const float alpha =
     M_PI_2 - psi + std::asin((self_point_goalcoords.y - Cr_goalcoords.y) / d_Cr_Einit);
 
-  const float R_Einit_l = (std::pow(d_Cr_Einit, 2) - std::pow(R_E_min_, 2)) /
-                          (2 * (R_E_min_ + d_Cr_Einit * std::cos(alpha)));
-  if (R_Einit_l <= 0) {
+  const float R_E_l = (std::pow(d_Cr_Einit, 2) - std::pow(R_E_r, 2)) /
+                          (2 * (R_E_r + d_Cr_Einit * std::cos(alpha)));
+  if (R_E_l <= 0) {
     return false;
   }
 
-  // If start_pose is prallel to goal_pose, we can know front-right's lateral deviation,
-  // so detect lane departure.
-  const float R_front_left =
-    std::hypot(R_Einit_l + common_params.vehicle_width / 2, common_params.base_link2front);
-  const float lateral_deviation = R_front_left - R_Einit_l;
-  const double distance_to_right_bound = util::getDistanceToRightBoundary(lanes, start_pose);
-  if (distance_to_right_bound < lateral_deviation) {
-    return false;
+  // If start_pose is prallel to goal_pose, we can know lateral deviation of eges of vehicle,
+  // and detect lane departure.
+  // Check left bound
+  if (is_forward) {
+    const float R_front_left =
+      std::hypot(R_E_r + common_params.vehicle_width / 2, common_params.base_link2front);
+    const double distance_to_left_bound = util::getDistanceToShoulderBoundary(lanes, goal_pose);
+    const float left_deviation = R_front_left - R_E_r;
+    if (std::abs(distance_to_left_bound) < left_deviation) {
+      return false;
+    }
+  }
+  // Check right bound
+  else {
+    const float R_front_right =
+      std::hypot(R_E_l + common_params.vehicle_width / 2, common_params.base_link2front);
+    const float right_deviation = R_front_right - R_E_l;
+    const double distance_to_right_bound = util::getDistanceToRightBoundary(lanes, start_pose);
+    if (distance_to_right_bound < right_deviation) {
+      return false;
+    }
   }
 
-  const float steer_l = std::atan(common_params.wheel_base / R_Einit_l);
+  const float steer_l = std::atan(common_params.wheel_base / R_E_l);
 
-  Pose Cl = calcOffsetPose(start_pose, 0, R_Einit_l, 0);
+  Pose Cl = calcOffsetPose(start_pose, 0, R_E_l, 0);
   Cl_.pose = Cl;
   Cl_.header = planner_data_->route_handler->getRouteHeader();
 
-  const float theta_l = std::acos(
-    (std::pow(R_Einit_l, 2) + std::pow(R_Einit_l + R_E_min_, 2) - std::pow(d_Cr_Einit, 2)) /
-    (2 * R_Einit_l * (R_Einit_l + R_E_min_)));
-
+  float theta_l = std::acos(
+    (std::pow(R_E_l, 2) + std::pow(R_E_l + R_E_r, 2) - std::pow(d_Cr_Einit, 2)) /
+    (2 * R_E_l * (R_E_l + R_E_r)));
+  theta_l = is_forward ? theta_l : -theta_l;
   PathWithLaneId path_turn_left =
-    generateArcPath(Cl, R_Einit_l, -M_PI_2, normalizeRadian(-M_PI_2 - theta_l), false);
+    generateArcPath(Cl, R_E_l, -M_PI_2, normalizeRadian(-M_PI_2 + theta_l), is_forward, is_forward);
+  PathWithLaneId path_turn_right =
+    generateArcPath(Cr, R_E_r, normalizeRadian(psi + M_PI_2 + theta_l), M_PI_2, !is_forward, is_forward);
+
   path_turn_left.header = planner_data_->route_handler->getRouteHeader();
   path_turn_left.drivable_area = util::generateDrivableArea(
     lanes, common_params.drivable_area_resolution, common_params.vehicle_length, planner_data_);
   paths_.push_back(path_turn_left);
 
-  PathWithLaneId path_turn_right =
-    generateArcPath(Cr, R_E_min_, normalizeRadian(psi + M_PI_2 - theta_l), M_PI_2, true);
   path_turn_right.header = planner_data_->route_handler->getRouteHeader();
   path_turn_right.drivable_area = util::generateDrivableArea(
     lanes, common_params.drivable_area_resolution, common_params.vehicle_length, planner_data_);
@@ -231,7 +272,6 @@ bool ParallelParkingPlanner::planOneTraial(
   concat_path.points.insert(
     concat_path.points.end(), path_turn_left.points.begin(), path_turn_left.points.end());
 
-  path.header = planner_data_->route_handler->getRouteHeader();
   path_pose_array_ = convertToGeometryPoseArray(concat_path);
 
   return true;
@@ -239,32 +279,34 @@ bool ParallelParkingPlanner::planOneTraial(
 
 PathWithLaneId ParallelParkingPlanner::generateArcPath(
   const Pose & center, const float radius, const float start_yaw, float end_yaw,
-  const bool is_left_turn)
+  const bool is_left_turn,  // is_left_turn means clockwise around center.
+  const bool is_forward)
 {
   PathWithLaneId path;
 
   const float interval = 1.0;
   const float yaw_interval = interval / radius;
   float yaw = start_yaw;
+  const float velocity = is_forward ? 1.0 : -0.5;
 
   if (is_left_turn) {
     if (end_yaw < start_yaw) end_yaw += M_PI_2;
     while (yaw < end_yaw) {
-      PathPointWithLaneId p = generateArcPathPoint(center, radius, yaw, is_left_turn);
-      p.point.longitudinal_velocity_mps = -0.5;
+      PathPointWithLaneId p = generateArcPathPoint(center, radius, yaw, is_left_turn, is_forward);
+      p.point.longitudinal_velocity_mps = velocity;
       path.points.push_back(p);
       yaw += yaw_interval;
     }
   } else {  // right_turn
     if (end_yaw > start_yaw) end_yaw -= M_PI_2;
     while (yaw > end_yaw) {
-      PathPointWithLaneId p = generateArcPathPoint(center, radius, yaw, is_left_turn);
-      p.point.longitudinal_velocity_mps = -0.5;
+      PathPointWithLaneId p = generateArcPathPoint(center, radius, yaw, is_left_turn, is_forward);
+      p.point.longitudinal_velocity_mps = velocity;
       path.points.push_back(p);
       yaw -= yaw_interval;
     }
   }
-  PathPointWithLaneId p = generateArcPathPoint(center, radius, end_yaw, is_left_turn);
+  PathPointWithLaneId p = generateArcPathPoint(center, radius, end_yaw, is_left_turn, is_forward);
   p.point.longitudinal_velocity_mps = 0.0;
   path.points.push_back(p);
 
@@ -272,14 +314,14 @@ PathWithLaneId ParallelParkingPlanner::generateArcPath(
 }
 
 PathPointWithLaneId ParallelParkingPlanner::generateArcPathPoint(
-  const Pose & center, const float radius, const float yaw, const bool is_left_turn)
+  const Pose & center, const float radius, const float yaw, const bool is_left_turn, const bool is_forward)
 {
   Pose pose_centercoords;
   pose_centercoords.position.x = radius * std::cos(yaw);
   pose_centercoords.position.y = radius * std::sin(yaw);
 
   tf2::Quaternion quat;
-  if (is_left_turn) {
+  if ((is_left_turn && !is_forward) || (!is_left_turn && is_forward)) {
     quat.setRPY(0, 0, normalizeRadian(yaw - M_PI_2));
   } else {
     quat.setRPY(0, 0, normalizeRadian(yaw + M_PI_2));
