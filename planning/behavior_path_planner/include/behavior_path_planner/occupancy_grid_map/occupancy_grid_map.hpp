@@ -63,7 +63,7 @@ struct VehicleShape
   double base2back;  // base_link to rear [m]
 };
 
-struct CommonParam
+struct OccupancyGridMapParam
 {
   // robot configs
   VehicleShape vehicle_shape;
@@ -88,19 +88,12 @@ struct PlannerWaypoints
 class OccupancyGridMap
 {
 public:
-  OccupancyGridMap(){}
-  // explicit OccupancyGridMap(const CommonParam & common_param)
-  // : common_param_(common_param)
-  // {
-  // }
-  void setParam(const CommonParam & common_param){common_param_ = common_param;};
-  CommonParam getParam() const { return common_param_; };
+  OccupancyGridMap() {}
+  void setParam(const OccupancyGridMapParam & param) { param_ = param; };
+  OccupancyGridMapParam getParam() const { return param_; };
   void setMap(const nav_msgs::msg::OccupancyGrid & costmap);
   nav_msgs::msg::OccupancyGrid getMap() const { return costmap_; };
-  void setVehicleShape(const VehicleShape & vehicle_shape)
-  {
-    common_param_.vehicle_shape = vehicle_shape;
-  }
+  void setVehicleShape(const VehicleShape & vehicle_shape) { param_.vehicle_shape = vehicle_shape; }
   bool hasObstacleOnPath(
     const geometry_msgs::msg::PoseArray & path, const bool check_out_of_range) const;
   bool hasObstacleOnPath(
@@ -130,7 +123,7 @@ protected:
     return is_obstacle_table_[index.y][index.x];
   }
 
-  CommonParam common_param_;
+  OccupancyGridMapParam param_;
 
   // costmap as occupancy grid
   nav_msgs::msg::OccupancyGrid costmap_;

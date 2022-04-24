@@ -14,8 +14,8 @@
 
 #include "behavior_path_planner/occupancy_grid_map/occupancy_grid_map.hpp"
 
-#include <tier4_autoware_utils/tier4_autoware_utils.hpp>
 #include <tier4_autoware_utils/geometry/geometry.hpp>
+#include <tier4_autoware_utils/tier4_autoware_utils.hpp>
 
 #include <vector>
 
@@ -24,15 +24,6 @@ namespace behavior_path_planner
 using tier4_autoware_utils::createQuaternionFromYaw;
 using tier4_autoware_utils::normalizeRadian;
 using tier4_autoware_utils::transformPose;
-
-// geometry_msgs::msg::Pose transformPose(
-//   const geometry_msgs::msg::Pose & pose, const geometry_msgs::msg::TransformStamped & transform)
-// {
-//   geometry_msgs::msg::Pose transformed_pose;
-//   tf2::doTransform(pose, transformed_pose, transform);
-
-//   return transformed_pose;
-// }
 
 int discretizeAngle(const double theta, const int theta_size)
 {
@@ -103,7 +94,7 @@ void OccupancyGridMap::setMap(const nav_msgs::msg::OccupancyGrid & costmap)
     for (uint32_t j = 0; j < width; j++) {
       const int cost = costmap_.data[i * width + j];
 
-      if (cost < 0 || common_param_.obstacle_threshold <= cost) {
+      if (cost < 0 || param_.obstacle_threshold <= cost) {
         is_obstacle_table[i][j] = true;
       }
     }
@@ -112,18 +103,17 @@ void OccupancyGridMap::setMap(const nav_msgs::msg::OccupancyGrid & costmap)
 
   // construct collision indexes table
   coll_indexes_table_.clear();
-  for (int i = 0; i < common_param_.theta_size; i++) {
+  for (int i = 0; i < param_.theta_size; i++) {
     std::vector<IndexXY> indexes_2d;
     computeCollisionIndexes(i, indexes_2d);
     coll_indexes_table_.push_back(indexes_2d);
   }
 }
 
-void OccupancyGridMap::computeCollisionIndexes(
-  int theta_index, std::vector<IndexXY> & indexes_2d)
+void OccupancyGridMap::computeCollisionIndexes(int theta_index, std::vector<IndexXY> & indexes_2d)
 {
   IndexXYT base_index{0, 0, theta_index};
-  const VehicleShape & vehicle_shape = common_param_.vehicle_shape;
+  const VehicleShape & vehicle_shape = param_.vehicle_shape;
 
   // Define the robot as rectangle
   const double back = -1.0 * vehicle_shape.base2back;
@@ -131,12 +121,13 @@ void OccupancyGridMap::computeCollisionIndexes(
   const double right = -1.0 * vehicle_shape.width / 2.0;
   const double left = vehicle_shape.width / 2.0;
 
-  const auto base_pose = index2pose(costmap_, base_index, common_param_.theta_size);
+  const auto base_pose = index2pose(costmap_, base_index, param_.theta_size);
   const auto base_theta = tf2::getYaw(base_pose.orientation);
 
   // Convert each point to index and check if the node is Obstacle
   for (double x = back; x <= front + costmap_.info.resolution; x += costmap_.info.resolution / 2) {
-    for (double y = right; y <= left + costmap_.info.resolution; y += costmap_.info.resolution / 2) {
+    for (double y = right; y <= left + costmap_.info.resolution;
+         y += costmap_.info.resolution / 2) {
       // Calculate offset in rotated frame
       const double offset_x = std::cos(base_theta) * x - std::sin(base_theta) * y;
       const double offset_y = std::sin(base_theta) * x + std::cos(base_theta) * y;
@@ -145,7 +136,7 @@ void OccupancyGridMap::computeCollisionIndexes(
       pose_local.position.x = base_pose.position.x + offset_x;
       pose_local.position.y = base_pose.position.y + offset_y;
 
-      const auto index = pose2index(costmap_, pose_local, common_param_.theta_size);
+      const auto index = pose2index(costmap_, pose_local, param_.theta_size);
       const auto index_2d = IndexXY{index.x, index.y};
       indexes_2d.push_back(index_2d);
     }
@@ -177,7 +168,7 @@ bool OccupancyGridMap::hasObstacleOnPath(
 {
   for (const auto & pose : path.poses) {
     const auto pose_local = global2local(costmap_, pose);
-    const auto index = pose2index(costmap_, pose_local, common_param_.theta_size);
+    const auto index = pose2index(costmap_, pose_local, param_.theta_size);
 
     if (detectCollision(index, check_out_of_range)) {
       return true;
@@ -193,7 +184,7 @@ bool OccupancyGridMap::hasObstacleOnPath(
 {
   for (const auto & p : path.points) {
     const auto pose_local = global2local(costmap_, p.point.pose);
-    const auto index = pose2index(costmap_, pose_local, common_param_.theta_size);
+    const auto index = pose2index(costmap_, pose_local, param_.theta_size);
 
     if (detectCollision(index, check_out_of_range)) {
       return true;

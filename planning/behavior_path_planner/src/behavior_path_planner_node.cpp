@@ -364,32 +364,37 @@ PullOverParameters BehaviorPathPlannerNode::getPullOverParam()
   };
 
   PullOverParameters p;
-
-  p.min_stop_distance = dp("min_stop_distance", 5.0);
-  p.stop_time = dp("stop_time", 2.0);
-  p.hysteresis_buffer_distance = dp("hysteresis_buffer_distance", 2.0);
-  p.pull_over_prepare_duration = dp("pull_over_prepare_duration", 2.0);
-  p.pull_over_duration = dp("pull_over_duration", 4.0);
-  p.pull_over_finish_judge_buffer = dp("pull_over_finish_judge_buffer", 3.0);
-  p.minimum_pull_over_velocity = dp("minimum_pull_over_velocity", 8.3);
-  p.prediction_duration = dp("prediction_duration", 8.0);
-  p.prediction_time_resolution = dp("prediction_time_resolution", 0.5);
-  p.static_obstacle_velocity_thresh = dp("static_obstacle_velocity_thresh", 0.1);
-  p.maximum_deceleration = dp("maximum_deceleration", 1.0);
-  p.pull_over_sampling_num = dp("pull_over_sampling_num", 4);
-  p.enable_collision_check_at_prepare_phase = dp("enable_collision_check_at_prepare_phase", true);
-  p.use_predicted_path_outside_lanelet = dp("use_predicted_path_outside_lanelet", true);
-  p.use_all_predicted_path = dp("use_all_predicted_path", false);
-  p.enable_blocked_by_obstacle = dp("enable_blocked_by_obstacle", false);
-  p.pull_over_search_distance = dp("pull_over_search_distance", 30.0);
-  p.after_pull_over_straight_distance = dp("after_pull_over_straight_distance", 3.0);
-  p.before_pull_over_straight_distance = dp("before_pull_over_straight_distance", 3.0);
+  p.th_arrived_distance_m = dp("th_stopped_velocity_mps", 0.01);
+  p.th_arrived_distance_m = dp("th_arrived_distance_m", 0.3);
   p.margin_from_boundary = dp("margin_from_boundary", 0.3);
+  p.pull_over_forward_search_length = dp("pull_over_forward_search_length", 20.0);
+  p.pull_over_backward_search_length = dp("pull_over_backward_search_length", 20.0);
+  // For occupancy grid map
+  p.collision_check_margin = dp("collision_check_margin", 0.5);
+  p.theta_size = dp("theta_size", 360);
+  p.obstacle_threshold = dp("obstacle_threshold", 90);
+  // For shift path
+  p.pull_over_sampling_num = dp("pull_over_sampling_num", 4);
   p.maximum_lateral_jerk = dp("maximum_lateral_jerk", 3.0);
   p.minimum_lateral_jerk = dp("minimum_lateral_jerk", 1.0);
   p.deceleration_interval = dp("deceleration_interval", 10.0);
+  p.minimum_pull_over_velocity = dp("minimum_pull_over_velocity", 8.3);
+  p.maximum_deceleration = dp("maximum_deceleration", 1.0);
+  p.after_pull_over_straight_distance = dp("after_pull_over_straight_distance", 3.0);
+  p.before_pull_over_straight_distance = dp("before_pull_over_straight_distance", 3.0);
+  // For hazard
   p.hazard_on_threshold_dis = dp("hazard_on_threshold_dis", 1.0);
   p.hazard_on_threshold_vel = dp("hazard_on_threshold_vel", 0.5);
+  // For check safety with dynamic objects. Not used now.
+  p.pull_over_duration = dp("pull_over_duration", 4.0);
+  p.pull_over_prepare_duration = dp("pull_over_prepare_duration", 2.0);
+  p.min_stop_distance = dp("min_stop_distance", 5.0);
+  p.stop_time = dp("stop_time", 2.0);
+  p.hysteresis_buffer_distance = dp("hysteresis_buffer_distance", 2.0);
+  p.prediction_time_resolution = dp("prediction_time_resolution", 0.5);
+  p.enable_collision_check_at_prepare_phase = dp("enable_collision_check_at_prepare_phase", true);
+  p.use_predicted_path_outside_lanelet = dp("use_predicted_path_outside_lanelet", true);
+  p.use_all_predicted_path = dp("use_all_predicted_path", false);
 
   // validation of parameters
   if (p.pull_over_sampling_num < 1) {

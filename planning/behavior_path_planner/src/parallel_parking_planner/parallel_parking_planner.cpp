@@ -59,13 +59,11 @@ PathWithLaneId ParallelParkingPlanner::getCurrentPath()
   const auto current_target = current_path.points.back();
   const auto self_pose = planner_data_->self_pose->pose;
 
-  const float th_arrived_distance_m = 0.3;  // todo
   const bool is_near_target =
-    tier4_autoware_utils::calcDistance2d(current_target, self_pose) < th_arrived_distance_m;
+    tier4_autoware_utils::calcDistance2d(current_target, self_pose) <  parameters_.th_arrived_distance_m;
 
-  const float th_stopped_velocity_mps = 0.01;  // todo
   const bool is_stopped =
-    std::abs(planner_data_->self_odometry->twist.twist.linear.x) < th_stopped_velocity_mps;
+    std::abs(planner_data_->self_odometry->twist.twist.linear.x) < parameters_.th_stopped_velocity_mps;
 
   if (is_near_target && is_stopped) {
     current_path_idx_ += 1;
@@ -333,9 +331,12 @@ PathPointWithLaneId ParallelParkingPlanner::generateArcPathPoint(
   return p;
 }
 
-void ParallelParkingPlanner::setParams(const std::shared_ptr<const PlannerData> & planner_data)
+void ParallelParkingPlanner::setParams(
+  const std::shared_ptr<const PlannerData> & planner_data, ParallelParkingParameters parameters)
 {
   planner_data_ = planner_data;
+  parameters_ = parameters;
+
   auto common_params = planner_data_->parameters;
   max_steer_rad_ = deg2rad(max_steer_deg_);
 

@@ -373,7 +373,8 @@ bool hasEnoughDistance(
   return true;
 }
 
-bool isShiftParkingPathSafe(
+// Use occupancy grid to check safety instead of this function.
+bool isPullOverPathSafe(
   const PathWithLaneId & path, const lanelet::ConstLanelets & current_lanes,
   const lanelet::ConstLanelets & target_lanes,
   const PredictedObjects::ConstSharedPtr & dynamic_objects, const Pose & current_pose,

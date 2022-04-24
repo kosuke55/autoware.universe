@@ -45,33 +45,40 @@ using geometry_msgs::msg::PoseArray;
 using tier4_autoware_utils::calcAveragePose;
 using visualization_msgs::msg::Marker;
 using visualization_msgs::msg::MarkerArray;
+
 struct PullOverParameters
 {
-  double min_stop_distance;
-  double stop_time;
-  double hysteresis_buffer_distance;
-  double pull_over_prepare_duration;
-  double pull_over_duration;
-  double pull_over_finish_judge_buffer;
-  double minimum_pull_over_velocity;
-  double prediction_duration;
-  double prediction_time_resolution;
-  double static_obstacle_velocity_thresh;
-  double maximum_deceleration;
-  int pull_over_sampling_num;
-  bool enable_collision_check_at_prepare_phase;
-  bool use_predicted_path_outside_lanelet;
-  bool use_all_predicted_path;
-  bool enable_blocked_by_obstacle;
-  double pull_over_search_distance;
-  double after_pull_over_straight_distance;
-  double before_pull_over_straight_distance;
+  double th_arrived_distance_m;
+  double th_stopped_velocity_mps;
   double margin_from_boundary;
+  double pull_over_forward_search_length;
+  double pull_over_backward_search_length;
+  // For occupancy grid map
+  double collision_check_margin;
+  double theta_size;
+  double obstacle_threshold;
+  // For shift path
+  int pull_over_sampling_num;
   double maximum_lateral_jerk;
   double minimum_lateral_jerk;
   double deceleration_interval;
+  double minimum_pull_over_velocity;
+  double maximum_deceleration;
+  double after_pull_over_straight_distance;
+  double before_pull_over_straight_distance;
+  // For hazard
   double hazard_on_threshold_dis;
   double hazard_on_threshold_vel;
+  // For check safety with dynamic objects. Not used now.
+  double pull_over_duration;
+  double pull_over_prepare_duration;
+  double min_stop_distance;
+  double stop_time;
+  double hysteresis_buffer_distance;
+  double prediction_time_resolution;
+  bool enable_collision_check_at_prepare_phase;
+  bool use_predicted_path_outside_lanelet;
+  bool use_all_predicted_path;
 };
 
 enum PathType {
@@ -84,7 +91,7 @@ enum PathType {
 struct PUllOverStatus
 {
   PathWithLaneId path;
-  bool has_decided = false;
+  bool has_decided_path = false;
   int path_type = PathType::NONE;
   bool is_safe = false;
 };
@@ -147,6 +154,7 @@ private:
   Pose modified_goal_pose_;
   std::vector<GoalCandidate> goal_candidates_;
   ParallelParkingPlanner parallel_parking_planner_;
+  ParallelParkingParameters parallel_parking_prameters_;
 
   PathWithLaneId getReferencePath() const;
   // lanelet::ConstLanelets getCurrentLanes() const;
@@ -163,7 +171,8 @@ private:
     const double & hazard_on_threshold_vel, const double & base_link2front) const;
 
   bool planShiftPath();
-  bool isLongEnough(const lanelet::ConstLanelets & lanelets, const double buffer = 0) const;
+  bool isLongEnough(
+    const lanelet::ConstLanelets & lanelets, const Pose goal_pose, const double buffer = 0) const;
   bool hasFinishedPullOver() const;
   void updateOccupancyGrid();
   Pose getRefinedGoal();

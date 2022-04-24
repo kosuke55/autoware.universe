@@ -47,12 +47,19 @@ using geometry_msgs::msg::PoseArray;
 using geometry_msgs::msg::PoseStamped;
 using lane_departure_checker::LaneDepartureChecker;
 
+struct ParallelParkingParameters
+{
+  double th_arrived_distance_m;
+  double th_stopped_velocity_mps;
+};
+
 class ParallelParkingPlanner
 {
 public:
   bool isParking() const;
   void plan(const Pose goal_pose, lanelet::ConstLanelets lanes, const bool is_forward);
-  void setParams(const std::shared_ptr<const PlannerData> & planner_data);
+  void setParams(
+    const std::shared_ptr<const PlannerData> & planner_data, ParallelParkingParameters parameters);
   PathWithLaneId getCurrentPath();
   PathWithLaneId getFullPath();
   void clear();
@@ -65,7 +72,11 @@ public:
 
 private:
   std::shared_ptr<const PlannerData> planner_data_;
-  float max_steer_deg_ = 40.0;  // max steering angle [deg]. todo: use new vehicle info
+  ParallelParkingParameters parameters_;
+
+  // todo: use vehicle info after merging
+  // https://github.com/autowarefoundation/autoware.universe/pull/740
+  float max_steer_deg_ = 40.0;  // max steering angle [deg].
   float max_steer_rad_;
   float R_E_min_;   // base_link
   float R_Bl_min_;  // front_left
