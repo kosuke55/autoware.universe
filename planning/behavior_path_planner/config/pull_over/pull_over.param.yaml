@@ -7,11 +7,11 @@
       pull_over_search_distance: 30.0
       pull_over_forward_search_length: 20.0
       pull_over_backward_search_length: 20.0
-      # For occupancy grid map
+      # occupancy grid map
       collision_check_margin: 0.5
       theta_size: 360
       obstacle_threshold: 90
-      # For shift path
+      # shift path
       pull_over_sampling_num: 4
       maximum_lateral_jerk: 2.0
       minimum_lateral_jerk: 0.5
@@ -20,10 +20,13 @@
       maximum_deceleration: 1.0
       after_pull_over_straight_distance: 5.0
       before_pull_over_straight_distance: 5.0
-      # For hazard
+      # parallel parking path
+      after_forward_parking_straight_distance: 0.5
+      after_backward_parking_straight_distance: 0.5
+      # hazard
       double hazard_on_threshold_dis: 1.0
       double hazard_on_threshold_vel: 0.5
-      # For check safety with dynamic objects. Not used now.
+      # check safety with dynamic objects. Not used now.
       pull_over_duration: 2.0
       pull_over_prepare_duration: 4.0
       min_stop_distance: 5.0

@@ -67,7 +67,6 @@ PullOverModule::PullOverModule(
 void PullOverModule::updateOccupancyGrid()
 {
   occupancy_grid_map_.setMap(*(planner_data_->occupancy_grid));
-  std::cerr << "update occgrid " << planner_data_->occupancy_grid->header.stamp.sec << std::endl;
 }
 
 BehaviorModuleOutput PullOverModule::run()
@@ -80,8 +79,7 @@ BehaviorModuleOutput PullOverModule::run()
 
 void PullOverModule::onEntry()
 {
-  // RCLCPP_DEBUG(getLogger(), "PULL_OVER onEntry");
-  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
+  RCLCPP_DEBUG(getLogger(), "PULL_OVER onEntry");
   current_state_ = BT::NodeStatus::SUCCESS;
 
   // Initialize occupancy grid map
@@ -100,7 +98,9 @@ void PullOverModule::onEntry()
   // Initialize sratus
   parallel_parking_planner_.clear();
   parallel_parking_prameters_ = ParallelParkingParameters{
-    parameters_.th_arrived_distance_m, parameters_.th_stopped_velocity_mps};
+    parameters_.th_arrived_distance_m, parameters_.th_stopped_velocity_mps,
+    parameters_.after_forward_parking_straight_distance,
+    parameters_.after_backward_parking_straight_distance};
   status_.has_decided_path = false;
   status_.path_type = PathType::NONE;
   status_.is_safe = false;
@@ -259,7 +259,6 @@ BT::NodeStatus PullOverModule::updateState()
 
 BehaviorModuleOutput PullOverModule::plan()
 {
-  // RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   const auto common_parameters = planner_data_->parameters;
   const auto current_lanes = util::getExtendedCurrentLanes(planner_data_);
   const auto pull_over_lanes = getPullOverLanes(current_lanes);
@@ -321,8 +320,6 @@ BehaviorModuleOutput PullOverModule::plan()
   output.path = status_.is_safe ? std::make_shared<PathWithLaneId>(status_.path)
                                 : std::make_shared<PathWithLaneId>(getReferencePath());
 
-  std::cerr << "path_type: " << status_.path_type << std::endl;
-  std::cerr << "safe: " << status_.is_safe << std::endl;
   publishDebugData();
 
   return output;
@@ -333,7 +330,6 @@ PathWithLaneId PullOverModule::planCandidate() const { return {}; }
 
 BehaviorModuleOutput PullOverModule::planWaitingApproval()
 {
-  // RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   updateOccupancyGrid();
   BehaviorModuleOutput out;
   out.path = std::make_shared<PathWithLaneId>(getReferencePath());
@@ -348,7 +344,6 @@ BehaviorModuleOutput PullOverModule::planWaitingApproval()
 
 void PullOverModule::setParameters(const PullOverParameters & parameters)
 {
-  // RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   parameters_ = parameters;
 }
 
@@ -390,7 +385,6 @@ bool PullOverModule::planShiftPath()
 
 PathWithLaneId PullOverModule::getReferencePath() const
 {
-  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   PathWithLaneId reference_path;
 
   const auto & route_handler = planner_data_->route_handler;
@@ -456,7 +450,6 @@ std::pair<bool, bool> PullOverModule::getSafePath(
   const lanelet::ConstLanelets & pull_over_lanes, const double check_distance, const Pose goal_pose,
   ShiftParkingPath & safe_path) const
 {
-  // RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   std::vector<ShiftParkingPath> valid_paths;
 
   const auto & route_handler = planner_data_->route_handler;
@@ -506,7 +499,6 @@ std::pair<bool, bool> PullOverModule::getSafePath(
 bool PullOverModule::isLongEnough(
   const lanelet::ConstLanelets & lanelets, const Pose goal_pose, const double buffer) const
 {
-  // RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   PathShifter path_shifter;
   const double maximum_jerk = parameters_.maximum_lateral_jerk;
   const double pull_over_velocity = parameters_.minimum_pull_over_velocity;
@@ -551,7 +543,6 @@ std::pair<HazardLightsCommand, double> PullOverModule::getHazard(
   const double & velocity, const double & hazard_on_threshold_dis,
   const double & hazard_on_threshold_vel, const double & base_link2front) const
 {
-  RCLCPP_ERROR(getLogger(), "(%s):", __func__);
   HazardLightsCommand hazard_signal;
   const double max_distance = std::numeric_limits<double>::max();
 

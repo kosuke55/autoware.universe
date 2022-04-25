@@ -69,8 +69,6 @@ PathWithLaneId ParallelParkingPlanner::getCurrentPath()
     current_path_idx_ += 1;
   }
   current_path_idx_ = std::min(current_path_idx_, paths_.size() - 1);
-  std::cerr << "current_path_idx_: " << current_path_idx_ << " / " << paths_.size() - 1
-            << std::endl;
 
   return paths_.at(current_path_idx_);
 }
@@ -86,7 +84,6 @@ PathWithLaneId ParallelParkingPlanner::getFullPath()
 
 void ParallelParkingPlanner::clear()
 {
-  std::cerr << "clear : " << current_path_idx_ << std::endl;
   current_path_idx_ = 0;
   paths_.clear();
 }
@@ -101,21 +98,16 @@ void ParallelParkingPlanner::plan(
   if (!isParking()) {
     if (is_forward) {
       // When turning forward to the right, the front left goes out,
-      // so reduce the steer angle at that time.
+      // so reduce the steer angle at that time for seach no lane departure path.
       for (double steer = max_steer_rad_; steer > 0.05; steer -= 0.05) {
-        paths_.clear();
         const double R_E_r = common_params.wheel_base / std::tan(steer);
-        getStraightPath(goal_pose, 0, R_E_r, is_forward);
-        // Find path witout lane departure
         if (planOneTraial(goal_pose, 0, R_E_r, lanes, is_forward)) break;
       }
     } else {
       // When turning backward to the left, the front right goes out,
-      // so make the parking start point in front(same to Equivalent to reducing the steer angle).
-      for (double dx = 0; dx < 20; dx += 0.5) {
-        paths_.clear();
-        getStraightPath(goal_pose, dx, R_E_min_, is_forward);
-        // Find path witout lane departure
+      // so make the parking start point in front for seach no lane departure path
+      // (same to Equivalent to reducing the steer angle)
+      for (double dx = 0; dx < 10; dx += 0.5) {
         if (planOneTraial(goal_pose, dx, R_E_min_, lanes, is_forward)) break;
       }
     }
@@ -173,24 +165,28 @@ bool ParallelParkingPlanner::planOneTraial(
   const Pose goal_pose, const double start_pose_offset, const double R_E_r,
   const lanelet::ConstLanelets lanes, const bool is_forward)
 {
-  // debug
-  // start_pose_.pose = getStartPose(goal_pose, start_pose_offset, R_E_r, is_forward);
-  // start_pose_.header = planner_data_->route_handler->getRouteHeader();
   path_pose_array_.poses.clear();
+  paths_.clear();
 
-  const auto start_pose = getStartPose(goal_pose, start_pose_offset, R_E_r, is_forward);
+  const double after_parking_straight_distance =
+    is_forward ? parameters_.after_forward_parking_straight_distance
+               : parameters_.after_backward_parking_straight_distance;
+  const Pose offsetted_goal_pose = calcOffsetPose(goal_pose, after_parking_straight_distance, 0, 0);
+  getStraightPath(offsetted_goal_pose, start_pose_offset, R_E_r, is_forward);
+
+  const auto start_pose = getStartPose(offsetted_goal_pose, start_pose_offset, R_E_r, is_forward);
 
   const float self_yaw = tf2::getYaw(start_pose.orientation);
-  const float goal_yaw = tf2::getYaw(goal_pose.orientation);
+  const float goal_yaw = tf2::getYaw(offsetted_goal_pose.orientation);
   const float psi = normalizeRadian(self_yaw - goal_yaw);
   const auto common_params = planner_data_->parameters;
 
-  Pose Cr = calcOffsetPose(goal_pose, 0, -R_E_r, 0);
+  Pose Cr = calcOffsetPose(offsetted_goal_pose, 0, -R_E_r, 0);
   const float d_Cr_Einit = calcDistance2d(Cr, start_pose);
 
-  geometry_msgs::msg::Point Cr_goalcoords = inverseTransformPoint(Cr.position, goal_pose);
+  geometry_msgs::msg::Point Cr_goalcoords = inverseTransformPoint(Cr.position, offsetted_goal_pose);
   geometry_msgs::msg::Point self_point_goalcoords =
-    inverseTransformPoint(start_pose.position, goal_pose);
+    inverseTransformPoint(start_pose.position, offsetted_goal_pose);
 
   const float alpha =
     M_PI_2 - psi + std::asin((self_point_goalcoords.y - Cr_goalcoords.y) / d_Cr_Einit);
@@ -207,7 +203,7 @@ bool ParallelParkingPlanner::planOneTraial(
   if (is_forward) {
     const float R_front_left =
       std::hypot(R_E_r + common_params.vehicle_width / 2, common_params.base_link2front);
-    const double distance_to_left_bound = util::getDistanceToShoulderBoundary(lanes, goal_pose);
+    const double distance_to_left_bound = util::getDistanceToShoulderBoundary(lanes, offsetted_goal_pose);
     const float left_deviation = R_front_left - R_E_r;
     if (std::abs(distance_to_left_bound) < left_deviation) {
       return false;
@@ -232,8 +228,17 @@ bool ParallelParkingPlanner::planOneTraial(
   theta_l = is_forward ? theta_l : -theta_l;
   PathWithLaneId path_turn_left =
     generateArcPath(Cl, R_E_l, -M_PI_2, normalizeRadian(-M_PI_2 + theta_l), is_forward, is_forward);
+
   PathWithLaneId path_turn_right = generateArcPath(
     Cr, R_E_r, normalizeRadian(psi + M_PI_2 + theta_l), M_PI_2, !is_forward, is_forward);
+  // Need going straight for parking in parallel
+  PathPointWithLaneId straight_point{};
+  lanelet::ConstLanelet goal_lane;
+  lanelet::utils::query::getClosestLanelet(lanes, goal_pose, &goal_lane);
+  straight_point.point.pose = goal_pose;
+  straight_point.point.longitudinal_velocity_mps = 0.0;
+  straight_point.lane_ids.push_back(goal_lane.id());
+  path_turn_right.points.push_back(straight_point);
 
   path_turn_left.header = planner_data_->route_handler->getRouteHeader();
   path_turn_left.drivable_area = util::generateDrivableArea(
@@ -265,11 +270,10 @@ PathWithLaneId ParallelParkingPlanner::generateArcPath(
 {
   PathWithLaneId path;
 
+  const float velocity = is_forward ? 1.0 : -0.5;
   const float interval = 1.0;
   const float yaw_interval = interval / radius;
   float yaw = start_yaw;
-  const float velocity = is_forward ? 1.0 : -0.5;
-
   if (is_left_turn) {
     if (end_yaw < start_yaw) end_yaw += M_PI_2;
     while (yaw < end_yaw) {
@@ -287,8 +291,11 @@ PathWithLaneId ParallelParkingPlanner::generateArcPath(
       yaw -= yaw_interval;
     }
   }
+
   PathPointWithLaneId p = generateArcPathPoint(center, radius, end_yaw, is_left_turn, is_forward);
-  p.point.longitudinal_velocity_mps = 0.0;
+  // If last parking turn, going straight is needed for parking in parallel.
+  const bool is_final_turn = (is_left_turn && !is_forward) || (!is_left_turn && is_forward);
+  p.point.longitudinal_velocity_mps = is_final_turn ? velocity : 0;
   path.points.push_back(p);
 
   return path;

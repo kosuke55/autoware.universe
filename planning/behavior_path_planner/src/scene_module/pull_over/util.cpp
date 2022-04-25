@@ -301,7 +301,6 @@ std::vector<ShiftParkingPath> selectValidPaths(
   const lanelet::routing::RoutingGraphContainer & overall_graphs, const Pose & current_pose,
   const bool isInGoalRouteSection, const Pose & goal_pose)
 {
-  std::cerr <<  __func__ << " path size " << paths.size() << std::endl;
   std::vector<ShiftParkingPath> available_paths;
 
   for (const auto & path : paths) {
@@ -322,14 +321,12 @@ bool selectSafePath(
   const Twist & current_twist, const double vehicle_width,
   const PullOverParameters & ros_parameters, const OccupancyGridMap & occupancy_grid_map, ShiftParkingPath * selected_path)
 {
-  std::cerr <<  __func__ << " path size " << paths.size() << std::endl;
   for (const auto & path : paths) {
     if (!occupancy_grid_map.hasObstacleOnPath(path.path, false)) {
       *selected_path = path;
       return true;
     }
   }
-  std::cerr << "hasObstacle " << std::endl;
 
   // set first path for force pull over if no valid path found
   if (!paths.empty()) {

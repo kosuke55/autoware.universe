@@ -9,7 +9,7 @@
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
+// See the License the specific language governing permissions and
 // limitations under the License.
 
 #ifndef BEHAVIOR_PATH_PLANNER__SCENE_MODULE__PULL_OVER__PULL_OVER_MODULE_HPP_
@@ -53,11 +53,11 @@ struct PullOverParameters
   double margin_from_boundary;
   double pull_over_forward_search_length;
   double pull_over_backward_search_length;
-  // For occupancy grid map
+  // occupancy grid map
   double collision_check_margin;
   double theta_size;
   double obstacle_threshold;
-  // For shift path
+  // shift path
   int pull_over_sampling_num;
   double maximum_lateral_jerk;
   double minimum_lateral_jerk;
@@ -66,10 +66,13 @@ struct PullOverParameters
   double maximum_deceleration;
   double after_pull_over_straight_distance;
   double before_pull_over_straight_distance;
-  // For hazard
+  // parallel parking
+  double after_forward_parking_straight_distance;
+  double after_backward_parking_straight_distance;
+  // hazard
   double hazard_on_threshold_dis;
   double hazard_on_threshold_vel;
-  // For check safety with dynamic objects. Not used now.
+  // check safety with dynamic objects. Not used now.
   double pull_over_duration;
   double pull_over_prepare_duration;
   double min_stop_distance;

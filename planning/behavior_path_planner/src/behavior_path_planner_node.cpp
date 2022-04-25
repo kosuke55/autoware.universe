@@ -369,11 +369,11 @@ PullOverParameters BehaviorPathPlannerNode::getPullOverParam()
   p.margin_from_boundary = dp("margin_from_boundary", 0.3);
   p.pull_over_forward_search_length = dp("pull_over_forward_search_length", 20.0);
   p.pull_over_backward_search_length = dp("pull_over_backward_search_length", 20.0);
-  // For occupancy grid map
+  // occupancy grid map
   p.collision_check_margin = dp("collision_check_margin", 0.5);
   p.theta_size = dp("theta_size", 360);
   p.obstacle_threshold = dp("obstacle_threshold", 90);
-  // For shift path
+  // shift path
   p.pull_over_sampling_num = dp("pull_over_sampling_num", 4);
   p.maximum_lateral_jerk = dp("maximum_lateral_jerk", 3.0);
   p.minimum_lateral_jerk = dp("minimum_lateral_jerk", 1.0);
@@ -382,10 +382,13 @@ PullOverParameters BehaviorPathPlannerNode::getPullOverParam()
   p.maximum_deceleration = dp("maximum_deceleration", 1.0);
   p.after_pull_over_straight_distance = dp("after_pull_over_straight_distance", 3.0);
   p.before_pull_over_straight_distance = dp("before_pull_over_straight_distance", 3.0);
-  // For hazard
+  // parallel parking
+  p.after_forward_parking_straight_distance = dp("after_forward_parking_straight_distance", 0.5);
+  p.after_backward_parking_straight_distance = dp("after_backward_parking_straight_distance", 0.5);
+  // hazard
   p.hazard_on_threshold_dis = dp("hazard_on_threshold_dis", 1.0);
   p.hazard_on_threshold_vel = dp("hazard_on_threshold_vel", 0.5);
-  // For check safety with dynamic objects. Not used now.
+  // safety with dynamic objects. Not used now.
   p.pull_over_duration = dp("pull_over_duration", 4.0);
   p.pull_over_prepare_duration = dp("pull_over_prepare_duration", 2.0);
   p.min_stop_distance = dp("min_stop_distance", 5.0);
