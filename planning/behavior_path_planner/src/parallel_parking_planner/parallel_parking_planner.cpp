@@ -220,18 +220,19 @@ bool ParallelParkingPlanner::planOneTraial(
     }
   }
 
-  // Generate left right arc paths
+  // Generate arc path(left turn -> right turn)
   Pose Cl = calcOffsetPose(start_pose, 0, R_E_l, 0);
   float theta_l = std::acos(
     (std::pow(R_E_l, 2) + std::pow(R_E_l + R_E_r, 2) - std::pow(d_Cr_Einit, 2)) /
     (2 * R_E_l * (R_E_l + R_E_r)));
   theta_l = is_forward ? theta_l : -theta_l;
+
   PathWithLaneId path_turn_left =
     generateArcPath(Cl, R_E_l, -M_PI_2, normalizeRadian(-M_PI_2 + theta_l), is_forward, is_forward);
 
   PathWithLaneId path_turn_right = generateArcPath(
     Cr, R_E_r, normalizeRadian(psi + M_PI_2 + theta_l), M_PI_2, !is_forward, is_forward);
-  // Need going straight for parking in parallel
+  // Need to add straight path to last right_turning for parking in parallel
   PathPointWithLaneId straight_point{};
   lanelet::ConstLanelet goal_lane;
   lanelet::utils::query::getClosestLanelet(lanes, goal_pose, &goal_lane);
