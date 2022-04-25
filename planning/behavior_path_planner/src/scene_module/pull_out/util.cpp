@@ -266,18 +266,17 @@ PullOutPath getBackPaths(
     const double s_start = arc_position.length + backward_path_length;
     double s_end = s_start - 50;
     reference_path1 = route_handler.getCenterLinePath(shoulder_lanelets, s_end, s_start);
-    RCLCPP_ERROR(
-      rclcpp::get_logger("behavior_path_planner").get_child("pull_out"), "ref1 s_start:%f s_end%f",
-      s_start, s_end);
+    // ROS_ERROR("ref1 s_start:%f s_end%f", s_start, s_end);
     for (auto & point : reference_path1.points) {
       // auto arc_length =
       //   lanelet::utils::getArcCoordinates(shoulder_lanelets, point.point.pose).length;
       point.point.longitudinal_velocity_mps = -5;
+      // ROS_ERROR("back_distance:%f", back_distance);
       // if (arc_position.length - arc_length > back_distance) {
       //   point.point.longitudinal_velocity_mps = 0;
       // }
     }
-    std::reverse(reference_path1.points.begin(), reference_path1.points.end());
+    // std::reverse(reference_path1.points.begin(), reference_path1.points.end());
     // reference_path1.points.front().point.longitudinal_velocity_mps = 0;
   }
 
@@ -301,9 +300,6 @@ PullOutPath getBackPaths(
   PullOutPath candidate_path;
 
   candidate_path.path = reference_path1;
-  RCLCPP_ERROR(
-    rclcpp::get_logger("behavior_path_planner").get_child("pull_out"),
-    "backpath size %d", reference_path1.points.size());
 
   return candidate_path;
 }
