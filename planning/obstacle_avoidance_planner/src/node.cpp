@@ -380,7 +380,7 @@ ObstacleAvoidancePlanner::ObstacleAvoidancePlanner(const rclcpp::NodeOptions & n
 
     // option
     // TODO(murooka) implement plan_from_ego
-    mpt_param_.plan_from_ego = false;
+    mpt_param_.plan_from_ego = true;
     // mpt_param_.plan_from_ego = declare_parameter<bool>("mpt.option.plan_from_ego");
     mpt_param_.steer_limit_constraint =
       declare_parameter<bool>("mpt.option.steer_limit_constraint");
