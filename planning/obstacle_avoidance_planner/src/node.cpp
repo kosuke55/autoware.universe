@@ -883,11 +883,6 @@ void ObstacleAvoidancePlanner::pathCallback(
     const auto post_processed_traj_points =
       generatePostProcessedTrajectory(path_ptr->points, optimized_traj_points);
     output_traj_msg = tier4_autoware_utils::convertToTrajectory(post_processed_traj_points);
-
-
-    // todo remove(tmp debug)
-    // const auto traj_points = points_utils::convertToTrajectoryPoints(path_ptr->points);
-    // output_traj_msg = tier4_autoware_utils::convertToTrajectory(traj_points);
   }
   output_traj_msg.header = path_ptr->header;
 
