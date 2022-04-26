@@ -598,6 +598,8 @@ void ObstacleStopPlannerNode::pathCallback(const Trajectory::ConstSharedPtr inpu
   if (std::any_of(input_msg->points.begin(), input_msg->points.end(), [&](const auto & p) {
         return p.longitudinal_velocity_mps < 0;
       })) {
+    RCLCPP_WARN(
+      get_logger(), "Negative velocity is detected, so let the input trajectory pass through");
     trajectory = *input_msg;
   } else {
     PlannerData planner_data{};
