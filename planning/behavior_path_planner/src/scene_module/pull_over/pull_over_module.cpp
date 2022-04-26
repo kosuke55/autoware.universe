@@ -260,9 +260,13 @@ BT::NodeStatus PullOverModule::updateState()
 BehaviorModuleOutput PullOverModule::plan()
 {
   const auto common_parameters = planner_data_->parameters;
+
   const auto current_lanes = util::getExtendedCurrentLanes(planner_data_);
   const auto pull_over_lanes = getPullOverLanes(current_lanes);
-  const auto target_lanes = lanelet::utils::concatenateLanelets(current_lanes, pull_over_lanes);
+  lanelet::ConstLanelets lanes;
+  lanes.insert(lanes.end(), current_lanes.begin(), current_lanes.end());
+  lanes.insert(lanes.end(), pull_over_lanes.begin(), pull_over_lanes.end());
+
   if (!status_.has_decided_path) researchGoal();
 
   // Check if we have to deciede path
@@ -303,7 +307,7 @@ BehaviorModuleOutput PullOverModule::plan()
         // Generate arc forward path then arc backward path.
         for (const auto is_forward : {true, false}) {
           parallel_parking_planner_.setParams(planner_data_, parallel_parking_prameters_);
-          parallel_parking_planner_.plan(modified_goal_pose_, target_lanes, is_forward);
+          parallel_parking_planner_.plan(modified_goal_pose_, lanes, is_forward);
           const auto full_path = parallel_parking_planner_.getFullPath();
           if (!occupancy_grid_map_.hasObstacleOnPath(full_path, is_forward)) {
             status_.path = parallel_parking_planner_.getCurrentPath();
@@ -375,6 +379,7 @@ bool PullOverModule::planShiftPath()
   {
     lanelet::ConstLanelets lanes;
     lanes.insert(lanes.end(), current_lanes.begin(), current_lanes.end());
+    lanes.insert(lanes.end(), pull_over_lanes.begin(), pull_over_lanes.end());
     shift_parking_path_.path.drivable_area = util::generateDrivableArea(
       lanes, common_parameters.drivable_area_resolution, common_parameters.vehicle_length,
       planner_data_);

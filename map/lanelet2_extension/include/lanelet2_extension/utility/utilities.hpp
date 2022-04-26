@@ -79,9 +79,6 @@ bool isInLanelet(
   const double radius = 0.0);
 geometry_msgs::msg::Pose getClosestCenterPose(
   const lanelet::ConstLanelet & lanelet, const geometry_msgs::msg::Point & search_point);
-ConstLanelets concatenateLanelets(
-  const ConstLanelets & lanelets_a, const ConstLanelets & lanelets_b);
-
 }  // namespace utils
 }  // namespace lanelet
 
