@@ -9,7 +9,7 @@
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License the specific language governing permissions and
+// See the License for the specific language governing permissions and
 // limitations under the License.
 
 #ifndef BEHAVIOR_PATH_PLANNER__SCENE_MODULE__PULL_OVER__PULL_OVER_MODULE_HPP_
@@ -69,7 +69,7 @@ struct PullOverParameters
   // parallel parking
   double after_forward_parking_straight_distance;
   double after_backward_parking_straight_distance;
-  // hazard
+  // hazard. Not used now.
   double hazard_on_threshold_dis;
   double hazard_on_threshold_vel;
   // check safety with dynamic objects. Not used now.

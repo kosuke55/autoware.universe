@@ -23,7 +23,7 @@
       # parallel parking path
       after_forward_parking_straight_distance: 0.5
       after_backward_parking_straight_distance: 0.5
-      # hazard
+      # hazard. Not used now.
       double hazard_on_threshold_dis: 1.0
       double hazard_on_threshold_vel: 0.5
       # check safety with dynamic objects. Not used now.

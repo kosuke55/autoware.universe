@@ -543,6 +543,7 @@ bool PullOverModule::hasFinishedPullOver() const
   return car_is_on_goal && car_is_stopping;
 }
 
+// Not used.
 std::pair<HazardLightsCommand, double> PullOverModule::getHazard(
   const lanelet::ConstLanelets & target_lanes, const Pose & current_pose, const Pose & goal_pose,
   const double & velocity, const double & hazard_on_threshold_dis,
