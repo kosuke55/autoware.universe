@@ -169,7 +169,7 @@ bool ParallelParkingPlanner::planOneTraial(
   paths_.clear();
 
   const double after_parking_straight_distance =
-    is_forward ? parameters_.after_forward_parking_straight_distance
+    is_forward ? -parameters_.after_forward_parking_straight_distance
                : parameters_.after_backward_parking_straight_distance;
   const Pose offsetted_goal_pose = calcOffsetPose(goal_pose, after_parking_straight_distance, 0, 0);
   getStraightPath(offsetted_goal_pose, start_pose_offset, R_E_r, is_forward);
@@ -237,6 +237,9 @@ bool ParallelParkingPlanner::planOneTraial(
   lanelet::ConstLanelet goal_lane;
   lanelet::utils::query::getClosestLanelet(lanes, goal_pose, &goal_lane);
   straight_point.point.pose = goal_pose;
+  // Use z of previous point because z of goal is 0.
+  // https://github.com/autowarefoundation/autoware.universe/issues/711
+  straight_point.point.pose.position.z = path_turn_right.points.back().point.pose.position.z;
   straight_point.point.longitudinal_velocity_mps = 0.0;
   straight_point.lane_ids.push_back(goal_lane.id());
   path_turn_right.points.push_back(straight_point);
@@ -323,7 +326,8 @@ PathPointWithLaneId ParallelParkingPlanner::generateArcPathPoint(
   lanelet::ConstLanelet current_lane;
   planner_data_->route_handler->getClosestLaneletWithinRoute(p.point.pose, &current_lane);
 
-  // Use z of lanelet closest point
+  // Use z of lanelet closest point because z of goal is 0.
+  // https://github.com/autowarefoundation/autoware.universe/issues/711
   double min_distance = std::numeric_limits<double>::max();
   for (const auto pt : current_lane.centerline3d()) {
     const double distance =
