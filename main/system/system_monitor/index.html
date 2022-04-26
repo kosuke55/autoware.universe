@@ -11,7 +11,7 @@
         <link rel="canonical" href="https://autowarefoundation.github.io/autoware.universe/main/system/system_monitor/">
       
       <link rel="icon" href="../../docs/assets/images/autoware-foundation.png">
-      <meta name="generator" content="mkdocs-1.3.0, mkdocs-material-8.2.10">
+      <meta name="generator" content="mkdocs-1.3.0, mkdocs-material-8.2.11">
     
     
       
@@ -19,7 +19,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.df45aa19.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.8c5ef100.min.css">
       
         
         <link rel="stylesheet" href="../../assets/stylesheets/palette.9647289d.min.css">
@@ -8722,10 +8722,10 @@
 </ul>
 <h2 id="how-to-use">How to use<a class="headerlink" href="#how-to-use" title="Permanent link">#</a></h2>
 <p>Use colcon build and launch in the same way as other packages.</p>
-<p><code>sh
-colcon build
-source install/setup.bash
-ros2 launch system_monitor system_monitor.launch.xml</code></p>
+<div class="highlight"><pre><span></span><code>colcon build
+<span class="nb">source</span> install/setup.bash
+ros2 launch system_monitor system_monitor.launch.xml
+</code></pre></div>
 <p>CPU and GPU monitoring method differs depending on platform.<br>
 CMake automatically chooses source to be built according to build environment.<br>
 If you build this package on intel platform, CPU monitor and GPU monitor which run on intel platform are built.</p>
@@ -8913,30 +8913,30 @@ If you build this package on intel platform, CPU monitor and GPU monitor which r
 <ol>
 <li>
 <p>Create a user to run 'msr_reader'.</p>
-<p><code>sh
- sudo adduser &lt;username&gt;</code></p>
+<div class="highlight"><pre><span></span><code>sudo adduser &lt;username&gt;
+</code></pre></div>
 </li>
 <li>
 <p>Load kernel module 'msr' into your target system.<br>
    The path '/dev/cpu/CPUNUM/msr' appears.</p>
-<p><code>sh
- sudo modprobe msr</code></p>
+<div class="highlight"><pre><span></span><code>sudo modprobe msr
+</code></pre></div>
 </li>
 <li>
 <p>Allow user to access MSR with read-only privilege using the Access Control List (ACL).</p>
-<p><code>sh
- sudo setfacl -m u:&lt;username&gt;:r /dev/cpu/*/msr</code></p>
+<div class="highlight"><pre><span></span><code>sudo setfacl -m u:&lt;username&gt;:r /dev/cpu/*/msr
+</code></pre></div>
 </li>
 <li>
 <p>Assign capability to 'msr_reader' since msr kernel module requires rawio capability.</p>
-<p><code>sh
- sudo setcap cap_sys_rawio=ep install/system_monitor/lib/system_monitor/msr_reader</code></p>
+<div class="highlight"><pre><span></span><code>sudo setcap <span class="nv">cap_sys_rawio</span><span class="o">=</span>ep install/system_monitor/lib/system_monitor/msr_reader
+</code></pre></div>
 </li>
 <li>
 <p>Run 'msr_reader' as the user you created, and run system_monitor as a generic user.</p>
-<p><code>sh
- su &lt;username&gt;
- install/system_monitor/lib/system_monitor/msr_reader</code></p>
+<div class="highlight"><pre><span></span><code>su &lt;username&gt;
+install/system_monitor/lib/system_monitor/msr_reader
+</code></pre></div>
 </li>
 </ol>
 <h3 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">#</a></h3>
@@ -8953,24 +8953,24 @@ As with the CPU monitor, this package provides an approach to minimize security 
 <ol>
 <li>
 <p>Create a user to run 'hdd_reader'.</p>
-<p><code>sh
- sudo adduser &lt;username&gt;</code></p>
+<div class="highlight"><pre><span></span><code>sudo adduser &lt;username&gt;
+</code></pre></div>
 </li>
 <li>
 <p>Add user to the disk group.</p>
-<p><code>sh
- sudo usermod -a -G disk &lt;username&gt;</code></p>
+<div class="highlight"><pre><span></span><code>sudo usermod -a -G disk &lt;username&gt;
+</code></pre></div>
 </li>
 <li>
 <p>Assign capabilities to 'hdd_reader' since SCSI kernel module requires rawio capability to send ATA PASS-THROUGH (12) command and NVMe kernel module requires admin capability to send Admin Command.</p>
-<p><code>sh
- sudo setcap 'cap_sys_rawio=ep cap_sys_admin=ep' install/system_monitor/lib/system_monitor/hdd_reader</code></p>
+<div class="highlight"><pre><span></span><code>sudo setcap <span class="s1">&#39;cap_sys_rawio=ep cap_sys_admin=ep&#39;</span> install/system_monitor/lib/system_monitor/hdd_reader
+</code></pre></div>
 </li>
 <li>
 <p>Run 'hdd_reader' as the user you created, and run system_monitor as a generic user.</p>
-<p><code>sh
- su &lt;username&gt;
- install/system_monitor/lib/system_monitor/hdd_reader</code></p>
+<div class="highlight"><pre><span></span><code>su &lt;username&gt;
+install/system_monitor/lib/system_monitor/hdd_reader
+</code></pre></div>
 </li>
 </ol>
 <h3 id="see-also_1">See also<a class="headerlink" href="#see-also_1" title="Permanent link">#</a></h3>

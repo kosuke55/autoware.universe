@@ -11,7 +11,7 @@
         <link rel="canonical" href="https://autowarefoundation.github.io/autoware.universe/main/map/lanelet2_extension/docs/extra_regulatory_elements/">
       
       <link rel="icon" href="../../../../docs/assets/images/autoware-foundation.png">
-      <meta name="generator" content="mkdocs-1.3.0, mkdocs-material-8.2.10">
+      <meta name="generator" content="mkdocs-1.3.0, mkdocs-material-8.2.11">
     
     
       
@@ -19,7 +19,7 @@
       
     
     
-      <link rel="stylesheet" href="../../../../assets/stylesheets/main.df45aa19.min.css">
+      <link rel="stylesheet" href="../../../../assets/stylesheets/main.8c5ef100.min.css">
       
         
         <link rel="stylesheet" href="../../../../assets/stylesheets/palette.9647289d.min.css">
@@ -8646,45 +8646,45 @@
 </ul>
 <p><img alt="Detection area" src="../detection_area.png" /></p>
 <p>Sample detection area in .osm format is shown below:</p>
-<p><code>xml
-  &lt;node id=1 version='1' lat='49.00541994701' lon='8.41565013855'&gt;
-    &lt;tag k=’ele’ v=’0’/&gt;
-  &lt;/node&gt;
-  &lt;node id=2 version='1' lat='49.00542091657' lon='8.4156469497'&gt;
-    &lt;tag k=’ele’ v=’0’/&gt;
-  &lt;/node&gt;
-  &lt;node id=3 version='1' lat='49.00542180052' lon='8.41564400223'&gt;
-    &lt;tag k=’ele’ v=’0’/&gt;
-  &lt;/node&gt;
-  &lt;node id=4 version='1' lat='49.00541994701' lon='8.41564400223'&gt;
-    &lt;tag k=’ele’ v=’0’/&gt;
-  &lt;/node&gt;
-  &lt;node id=5 version='1' lat='49.00542180052' lon='8.41564400223'&gt;
-    &lt;tag k=’ele’ v=’0’/&gt;
-  &lt;/node&gt;
-  &lt;node id=6 version='1' lat='49.00541994701' lon='8.41564400223'&gt;
-    &lt;tag k=’ele’ v=’0’/&gt;
-  &lt;/node&gt;
-  &lt;way id=11 version='1'&gt;
-    &lt;nd ref=1 /&gt;
-    &lt;nd ref=2 /&gt;
-    &lt;nd ref=3 /&gt;
-    &lt;nd ref=4 /&gt;
-    &lt;nd ref=1 /&gt;
-    &lt;tag k='type' v=’detection_area’ /&gt;
-    &lt;tag k='area' v=’yes’ /&gt;
-  &lt;/way&gt;
-  &lt;way id=12 version="1"&gt;
-    &lt;nd ref=5 /&gt;
-    &lt;nd ref=6 /&gt;
-    &lt;tag k='type' v=stop_line’ /&gt;
-  &lt;/way&gt;
-  &lt;relation id="13"&gt;
-     &lt;tag k="type" v="regulatory_element"/&gt;
-     &lt;tag k="subtype" v="detection_area"/&gt;
-     &lt;member type="way" ref="11" role="refers"/&gt;
-     &lt;member type="way" ref="12" role="ref_line"/&gt;
-   &lt;/relation&gt;</code></p>
+<div class="highlight"><pre><span></span><code>  <span class="nt">&lt;node</span> <span class="na">id=</span><span class="s">1</span> <span class="na">version=</span><span class="s">&#39;1&#39;</span> <span class="na">lat=</span><span class="s">&#39;49.00541994701&#39;</span> <span class="na">lon=</span><span class="s">&#39;8.41565013855&#39;</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;tag</span> <span class="na">k=</span><span class="s">’ele’</span> <span class="na">v=</span><span class="s">’0’/</span><span class="nt">&gt;</span>
+  <span class="nt">&lt;/node&gt;</span>
+  <span class="nt">&lt;node</span> <span class="na">id=</span><span class="s">2</span> <span class="na">version=</span><span class="s">&#39;1&#39;</span> <span class="na">lat=</span><span class="s">&#39;49.00542091657&#39;</span> <span class="na">lon=</span><span class="s">&#39;8.4156469497&#39;</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;tag</span> <span class="na">k=</span><span class="s">’ele’</span> <span class="na">v=</span><span class="s">’0’/</span><span class="nt">&gt;</span>
+  <span class="nt">&lt;/node&gt;</span>
+  <span class="nt">&lt;node</span> <span class="na">id=</span><span class="s">3</span> <span class="na">version=</span><span class="s">&#39;1&#39;</span> <span class="na">lat=</span><span class="s">&#39;49.00542180052&#39;</span> <span class="na">lon=</span><span class="s">&#39;8.41564400223&#39;</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;tag</span> <span class="na">k=</span><span class="s">’ele’</span> <span class="na">v=</span><span class="s">’0’/</span><span class="nt">&gt;</span>
+  <span class="nt">&lt;/node&gt;</span>
+  <span class="nt">&lt;node</span> <span class="na">id=</span><span class="s">4</span> <span class="na">version=</span><span class="s">&#39;1&#39;</span> <span class="na">lat=</span><span class="s">&#39;49.00541994701&#39;</span> <span class="na">lon=</span><span class="s">&#39;8.41564400223&#39;</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;tag</span> <span class="na">k=</span><span class="s">’ele’</span> <span class="na">v=</span><span class="s">’0’/</span><span class="nt">&gt;</span>
+  <span class="nt">&lt;/node&gt;</span>
+  <span class="nt">&lt;node</span> <span class="na">id=</span><span class="s">5</span> <span class="na">version=</span><span class="s">&#39;1&#39;</span> <span class="na">lat=</span><span class="s">&#39;49.00542180052&#39;</span> <span class="na">lon=</span><span class="s">&#39;8.41564400223&#39;</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;tag</span> <span class="na">k=</span><span class="s">’ele’</span> <span class="na">v=</span><span class="s">’0’/</span><span class="nt">&gt;</span>
+  <span class="nt">&lt;/node&gt;</span>
+  <span class="nt">&lt;node</span> <span class="na">id=</span><span class="s">6</span> <span class="na">version=</span><span class="s">&#39;1&#39;</span> <span class="na">lat=</span><span class="s">&#39;49.00541994701&#39;</span> <span class="na">lon=</span><span class="s">&#39;8.41564400223&#39;</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;tag</span> <span class="na">k=</span><span class="s">’ele’</span> <span class="na">v=</span><span class="s">’0’/</span><span class="nt">&gt;</span>
+  <span class="nt">&lt;/node&gt;</span>
+  <span class="nt">&lt;way</span> <span class="na">id=</span><span class="s">11</span> <span class="na">version=</span><span class="s">&#39;1&#39;</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;nd</span> <span class="na">ref=</span><span class="s">1</span> <span class="nt">/&gt;</span>
+    <span class="nt">&lt;nd</span> <span class="na">ref=</span><span class="s">2</span> <span class="nt">/&gt;</span>
+    <span class="nt">&lt;nd</span> <span class="na">ref=</span><span class="s">3</span> <span class="nt">/&gt;</span>
+    <span class="nt">&lt;nd</span> <span class="na">ref=</span><span class="s">4</span> <span class="nt">/&gt;</span>
+    <span class="nt">&lt;nd</span> <span class="na">ref=</span><span class="s">1</span> <span class="nt">/&gt;</span>
+    <span class="nt">&lt;tag</span> <span class="na">k=</span><span class="s">&#39;type&#39;</span> <span class="na">v=</span><span class="s">’detection_area’</span> <span class="nt">/&gt;</span>
+    <span class="nt">&lt;tag</span> <span class="na">k=</span><span class="s">&#39;area&#39;</span> <span class="na">v=</span><span class="s">’yes’</span> <span class="nt">/&gt;</span>
+  <span class="nt">&lt;/way&gt;</span>
+  <span class="nt">&lt;way</span> <span class="na">id=</span><span class="s">12</span> <span class="na">version=</span><span class="s">&quot;1&quot;</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;nd</span> <span class="na">ref=</span><span class="s">5</span> <span class="nt">/&gt;</span>
+    <span class="nt">&lt;nd</span> <span class="na">ref=</span><span class="s">6</span> <span class="nt">/&gt;</span>
+    <span class="nt">&lt;tag</span> <span class="na">k=</span><span class="s">&#39;type&#39;</span> <span class="na">v=</span><span class="s">stop_line’</span> <span class="nt">/&gt;</span>
+  <span class="nt">&lt;/way&gt;</span>
+  <span class="nt">&lt;relation</span> <span class="na">id=</span><span class="s">&quot;13&quot;</span><span class="nt">&gt;</span>
+     <span class="nt">&lt;tag</span> <span class="na">k=</span><span class="s">&quot;type&quot;</span> <span class="na">v=</span><span class="s">&quot;regulatory_element&quot;</span><span class="nt">/&gt;</span>
+     <span class="nt">&lt;tag</span> <span class="na">k=</span><span class="s">&quot;subtype&quot;</span> <span class="na">v=</span><span class="s">&quot;detection_area&quot;</span><span class="nt">/&gt;</span>
+     <span class="nt">&lt;member</span> <span class="na">type=</span><span class="s">&quot;way&quot;</span> <span class="na">ref=</span><span class="s">&quot;11&quot;</span> <span class="na">role=</span><span class="s">&quot;refers&quot;</span><span class="nt">/&gt;</span>
+     <span class="nt">&lt;member</span> <span class="na">type=</span><span class="s">&quot;way&quot;</span> <span class="na">ref=</span><span class="s">&quot;12&quot;</span> <span class="na">role=</span><span class="s">&quot;ref_line&quot;</span><span class="nt">/&gt;</span>
+   <span class="nt">&lt;/relation&gt;</span>
+</code></pre></div>
 <h2 id="road-marking">Road Marking<a class="headerlink" href="#road-marking" title="Permanent link">#</a></h2>
 <p>This regulatory element specifies related road markings to a lanelet as shown below.</p>
 <p>* Note that the stopline in the image is for stoplines that are for reference, and normal stoplines should be expressed using TrafficSign regulatory element.</p>
