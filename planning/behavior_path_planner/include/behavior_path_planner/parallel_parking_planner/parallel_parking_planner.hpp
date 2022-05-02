@@ -59,7 +59,7 @@ class ParallelParkingPlanner
 {
 public:
   bool isParking() const;
-  void plan(const Pose goal_pose, lanelet::ConstLanelets lanes, const bool is_forward);
+  bool plan(const Pose goal_pose, lanelet::ConstLanelets lanes, const bool is_forward);
   void setParams(
     const std::shared_ptr<const PlannerData> & planner_data, ParallelParkingParameters parameters);
   PathWithLaneId getCurrentPath();

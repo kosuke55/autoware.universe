@@ -273,16 +273,17 @@ BehaviorModuleOutput PullOverModule::plan()
 
   // Check if we have to deciede path
   if (
-    status_.path_type == PathType::SHIFT && !isLongEnough(current_lanes, modified_goal_pose_)) {
+    status_.is_safe && status_.path_type == PathType::SHIFT &&
+    !isLongEnough(current_lanes, modified_goal_pose_)) {
     status_.has_decided_path = true;
   }
   // isLongEnough is for SHIFT, but it is also enoght for ARC_FORWARD.
   else if (
-    status_.path_type == PathType::ARC_FORWARD &&
+    status_.is_safe && status_.path_type == PathType::ARC_FORWARD &&
     !isLongEnough(current_lanes, modified_goal_pose_)) {
     status_.has_decided_path = true;
   } else if (
-    status_.path_type == PathType::ARC_BACK &&
+    status_.is_safe && status_.path_type == PathType::ARC_BACK &&
     inverseTransformPose(modified_goal_pose_, planner_data_->self_pose->pose).position.x < 0) {
     status_.has_decided_path = true;
   }
@@ -309,9 +310,10 @@ BehaviorModuleOutput PullOverModule::plan()
         // Generate arc forward path then arc backward path.
         for (const auto is_forward : {true, false}) {
           parallel_parking_planner_.setParams(planner_data_, parallel_parking_prameters_);
-          parallel_parking_planner_.plan(modified_goal_pose_, lanes, is_forward);
-          const auto full_path = parallel_parking_planner_.getFullPath();
-          if (!occupancy_grid_map_.hasObstacleOnPath(full_path, is_forward)) {
+          if (
+            parallel_parking_planner_.plan(modified_goal_pose_, lanes, is_forward) &&
+            !occupancy_grid_map_.hasObstacleOnPath(
+              parallel_parking_planner_.getFullPath(), false)) {
             status_.path = parallel_parking_planner_.getCurrentPath();
             status_.path_type = is_forward ? PathType::ARC_FORWARD : PathType::ARC_BACK;
             status_.is_safe = true;

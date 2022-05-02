@@ -44,6 +44,7 @@ using tier4_autoware_utils::calcSignedArcLength;
 using tier4_autoware_utils::deg2rad;
 using tier4_autoware_utils::fromMsg;
 using tier4_autoware_utils::inverseTransformPoint;
+using tier4_autoware_utils::inverseTransformPose;
 using tier4_autoware_utils::normalizeRadian;
 using tier4_autoware_utils::Point2d;
 using tier4_autoware_utils::Point3d;
@@ -90,7 +91,7 @@ void ParallelParkingPlanner::clear()
 
 bool ParallelParkingPlanner::isParking() const { return current_path_idx_ > 0; }
 
-void ParallelParkingPlanner::plan(
+bool ParallelParkingPlanner::plan(
   const Pose goal_pose, const lanelet::ConstLanelets lanes, const bool is_forward)
 {
   const auto common_params = planner_data_->parameters;
@@ -101,17 +102,18 @@ void ParallelParkingPlanner::plan(
       // so reduce the steer angle at that time for seach no lane departure path.
       for (double steer = max_steer_rad_; steer > 0.05; steer -= 0.05) {
         const double R_E_r = common_params.wheel_base / std::tan(steer);
-        if (planOneTraial(goal_pose, 0, R_E_r, lanes, is_forward)) break;
+        if (planOneTraial(goal_pose, 0, R_E_r, lanes, is_forward)) return true;
       }
     } else {
       // When turning backward to the left, the front right goes out,
       // so make the parking start point in front for seach no lane departure path
       // (same to Equivalent to reducing the steer angle)
       for (double dx = 0; dx < 10; dx += 0.5) {
-        if (planOneTraial(goal_pose, dx, R_E_min_, lanes, is_forward)) break;
+        if (planOneTraial(goal_pose, dx, R_E_min_, lanes, is_forward)) return true;
       }
     }
   }
+  return false;
 }
 
 Pose ParallelParkingPlanner::getStartPose(
@@ -174,7 +176,12 @@ bool ParallelParkingPlanner::planOneTraial(
   const Pose offsetted_goal_pose = calcOffsetPose(goal_pose, after_parking_straight_distance, 0, 0);
   getStraightPath(offsetted_goal_pose, start_pose_offset, R_E_r, is_forward);
 
-  const auto start_pose = getStartPose(offsetted_goal_pose, start_pose_offset, R_E_r, is_forward);
+  const Pose start_pose = getStartPose(offsetted_goal_pose, start_pose_offset, R_E_r, is_forward);
+  const Pose current_pose = planner_data_->self_pose->pose;
+  if (is_forward && inverseTransformPose(start_pose, current_pose).position.x < 0) {
+    std::cerr << "invalid forward arc path" << std::endl;
+    return false;
+  }
 
   const float self_yaw = tf2::getYaw(start_pose.orientation);
   const float goal_yaw = tf2::getYaw(offsetted_goal_pose.orientation);
