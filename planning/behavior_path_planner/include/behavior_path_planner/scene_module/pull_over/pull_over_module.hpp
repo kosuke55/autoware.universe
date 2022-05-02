@@ -174,6 +174,7 @@ private:
     const double & hazard_on_threshold_vel, const double & base_link2front) const;
 
   bool planShiftPath();
+  double calcMinimumShiftPathDistance() const;
   bool isLongEnough(
     const lanelet::ConstLanelets & lanelets, const Pose goal_pose, const double buffer = 0) const;
   bool hasFinishedPullOver() const;

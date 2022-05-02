@@ -46,6 +46,8 @@ using tier4_autoware_utils::createDefaultMarker;
 using tier4_autoware_utils::createMarkerColor;
 using tier4_autoware_utils::createMarkerScale;
 using tier4_autoware_utils::createPoint;
+using tier4_autoware_utils::findNearestIndex;
+using tier4_autoware_utils::calcSignedArcLength;
 
 namespace behavior_path_planner
 {
@@ -271,7 +273,7 @@ BehaviorModuleOutput PullOverModule::plan()
 
   // Check if we have to deciede path
   if (
-    status_.path_type == PathType::SHIFT && !isLongEnough(current_lanes, modified_goal_pose_, 5)) {
+    status_.path_type == PathType::SHIFT && !isLongEnough(current_lanes, modified_goal_pose_)) {
     status_.has_decided_path = true;
   }
   // isLongEnough is for SHIFT, but it is also enoght for ARC_FORWARD.
@@ -298,7 +300,7 @@ BehaviorModuleOutput PullOverModule::plan()
     for (const auto goal_candidate : goal_candidates_) {
       if (status_.is_safe) break;
       modified_goal_pose_ = goal_candidate.goal_pose;
-      if (isLongEnough(current_lanes, modified_goal_pose_, 5) && planShiftPath()) {
+      if (isLongEnough(current_lanes, modified_goal_pose_) && planShiftPath()) {
         // shift parking path already confirm safe in it's own function.
         status_.path = shift_parking_path_.path;
         status_.path_type = PathType::SHIFT;
@@ -316,6 +318,22 @@ BehaviorModuleOutput PullOverModule::plan()
             break;
           }
         }
+      }
+    }
+    // Decelerate before the minimum shift distance from the goal search area.
+    const Pose goal_pose = getRefinedGoal();
+    const auto arc_coordinates = lanelet::utils::getArcCoordinates(current_lanes, goal_pose);
+    const Pose search_start_pose = calcOffsetPose(
+      goal_pose, -parameters_.pull_over_backward_search_length, -arc_coordinates.distance, 0);
+    const auto search_start_signed_arg_length =
+      calcSignedArcLength(status_.path.points, planner_data_->self_pose->pose, search_start_pose.position);
+    double dist_sum = 0;
+    for (size_t i = 0; i < status_.path.points.size() - 1; i++) {
+      dist_sum += calcDistance2d(status_.path.points.at(i), status_.path.points.at(i + 1));
+      if (dist_sum > *search_start_signed_arg_length - calcMinimumShiftPathDistance()) {
+        status_.path.points.at(i).point.longitudinal_velocity_mps = std::min(
+          status_.path.points.at(i).point.longitudinal_velocity_mps,
+          static_cast<float>(parameters_.minimum_pull_over_velocity));
       }
     }
   }
@@ -501,14 +519,11 @@ std::pair<bool, bool> PullOverModule::getSafePath(
   return std::make_pair(false, false);
 }
 
-bool PullOverModule::isLongEnough(
-  const lanelet::ConstLanelets & lanelets, const Pose goal_pose, const double buffer) const
-{
+double PullOverModule::calcMinimumShiftPathDistance() const{
   PathShifter path_shifter;
   const double maximum_jerk = parameters_.maximum_lateral_jerk;
   const double pull_over_velocity = parameters_.minimum_pull_over_velocity;
   const auto current_pose = planner_data_->self_pose->pose;
-  // const auto goal_pose = planner_data_->route_handler->getGoalPose();
   const double distance_after_pull_over = parameters_.after_pull_over_straight_distance;
   const double distance_before_pull_over = parameters_.before_pull_over_straight_distance;
   const auto & route_handler = planner_data_->route_handler;
@@ -524,10 +539,18 @@ bool PullOverModule::isLongEnough(
     abs(offset_from_center_line), maximum_jerk, pull_over_velocity);
   const double pull_over_total_distance_min =
     distance_after_pull_over + pull_over_distance_min + distance_before_pull_over;
+
+  return pull_over_total_distance_min;
+}
+
+bool PullOverModule::isLongEnough(
+  const lanelet::ConstLanelets & lanelets, const Pose goal_pose, const double buffer) const
+{
+  const auto current_pose = planner_data_->self_pose->pose;
   const double distance_to_goal =
     std::abs(util::getSignedDistance(current_pose, goal_pose, lanelets));
 
-  return distance_to_goal > pull_over_total_distance_min + buffer;
+  return distance_to_goal > calcMinimumShiftPathDistance() + buffer;
 }
 
 bool PullOverModule::hasFinishedPullOver() const
