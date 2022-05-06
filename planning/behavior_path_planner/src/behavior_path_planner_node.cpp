@@ -379,7 +379,7 @@ PullOverParameters BehaviorPathPlannerNode::getPullOverParam()
   p.maximum_lateral_jerk = dp("maximum_lateral_jerk", 3.0);
   p.minimum_lateral_jerk = dp("minimum_lateral_jerk", 1.0);
   p.deceleration_interval = dp("deceleration_interval", 10.0);
-  p.minimum_pull_over_velocity = dp("minimum_pull_over_velocity", 8.3);
+  p.pull_over_velocity = dp("pull_over_velocity", 8.3);
   p.maximum_deceleration = dp("maximum_deceleration", 1.0);
   p.after_pull_over_straight_distance = dp("after_pull_over_straight_distance", 3.0);
   p.before_pull_over_straight_distance = dp("before_pull_over_straight_distance", 3.0);

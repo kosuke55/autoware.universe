@@ -63,7 +63,7 @@ struct PullOverParameters
   double maximum_lateral_jerk;
   double minimum_lateral_jerk;
   double deceleration_interval;
-  double minimum_pull_over_velocity;
+  double pull_over_velocity;
   double maximum_deceleration;
   double after_pull_over_straight_distance;
   double before_pull_over_straight_distance;

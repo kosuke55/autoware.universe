@@ -348,7 +348,7 @@ BehaviorModuleOutput PullOverModule::plan()
       if (dist_sum > *search_start_signed_arg_length - calcMinimumShiftPathDistance()) {
         status_.path.points.at(i).point.longitudinal_velocity_mps = std::min(
           status_.path.points.at(i).point.longitudinal_velocity_mps,
-          static_cast<float>(parameters_.minimum_pull_over_velocity));
+          static_cast<float>(parameters_.pull_over_velocity));
       }
     }
   }
@@ -538,7 +538,7 @@ double PullOverModule::calcMinimumShiftPathDistance() const
 {
   PathShifter path_shifter;
   const double maximum_jerk = parameters_.maximum_lateral_jerk;
-  const double pull_over_velocity = parameters_.minimum_pull_over_velocity;
+  const double pull_over_velocity = parameters_.pull_over_velocity;
   const auto current_pose = planner_data_->self_pose->pose;
   const double distance_after_pull_over = parameters_.after_pull_over_straight_distance;
   const double distance_before_pull_over = parameters_.before_pull_over_straight_distance;
