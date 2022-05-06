@@ -76,7 +76,7 @@ bool isPathInLanelets(
 }
 
 std::vector<ShiftParkingPath> getShiftParkingPaths(
-  const RouteHandler & roue_handler, const lanelet::ConstLanelets & original_lanelets,
+  const RouteHandler & route_handler, const lanelet::ConstLanelets & original_lanelets,
   const lanelet::ConstLanelets & target_lanelets, const Pose & current_pose, const Pose & goal_pose,
   [[maybe_unused]] const Twist & twist, const BehaviorPathPlannerParameters & common_parameter,
   const PullOverParameters & parameter)
