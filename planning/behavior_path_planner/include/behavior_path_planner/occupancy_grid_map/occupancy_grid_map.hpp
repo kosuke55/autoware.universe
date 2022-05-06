@@ -12,25 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef FREESPACE_PLANNING_ALGORITHMS__ABSTRACT_ALGORITHM_HPP_
-#define FREESPACE_PLANNING_ALGORITHMS__ABSTRACT_ALGORITHM_HPP_
+#ifndef BEHAVIOR_PATH_PLANNER__OCCUPANCY_GRID_MAP_HPP_
+#define BEHAVIOR_PATH_PLANNER__OCCUPANCY_GRID_MAP_HPP_
 
 #include <tier4_autoware_utils/geometry/geometry.hpp>
 
+#include <autoware_auto_planning_msgs/msg/path_with_lane_id.hpp>
 #include <geometry_msgs/msg/pose_array.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
 
 #include <tf2/utils.h>
-
-#ifdef ROS_DISTRO_GALACTIC
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
-#else
-#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
-#endif
 
 #include <vector>
 
-namespace freespace_planning_algorithms
+namespace behavior_path_planner
 {
 int discretizeAngle(const double theta, const int theta_size);
 
@@ -67,26 +63,13 @@ struct VehicleShape
   double base2back;  // base_link to rear [m]
 };
 
-struct PlannerCommonParam
+struct OccupancyGridMapParam
 {
-  // base configs
-  double time_limit;  // planning time limit [msec]
-
   // robot configs
   VehicleShape vehicle_shape;
-  double minimum_turning_radius;  // [m]
-  double maximum_turning_radius;  // [m]
-  int turning_radius_size;        // discretized turning radius table size [-]
-
-  // search configs
-  int theta_size;                  // discretized angle table size [-]
-  double curve_weight;             // curve moving cost [-]
-  double reverse_weight;           // backward moving cost [-]
-  double lateral_goal_range;       // reaching threshold, lateral error [m]
-  double longitudinal_goal_range;  // reaching threshold, longitudinal error [m]
-  double angle_goal_range;         // reaching threshold, angle error [deg]
 
   // costmap configs
+  int theta_size;          // discretized angle table size [-]
   int obstacle_threshold;  // obstacle threshold on grid [-]
 };
 
@@ -102,29 +85,27 @@ struct PlannerWaypoints
   std::vector<PlannerWaypoint> waypoints;
 };
 
-class AbstractPlanningAlgorithm
+class OccupancyGridMap
 {
 public:
-  explicit AbstractPlanningAlgorithm(const PlannerCommonParam & planner_common_param)
-  : planner_common_param_(planner_common_param)
-  {
-  }
-  virtual void setMap(const nav_msgs::msg::OccupancyGrid & costmap);
-  virtual bool makePlan(
-    const geometry_msgs::msg::Pose & start_pose, const geometry_msgs::msg::Pose & goal_pose) = 0;
-  virtual bool hasFeasibleSolution() = 0;  // currently used only in testing
-  void setVehicleShape(const VehicleShape & vehicle_shape)
-  {
-    planner_common_param_.vehicle_shape = vehicle_shape;
-  }
-  bool hasObstacleOnTrajectory(const geometry_msgs::msg::PoseArray & trajectory);
+  OccupancyGridMap() {}
+  void setParam(const OccupancyGridMapParam & param) { param_ = param; };
+  OccupancyGridMapParam getParam() const { return param_; };
+  void setMap(const nav_msgs::msg::OccupancyGrid & costmap);
+  nav_msgs::msg::OccupancyGrid getMap() const { return costmap_; };
+  void setVehicleShape(const VehicleShape & vehicle_shape) { param_.vehicle_shape = vehicle_shape; }
+  bool hasObstacleOnPath(
+    const geometry_msgs::msg::PoseArray & path, const bool check_out_of_range) const;
+  bool hasObstacleOnPath(
+    const autoware_auto_planning_msgs::msg::PathWithLaneId & path,
+    const bool check_out_of_range) const;
   const PlannerWaypoints & getWaypoints() const { return waypoints_; }
-  virtual ~AbstractPlanningAlgorithm() {}
+  bool detectCollision(const IndexXYT & base_index, const bool check_out_of_range) const;
+  virtual ~OccupancyGridMap() {}
 
 protected:
   void computeCollisionIndexes(int theta_index, std::vector<IndexXY> & indexes);
-  bool detectCollision(const IndexXYT & base_index);
-  inline bool isOutOfRange(const IndexXYT & index)
+  inline bool isOutOfRange(const IndexXYT & index) const
   {
     if (index.x < 0 || static_cast<int>(costmap_.info.width) <= index.x) {
       return true;
@@ -134,7 +115,7 @@ protected:
     }
     return false;
   }
-  inline bool isObs(const IndexXYT & index)
+  inline bool isObs(const IndexXYT & index) const
   {
     // NOTE: Accessing by .at() instead makes 1.2 times slower here.
     // Also, boundary check is already done in isOutOfRange before calling this function.
@@ -142,7 +123,7 @@ protected:
     return is_obstacle_table_[index.y][index.x];
   }
 
-  PlannerCommonParam planner_common_param_;
+  OccupancyGridMapParam param_;
 
   // costmap as occupancy grid
   nav_msgs::msg::OccupancyGrid costmap_;
@@ -161,6 +142,6 @@ protected:
   PlannerWaypoints waypoints_;
 };
 
-}  // namespace freespace_planning_algorithms
+}  // namespace behavior_path_planner
 
-#endif  // FREESPACE_PLANNING_ALGORITHMS__ABSTRACT_ALGORITHM_HPP_
+#endif  // BEHAVIOR_PATH_PLANNER__OCCUPANCY_GRID_MAP_HPP_

@@ -22,7 +22,7 @@
 namespace behavior_path_planner
 {
 using autoware_auto_planning_msgs::msg::PathWithLaneId;
-struct PullOverPath
+struct ShiftParkingPath
 {
   PathWithLaneId path;
   ShiftedPath shifted_path;
@@ -30,6 +30,7 @@ struct PullOverPath
   double acceleration{0.0};
   double preparation_length{0.0};
   double pull_over_length{0.0};
+  bool is_safe;
 };
 }  // namespace behavior_path_planner
 #endif  // BEHAVIOR_PATH_PLANNER__SCENE_MODULE__PULL_OVER__PULL_OVER_PATH_HPP_
