@@ -557,15 +557,29 @@ void BehaviorPathPlannerNode::run()
   planner_data_->prev_output_path = path;
   mutex_pd_.unlock();
 
-  // auto clipped_path = modifyPathForSmoothGoalConnection(*path);
-  path_publisher_->publish(*path);
+  // get running moudle name
+  std::string running_module_name = "";
+  const auto statuses = bt_manager_->getModulesStatus();
+  const auto running_module_itr = std::find_if(
+    statuses.begin(), statuses.end(), [](auto s) { return s->status == BT::NodeStatus::RUNNING; });
+  if (running_module_itr != statuses.end()) {
+    running_module_name = (*running_module_itr)->module_name;
+  }
 
-  // clipPathLength(clipped_path);
-  // if (!clipped_path.points.empty()) {
-  //   path_publisher_->publish(clipped_path);
-  // } else {
-  //   RCLCPP_ERROR(get_logger(), "behavior path output is empty! Stop publish.");
-  // }
+  PathWithLaneId clipped_path;
+  if (running_module_name == "PullOver") {
+    // skip SmoothGoalConnection
+    clipped_path = *path;
+  } else {
+    clipped_path = modifyPathForSmoothGoalConnection(*path);
+  }
+  clipPathLength(clipped_path);
+  if (!clipped_path.points.empty()) {
+    path_publisher_->publish(clipped_path);
+  } else {
+    RCLCPP_ERROR(get_logger(), "behavior path output is empty! Stop publish.");
+  }
+
   path_candidate_publisher_->publish(util::toPath(*path_candidate));
 
   // debug_path_publisher_->publish(util::toPath(path));
