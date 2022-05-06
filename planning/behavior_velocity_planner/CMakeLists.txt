@@ -1,26 +1,15 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.14)
 project(behavior_velocity_planner)
 
-### Compile options
-if(NOT CMAKE_CXX_STANDARD)
-  set(CMAKE_CXX_STANDARD 14)
-  set(CMAKE_CXX_STANDARD_REQUIRED ON)
-  set(CMAKE_CXX_EXTENSIONS OFF)
-endif()
-if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-Wall -Wextra -Wpedantic -Werror)
-endif()
+find_package(autoware_cmake REQUIRED)
+autoware_package()
 
 # Find the non-obvious packages manually
-find_package(ament_cmake REQUIRED)
 find_package(Boost REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(PCL REQUIRED COMPONENTS common)
 find_package(OpenCV REQUIRED)
-
-find_package(ament_cmake_auto REQUIRED)
-ament_auto_find_build_dependencies()
 
 set(BEHAVIOR_VELOCITY_PLANNER_DEPENDENCIES
   tier4_api_msgs
@@ -67,8 +56,12 @@ target_include_directories(scene_module_lib
     $<INSTALL_INTERFACE:include>
 )
 
-ament_target_dependencies(scene_module_lib ${BEHAVIOR_VELOCITY_PLANNER_DEPENDENCIES})
+target_include_directories(scene_module_lib
+  SYSTEM PUBLIC
+    ${PCL_INCLUDE_DIRS}
+)
 
+ament_target_dependencies(scene_module_lib ${BEHAVIOR_VELOCITY_PLANNER_DEPENDENCIES})
 
 # Scene Module: Stop Line
 ament_auto_add_library(scene_module_stop_line SHARED
@@ -86,7 +79,6 @@ target_include_directories(scene_module_stop_line
 ament_target_dependencies(scene_module_stop_line ${BEHAVIOR_VELOCITY_PLANNER_DEPENDENCIES})
 
 target_link_libraries(scene_module_stop_line scene_module_lib)
-
 
 # Scene Module: Crosswalk
 ament_auto_add_library(scene_module_crosswalk SHARED
@@ -107,7 +99,6 @@ ament_target_dependencies(scene_module_crosswalk ${BEHAVIOR_VELOCITY_PLANNER_DEP
 
 target_link_libraries(scene_module_crosswalk scene_module_lib)
 
-
 # Scene Module: Intersection
 ament_auto_add_library(scene_module_intersection SHARED
   src/scene_module/intersection/manager.cpp
@@ -127,7 +118,6 @@ ament_target_dependencies(scene_module_intersection ${BEHAVIOR_VELOCITY_PLANNER_
 
 target_link_libraries(scene_module_intersection scene_module_lib)
 
-
 # Scene Module: Traffic Light
 ament_auto_add_library(scene_module_traffic_light SHARED
   src/scene_module/traffic_light/manager.cpp
@@ -145,7 +135,6 @@ ament_target_dependencies(scene_module_traffic_light ${BEHAVIOR_VELOCITY_PLANNER
 
 target_link_libraries(scene_module_traffic_light scene_module_lib)
 
-
 # Scene Module: Blind Spot
 ament_auto_add_library(scene_module_blind_spot SHARED
   src/scene_module/blind_spot/manager.cpp
@@ -162,7 +151,6 @@ target_include_directories(scene_module_blind_spot
 ament_target_dependencies(scene_module_blind_spot ${BEHAVIOR_VELOCITY_PLANNER_DEPENDENCIES})
 
 target_link_libraries(scene_module_blind_spot scene_module_lib)
-
 
 # Scene Module: Detection Area
 ament_auto_add_library(scene_module_detection_area SHARED
@@ -198,7 +186,6 @@ ament_target_dependencies(scene_module_no_stopping_area ${BEHAVIOR_VELOCITY_PLAN
 
 target_link_libraries(scene_module_no_stopping_area scene_module_lib)
 
-
 # Scene Module: Virtual Traffic Light
 ament_auto_add_library(scene_module_virtual_traffic_light SHARED
   src/scene_module/virtual_traffic_light/manager.cpp
@@ -215,7 +202,6 @@ target_include_directories(scene_module_virtual_traffic_light
 ament_target_dependencies(scene_module_virtual_traffic_light ${BEHAVIOR_VELOCITY_PLANNER_DEPENDENCIES})
 
 target_link_libraries(scene_module_virtual_traffic_light scene_module_lib)
-
 
 # SceneModule OcclusionSpot
 # Util
@@ -270,7 +256,6 @@ ament_target_dependencies(scene_module_manager ${BEHAVIOR_VELOCITY_PLANNER_DEPEN
 
 target_link_libraries(scene_module_manager scene_module_lib)
 
-
 # Node
 ament_auto_add_library(behavior_velocity_planner SHARED
   src/node.cpp
@@ -307,13 +292,11 @@ rclcpp_components_register_node(behavior_velocity_planner
 
 
 if(BUILD_TESTING)
-  find_package(ament_lint_auto REQUIRED)
-  ament_lint_auto_find_test_dependencies()
-
   # utils for test
   ament_auto_add_library(utilization SHARED
     src/utilization/util.cpp
   )
+
   # Gtest for utilization
   ament_add_gtest(utilization-test
     test/src/test_state_machine.cpp
@@ -335,7 +318,6 @@ if(BUILD_TESTING)
     gtest_main
     scene_module_occlusion_spot
   )
-
 endif()
 
 ament_auto_package(INSTALL_TO_SHARE

@@ -69,6 +69,8 @@ BehaviorPathPlannerNode::BehaviorPathPlannerNode(const rclcpp::NodeOptions & nod
   hazard_signal_publisher_ = create_publisher<HazardLightsCommand>("~/output/hazard_lights_cmd", 1);
   debug_drivable_area_publisher_ = create_publisher<OccupancyGrid>("~/debug/drivable_area", 1);
   debug_path_publisher_ = create_publisher<Path>("~/debug/path_for_visualize", 1);
+  debug_avoidance_msg_array_publisher_ =
+    create_publisher<AvoidanceDebugMsgArray>("~/debug/avoidance_debug_message_array", 1);
 
   // For remote operation
   plan_ready_publisher_ = create_publisher<PathChangeModule>("~/output/ready", 1);
@@ -95,6 +97,12 @@ BehaviorPathPlannerNode::BehaviorPathPlannerNode(const rclcpp::NodeOptions & nod
   occupancy_grid_subscriber_ = create_subscription<OccupancyGrid>(
     "/perception/occupancy_grid_map/map", 1, std::bind(&BehaviorPathPlannerNode::onOccupancyGrid, this, _1),
     createSubscriptionOptions(this));
+  scenario_subscriber_ = create_subscription<Scenario>(
+    "~/input/scenario", 1,
+    [this](const Scenario::ConstSharedPtr msg) {
+      current_scenario_ = std::make_shared<Scenario>(*msg);
+    },
+    createSubscriptionOptions(this));
   external_approval_subscriber_ = create_subscription<ApprovalMsg>(
     "~/input/external_approval", 1,
     std::bind(&BehaviorPathPlannerNode::onExternalApproval, this, _1),
@@ -104,11 +112,12 @@ BehaviorPathPlannerNode::BehaviorPathPlannerNode(const rclcpp::NodeOptions & nod
     createSubscriptionOptions(this));
 
   // route_handler
+  auto qos_transient_local = rclcpp::QoS{1}.transient_local();
   vector_map_subscriber_ = create_subscription<HADMapBin>(
-    "~/input/vector_map", rclcpp::QoS{1}.transient_local(),
-    std::bind(&BehaviorPathPlannerNode::onMap, this, _1), createSubscriptionOptions(this));
+    "~/input/vector_map", qos_transient_local, std::bind(&BehaviorPathPlannerNode::onMap, this, _1),
+    createSubscriptionOptions(this));
   route_subscriber_ = create_subscription<HADMapRoute>(
-    "~/input/route", 1, std::bind(&BehaviorPathPlannerNode::onRoute, this, _1),
+    "~/input/route", qos_transient_local, std::bind(&BehaviorPathPlannerNode::onRoute, this, _1),
     createSubscriptionOptions(this));
 
   // behavior tree manager
@@ -483,10 +492,17 @@ BehaviorTreeManagerParam BehaviorPathPlannerNode::getBehaviorTreeManagerParam()
 void BehaviorPathPlannerNode::waitForData()
 {
   // wait until mandatory data is ready
+  while (!current_scenario_ && rclcpp::ok()) {
+    RCLCPP_INFO_SKIPFIRST_THROTTLE(get_logger(), *get_clock(), 5000, "waiting for scenario topic");
+    rclcpp::spin_some(this->get_node_base_interface());
+    rclcpp::Rate(100).sleep();
+  }
+
   mutex_pd_.lock();  // for planner_data_
   while (!planner_data_->route_handler->isHandlerReady() && rclcpp::ok()) {
     mutex_pd_.unlock();
-    RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, "waiting for route to be ready");
+    RCLCPP_INFO_SKIPFIRST_THROTTLE(
+      get_logger(), *get_clock(), 5000, "waiting for route to be ready");
     rclcpp::spin_some(this->get_node_base_interface());
     rclcpp::Rate(100).sleep();
     mutex_pd_.lock();
@@ -496,8 +512,9 @@ void BehaviorPathPlannerNode::waitForData()
     if (planner_data_->dynamic_object && planner_data_->self_odometry) {
       break;
     }
+
     mutex_pd_.unlock();
-    RCLCPP_WARN_THROTTLE(
+    RCLCPP_INFO_SKIPFIRST_THROTTLE(
       get_logger(), *get_clock(), 5000,
       "waiting for vehicle pose, vehicle_velocity, and obstacles");
     rclcpp::spin_some(this->get_node_base_interface());
@@ -515,6 +532,11 @@ void BehaviorPathPlannerNode::run()
   RCLCPP_DEBUG(get_logger(), "----- BehaviorPathPlannerNode start -----");
   mutex_bt_.lock();  // for bt_manager_
   mutex_pd_.lock();  // for planner_data_
+
+  // behavior_path_planner runs only in LANE DRIVING scenario.
+  if (current_scenario_->current_scenario != Scenario::LANEDRIVING) {
+    return;
+  }
 
   // update planner data
   planner_data_->self_pose = self_pose_listener_.getCurrentPose();
@@ -570,6 +592,7 @@ void BehaviorPathPlannerNode::run()
 
   // for remote operation
   publishModuleStatus(bt_manager_->getModulesStatus(), planner_data);
+  debug_avoidance_msg_array_publisher_->publish(bt_manager_->getAvoidanceDebugMsgArray());
 
   publishDebugMarker(bt_manager_->getDebugMarkers());
 
