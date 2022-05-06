@@ -23,7 +23,6 @@
 #include <autoware_auto_planning_msgs/msg/had_map_route.hpp>
 #include <autoware_auto_planning_msgs/msg/trajectory.hpp>
 #include <autoware_auto_planning_msgs/msg/trajectory_point.hpp>
-#include <autoware_auto_planning_msgs/msg/path_with_lane_id.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
 #include <geometry_msgs/msg/twist_stamped.hpp>
@@ -43,7 +42,6 @@ namespace lane_departure_checker
 using autoware_auto_planning_msgs::msg::HADMapRoute;
 using autoware_auto_planning_msgs::msg::Trajectory;
 using autoware_auto_planning_msgs::msg::TrajectoryPoint;
-using autoware_auto_planning_msgs::msg::PathWithLaneId;
 using tier4_autoware_utils::LinearRing2d;
 using tier4_autoware_utils::PoseDeviation;
 using TrajectoryPoints = std::vector<TrajectoryPoint>;
@@ -90,29 +88,14 @@ public:
   void setParam(const Param & param, const vehicle_info_util::VehicleInfo vehicle_info)
   {
     param_ = param;
-    // vehicle_info_ = vehicle_info;
     vehicle_info_ptr_ = std::make_shared<vehicle_info_util::VehicleInfo>(vehicle_info);
   }
 
   void setParam(const Param & param) { param_ = param; }
 
-  void setVehicleInfo(const vehicle_info_util::VehicleInfo vehicle_info)
-  {
-    vehicle_info_ptr_ = std::make_shared<vehicle_info_util::VehicleInfo>(vehicle_info);
-    // vehicle_info_util::VehicleInfo vehicle_info_local;
-    // vehicle_info_local = vehicle_info;
-    // vehicle_info_public_ = vehicle_info;
-    // vehicle_info_ = vehicle_info;
-  }
-
-  bool checkPathWillLeaveLane(const lanelet::ConstLanelets & lanelets, const PathWithLaneId & path);
-
-  vehicle_info_util::VehicleInfo vehicle_info_public_;
-
 private:
   Param param_;
   std::shared_ptr<vehicle_info_util::VehicleInfo> vehicle_info_ptr_;
-  // vehicle_info_util::VehicleInfo vehicle_info_;
 
   static PoseDeviation calcTrajectoryDeviation(
     const Trajectory & trajectory, const geometry_msgs::msg::Pose & pose);
@@ -125,7 +108,6 @@ private:
   std::vector<LinearRing2d> createVehicleFootprints(
     const geometry_msgs::msg::PoseWithCovariance & covariance, const TrajectoryPoints & trajectory,
     const Param & param);
-  std::vector<LinearRing2d> createVehicleFootprints(const PathWithLaneId & path);
 
   static std::vector<LinearRing2d> createVehiclePassingAreas(
     const std::vector<LinearRing2d> & vehicle_footprints);
