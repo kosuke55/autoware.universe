@@ -285,15 +285,16 @@ BehaviorModuleOutput PullOverModule::plan()
   if (!status_.has_decided_path) researchGoal();
 
   // Check if we have to deciede path
+  const double decide_path_buffer = 5.0;
   if (
     status_.is_safe && status_.path_type == PathType::SHIFT &&
-    !isLongEnough(current_lanes, modified_goal_pose_)) {
+    !isLongEnough(current_lanes, modified_goal_pose_, decide_path_buffer)) {
     status_.has_decided_path = true;
   }
   // isLongEnough is for SHIFT, but it is also enoght for ARC_FORWARD.
   else if (
     status_.is_safe && status_.path_type == PathType::ARC_FORWARD &&
-    !isLongEnough(current_lanes, modified_goal_pose_)) {
+    !isLongEnough(current_lanes, modified_goal_pose_, decide_path_buffer)) {
     status_.has_decided_path = true;
   } else if (
     status_.is_safe && status_.path_type == PathType::ARC_BACK &&
