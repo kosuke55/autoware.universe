@@ -50,6 +50,7 @@ struct PullOverParameters
 {
   double th_arrived_distance_m;
   double th_stopped_velocity_mps;
+  double th_stopped_time_sec;
   double margin_from_boundary;
   double pull_over_forward_search_length;
   double pull_over_backward_search_length;
@@ -158,6 +159,7 @@ private:
   std::vector<GoalCandidate> goal_candidates_;
   ParallelParkingPlanner parallel_parking_planner_;
   ParallelParkingParameters parallel_parking_prameters_;
+  std::deque<nav_msgs::msg::Odometry::ConstSharedPtr> odometry_buffer_;
 
   PathWithLaneId getReferencePath() const;
   // lanelet::ConstLanelets getCurrentLanes() const;
@@ -177,7 +179,7 @@ private:
   double calcMinimumShiftPathDistance() const;
   bool isLongEnough(
     const lanelet::ConstLanelets & lanelets, const Pose goal_pose, const double buffer = 0) const;
-  bool hasFinishedPullOver() const;
+  bool hasFinishedPullOver();
   void updateOccupancyGrid();
   Pose getRefinedGoal();
   void researchGoal();

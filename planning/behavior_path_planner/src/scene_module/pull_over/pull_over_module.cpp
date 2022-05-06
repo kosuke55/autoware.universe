@@ -42,12 +42,12 @@ using tier4_autoware_utils::inverseTransformPose;
 using tier4_autoware_utils::transformPose;
 
 using tier4_autoware_utils::calcDistance2d;
+using tier4_autoware_utils::calcSignedArcLength;
 using tier4_autoware_utils::createDefaultMarker;
 using tier4_autoware_utils::createMarkerColor;
 using tier4_autoware_utils::createMarkerScale;
 using tier4_autoware_utils::createPoint;
 using tier4_autoware_utils::findNearestIndex;
-using tier4_autoware_utils::calcSignedArcLength;
 
 namespace behavior_path_planner
 {
@@ -56,7 +56,8 @@ PullOverModule::PullOverModule(
 : SceneModuleInterface{name, node}, parameters_{parameters}
 {
   approval_handler_.waitApproval();
-  goal_pose_pub_ = node.create_publisher<PoseStamped>("~/pull_over/debug/goal_pose", 1);
+  goal_pose_pub_ =
+    node.create_publisher<PoseStamped>("/planning/scenario_planning/modified_goal", 1);
   parking_area_pub_ = node.create_publisher<MarkerArray>("~/pull_over/debug/parking_area", 1);
   // Only for arc paths
   Cl_pub_ = node.create_publisher<PoseStamped>("~/pull_over/debug/Cl", 1);
@@ -327,8 +328,8 @@ BehaviorModuleOutput PullOverModule::plan()
     const auto arc_coordinates = lanelet::utils::getArcCoordinates(current_lanes, goal_pose);
     const Pose search_start_pose = calcOffsetPose(
       goal_pose, -parameters_.pull_over_backward_search_length, -arc_coordinates.distance, 0);
-    const auto search_start_signed_arg_length =
-      calcSignedArcLength(status_.path.points, planner_data_->self_pose->pose, search_start_pose.position);
+    const auto search_start_signed_arg_length = calcSignedArcLength(
+      status_.path.points, planner_data_->self_pose->pose, search_start_pose.position);
     double dist_sum = 0;
     for (size_t i = 0; i < status_.path.points.size() - 1; i++) {
       dist_sum += calcDistance2d(status_.path.points.at(i), status_.path.points.at(i + 1));
@@ -521,7 +522,8 @@ std::pair<bool, bool> PullOverModule::getSafePath(
   return std::make_pair(false, false);
 }
 
-double PullOverModule::calcMinimumShiftPathDistance() const{
+double PullOverModule::calcMinimumShiftPathDistance() const
+{
   PathShifter path_shifter;
   const double maximum_jerk = parameters_.maximum_lateral_jerk;
   const double pull_over_velocity = parameters_.minimum_pull_over_velocity;
@@ -555,7 +557,7 @@ bool PullOverModule::isLongEnough(
   return distance_to_goal > calcMinimumShiftPathDistance() + buffer;
 }
 
-bool PullOverModule::hasFinishedPullOver() const
+bool PullOverModule::hasFinishedPullOver()
 {
   // check ego car is close enough to goal pose
   const auto current_pose = planner_data_->self_pose->pose;
@@ -563,9 +565,25 @@ bool PullOverModule::hasFinishedPullOver() const
     calcDistance2d(current_pose, modified_goal_pose_) < parameters_.th_arrived_distance_m;
 
   // check ego car is stopping
-  const double ego_vel = util::l2Norm(planner_data_->self_odometry->twist.twist.linear);
-  const bool car_is_stopping = (ego_vel < 0.01);
-  return car_is_on_goal && car_is_stopping;
+  odometry_buffer_.push_back(planner_data_->self_odometry);
+  // Delete old data in buffer
+  while (true) {
+    const auto time_diff = rclcpp::Time(odometry_buffer_.back()->header.stamp) -
+                           rclcpp::Time(odometry_buffer_.front()->header.stamp);
+    if (time_diff.seconds() < parameters_.th_stopped_time_sec) {
+      break;
+    }
+    odometry_buffer_.pop_front();
+  }
+  bool is_stopped = true;
+  for (const auto odometry : odometry_buffer_) {
+    const double ego_vel = util::l2Norm(odometry->twist.twist.linear);
+    if (ego_vel > parameters_.th_stopped_velocity_mps) {
+      is_stopped = false;
+      break;
+    }
+  }
+  return car_is_on_goal && is_stopped;
 }
 
 // Not used.
