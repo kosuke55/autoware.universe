@@ -263,7 +263,8 @@ std::vector<ShiftParkingPath> getShiftParkingPaths(
           std::max(0.0, (distance_to_goal / distance_pull_over_end_to_goal * pull_over_velocity)));
         point.lane_ids = reference_path2.points.front().lane_ids;
       }
-      candidate_path.path = combineReferencePath(reference_path1, shifted_path.path);
+      candidate_path.path =
+        util::resamplePathWithSpline(combineReferencePath(reference_path1, shifted_path.path), 1.0);
       candidate_path.shifted_path = shifted_path;
       shift_point.start_idx = tier4_autoware_utils::findNearestIndex(
         shifted_path.path.points, shift_point.start.position);
