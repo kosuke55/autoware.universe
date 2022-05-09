@@ -7,8 +7,12 @@
       pull_over_velocity: 3.0
       margin_from_boundary: 0.5
       decide_path_distance: 10.0
-      pull_over_forward_search_length: 20.0
-      pull_over_backward_search_length: 20.0
+      # goal research
+      forward_goal_search_length: 20.0
+      backward_goal_search_length: 20.0
+      goal_search_interval: 1.0
+      goal2obj_margin: 2.0
+      goal_search_backward_ignore_distance: 2.0
       # occupancy grid map
       collision_check_margin: 0.5
       theta_size: 360

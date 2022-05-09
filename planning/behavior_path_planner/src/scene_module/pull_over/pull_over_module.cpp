@@ -103,7 +103,7 @@ void PullOverModule::onEntry()
   parallel_parking_prameters_ = ParallelParkingParameters{
     parameters_.th_arrived_distance_m, parameters_.th_stopped_velocity_mps,
     parameters_.after_forward_parking_straight_distance,
-    parameters_.after_backward_parking_straight_distance};
+    parameters_.after_backward_parking_straight_distance, parameters_.decide_path_distance};
   status_.has_decided_path = false;
   status_.path_type = PathType::NONE;
   status_.is_safe = false;
@@ -196,7 +196,7 @@ void PullOverModule::researchGoal()
 
   const auto common_param = occupancy_grid_map_.getParam();
   auto goal_pose = getRefinedGoal();
-  double dx = -parameters_.pull_over_backward_search_length;
+  double dx = -parameters_.backward_goal_search_length;
 
   // Avoid adding areas that are in conflict from the start.
   bool prev_is_collided = true;
@@ -206,7 +206,7 @@ void PullOverModule::researchGoal()
   Pose start_pose = calcOffsetPose(goal_pose, dx, 0, 0);
   // Serch non collision areas around the goal
   while (true) {
-    bool is_last_search = (dx >= parameters_.pull_over_forward_search_length);
+    bool is_last_search = (dx >= parameters_.forward_goal_search_length);
     Pose serach_pose = calcOffsetPose(goal_pose_map_coords, dx, 0, 0);
     bool is_collided = occupancy_grid_map_.detectCollision(
       pose2index(occupancy_grid_map_.getMap(), serach_pose, common_param.theta_size), false);
@@ -236,19 +236,17 @@ void PullOverModule::researchGoal()
 
   // Find goals in pull over areas.
   goal_candidates_.clear();
-  const double goal_interval = 5.0;
-  const double min_margin = 2;
-  const double backward_ignore_distance = -2;
-  for (double dx = -parameters_.pull_over_backward_search_length;
-       dx <= parameters_.pull_over_forward_search_length; dx += goal_interval) {
+  for (double dx = -parameters_.backward_goal_search_length;
+       dx <= parameters_.forward_goal_search_length; dx += parameters_.goal_search_interval) {
     Pose search_pose = calcOffsetPose(goal_pose, dx, 0, 0);
     for (const auto area : pull_over_areas_) {
       const Pose start_to_search = inverseTransformPose(search_pose, area.start_pose);
       const Pose end_to_search = inverseTransformPose(search_pose, area.end_pose);
       const Pose current_to_search = inverseTransformPose(search_pose, current_pose);
       if (
-        start_to_search.position.x > min_margin && end_to_search.position.x < -min_margin &&
-        current_to_search.position.x > backward_ignore_distance) {
+        start_to_search.position.x > parameters_.goal2obj_margin &&
+        end_to_search.position.x < -parameters_.goal2obj_margin &&
+        current_to_search.position.x > -parameters_.backward_ignore_distance) {
         GoalCandidate goal_candidate;
         goal_candidate.goal_pose = search_pose;
         goal_candidate.distance_from_original_goal =
@@ -340,7 +338,7 @@ BehaviorModuleOutput PullOverModule::plan()
     const Pose goal_pose = getRefinedGoal();
     const auto arc_coordinates = lanelet::utils::getArcCoordinates(current_lanes, goal_pose);
     const Pose search_start_pose = calcOffsetPose(
-      goal_pose, -parameters_.pull_over_backward_search_length, -arc_coordinates.distance, 0);
+      goal_pose, -parameters_.backward_goal_search_length, -arc_coordinates.distance, 0);
     const auto search_start_signed_arg_length = calcSignedArcLength(
       status_.path.points, planner_data_->self_pose->pose, search_start_pose.position,
       std::numeric_limits<double>::max(), M_PI_2);

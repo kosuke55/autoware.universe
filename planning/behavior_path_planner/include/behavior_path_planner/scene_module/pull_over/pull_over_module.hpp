@@ -53,8 +53,12 @@ struct PullOverParameters
   double th_stopped_time_sec;
   double margin_from_boundary;
   double decide_path_distance;
-  double pull_over_forward_search_length;
-  double pull_over_backward_search_length;
+  // goal research
+  double forward_goal_search_length;
+  double backward_goal_search_length;
+  double goal_search_interval;
+  double goal2obj_margin;
+  double backward_ignore_distance;
   // occupancy grid map
   double collision_check_margin;
   double theta_size;

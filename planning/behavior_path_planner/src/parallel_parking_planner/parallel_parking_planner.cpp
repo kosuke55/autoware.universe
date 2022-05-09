@@ -178,8 +178,8 @@ bool ParallelParkingPlanner::planOneTraial(
 
   const Pose start_pose = getStartPose(offsetted_goal_pose, start_pose_offset, R_E_r, is_forward);
   const Pose current_pose = planner_data_->self_pose->pose;
-  if (is_forward && inverseTransformPose(start_pose, current_pose).position.x < 5) {
-    // std::cerr << "invalid forward arc path" << std::endl;
+  const Pose current2start = inverseTransformPose(start_pose, current_pose);
+  if (is_forward && current2start.position.x < parameters_.decide_path_distance) {
     return false;
   }
 
