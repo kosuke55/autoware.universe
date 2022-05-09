@@ -285,21 +285,22 @@ BehaviorModuleOutput PullOverModule::plan()
   if (!status_.has_decided_path) researchGoal();
 
   // Check if we have to deciede path
-  const double decide_path_buffer = 5.0;
-  if (
-    status_.is_safe && status_.path_type == PathType::SHIFT &&
-    !isLongEnough(current_lanes, modified_goal_pose_, decide_path_buffer)) {
-    status_.has_decided_path = true;
-  }
-  // isLongEnough is for SHIFT, but it is also enoght for ARC_FORWARD.
-  else if (
-    status_.is_safe && status_.path_type == PathType::ARC_FORWARD &&
-    !isLongEnough(current_lanes, modified_goal_pose_, decide_path_buffer)) {
-    status_.has_decided_path = true;
-  } else if (
-    status_.is_safe && status_.path_type == PathType::ARC_BACK &&
-    inverseTransformPose(modified_goal_pose_, planner_data_->self_pose->pose).position.x < 0) {
-    status_.has_decided_path = true;
+  if (status_.is_safe) {
+    Pose parking_start_pose;
+    if (status_.path_type == PathType::SHIFT) {
+      parking_start_pose = shift_parking_path_.shift_point.start;
+    } else if (
+      status_.path_type == PathType::ARC_FORWARD || status_.path_type == PathType::ARC_BACK) {
+      parking_start_pose = parallel_parking_planner_.getStartPose().pose;
+    }
+    const auto dist_to_parking_start_pose = calcSignedArcLength(
+      status_.path.points, planner_data_->self_pose->pose, parking_start_pose.position,
+      std::numeric_limits<double>::max(), M_PI_2);
+
+    const double decide_path_distance = 10.0;
+    if (*dist_to_parking_start_pose < decide_path_distance) {
+      status_.has_decided_path = true;
+    }
   }
 
   // Use decided path
@@ -342,7 +343,8 @@ BehaviorModuleOutput PullOverModule::plan()
     const Pose search_start_pose = calcOffsetPose(
       goal_pose, -parameters_.pull_over_backward_search_length, -arc_coordinates.distance, 0);
     const auto search_start_signed_arg_length = calcSignedArcLength(
-      status_.path.points, planner_data_->self_pose->pose, search_start_pose.position);
+      status_.path.points, planner_data_->self_pose->pose, search_start_pose.position,
+      std::numeric_limits<double>::max(), M_PI_2);
     double dist_sum = 0;
     for (size_t i = 0; i < status_.path.points.size() - 1; i++) {
       dist_sum += calcDistance2d(status_.path.points.at(i), status_.path.points.at(i + 1));
