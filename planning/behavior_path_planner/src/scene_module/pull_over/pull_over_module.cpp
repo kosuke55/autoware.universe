@@ -245,11 +245,11 @@ void PullOverModule::researchGoal()
     for (const auto area : pull_over_areas_) {
       const Pose start_to_search = inverseTransformPose(search_pose, area.start_pose);
       const Pose end_to_search = inverseTransformPose(search_pose, area.end_pose);
-      const Pose current_to_search = inverseTransformPose(search_pose, current_pose);
+      const Pose search_to_current = inverseTransformPose(current_pose, search_pose);
       if (
         start_to_search.position.x > parameters_.goal2obj_margin &&
         end_to_search.position.x < -parameters_.goal2obj_margin &&
-        current_to_search.position.x > -parameters_.backward_ignore_distance) {
+        search_to_current.position.x < parameters_.backward_ignore_distance) {
         GoalCandidate goal_candidate;
         goal_candidate.goal_pose = search_pose;
         goal_candidate.distance_from_original_goal =
