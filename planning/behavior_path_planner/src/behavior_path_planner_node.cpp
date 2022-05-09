@@ -377,6 +377,7 @@ PullOverParameters BehaviorPathPlannerNode::getPullOverParam()
   p.th_arrived_distance_m = dp("th_arrived_distance_m", 0.3);
   p.th_stopped_time_sec = dp("th_stopped_time_sec", 2.0);
   p.margin_from_boundary = dp("margin_from_boundary", 0.3);
+  p.decide_path_distance = dp("decide_path_distance", 10.0);
   p.pull_over_forward_search_length = dp("pull_over_forward_search_length", 20.0);
   p.pull_over_backward_search_length = dp("pull_over_backward_search_length", 20.0);
   // occupancy grid map

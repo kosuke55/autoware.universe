@@ -297,8 +297,7 @@ BehaviorModuleOutput PullOverModule::plan()
       status_.path.points, planner_data_->self_pose->pose, parking_start_pose.position,
       std::numeric_limits<double>::max(), M_PI_2);
 
-    const double decide_path_distance = 10.0;
-    if (*dist_to_parking_start_pose < decide_path_distance) {
+    if (*dist_to_parking_start_pose < parameters_.decide_path_distance) {
       status_.has_decided_path = true;
     }
   }
