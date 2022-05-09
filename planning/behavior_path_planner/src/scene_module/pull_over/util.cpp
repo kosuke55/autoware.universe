@@ -263,13 +263,14 @@ std::vector<ShiftParkingPath> getShiftParkingPaths(
           std::max(0.0, (distance_to_goal / distance_pull_over_end_to_goal * pull_over_velocity)));
         point.lane_ids = reference_path2.points.front().lane_ids;
       }
+      candidate_path.shifted_path = shifted_path;
+      // resample is needed for adding orientation to path points for collision check
       candidate_path.path =
         util::resamplePathWithSpline(combineReferencePath(reference_path1, shifted_path.path), 1.0);
-      candidate_path.shifted_path = shifted_path;
       shift_point.start_idx = tier4_autoware_utils::findNearestIndex(
-        shifted_path.path.points, shift_point.start.position);
-      shift_point.end_idx =
-        tier4_autoware_utils::findNearestIndex(shifted_path.path.points, shift_point.end.position);
+        candidate_path.path.points, shift_point.start.position);
+      shift_point.end_idx = tier4_autoware_utils::findNearestIndex(
+        candidate_path.path.points, shift_point.end.position);
       candidate_path.shift_point = shift_point;
       // candidate_path.acceleration = acceleration;
       candidate_path.preparation_length = straight_distance;
@@ -281,7 +282,6 @@ std::vector<ShiftParkingPath> getShiftParkingPaths(
       continue;
     }
 
-    // ROS_ERROR("candidate path is push backed");
     candidate_paths.push_back(candidate_path);
   }
 
