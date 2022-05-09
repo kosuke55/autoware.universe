@@ -91,7 +91,6 @@ void AutowareStateMonitorNode::onModifiedGoal(
   state_input_.modified_goal_pose = msg;
 }
 
-
 void AutowareStateMonitorNode::onRoute(
   const autoware_auto_planning_msgs::msg::HADMapRoute::ConstSharedPtr msg)
 {

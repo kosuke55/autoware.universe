@@ -39,8 +39,8 @@ using autoware_auto_perception_msgs::msg::PredictedObjects;
 using autoware_auto_planning_msgs::msg::PathWithLaneId;
 using geometry_msgs::msg::PoseStamped;
 using geometry_msgs::msg::TwistStamped;
-using nav_msgs::msg::Odometry;
 using nav_msgs::msg::OccupancyGrid;
+using nav_msgs::msg::Odometry;
 using route_handler::RouteHandler;
 struct BoolStamped
 {

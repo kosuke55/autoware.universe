@@ -1481,13 +1481,11 @@ double getDistanceToShoulderBoundary(
   return arc_coordinates.distance;
 }
 
-double getDistanceToRightBoundary(
-  const lanelet::ConstLanelets & lanelets, const Pose & pose)
+double getDistanceToRightBoundary(const lanelet::ConstLanelets & lanelets, const Pose & pose)
 {
   lanelet::ConstLanelet closest_shoulder_lanelet;
   lanelet::ArcCoordinates arc_coordinates;
-  if (lanelet::utils::query::getClosestLanelet(
-        lanelets, pose, &closest_shoulder_lanelet)) {
+  if (lanelet::utils::query::getClosestLanelet(lanelets, pose, &closest_shoulder_lanelet)) {
     const auto lanelet_point = lanelet::utils::conversion::toLaneletPoint(pose.position);
     const auto & right_line_2d = lanelet::utils::to2D(closest_shoulder_lanelet.rightBound3d());
     arc_coordinates = lanelet::geometry::toArcCoordinates(
@@ -1909,7 +1907,8 @@ lanelet::ConstLanelets getCurrentLanes(const std::shared_ptr<const PlannerData> 
     common_parameters.forward_path_length);
 }
 
-lanelet::ConstLanelets getExtendedCurrentLanes(const std::shared_ptr<const PlannerData> & planner_data)
+lanelet::ConstLanelets getExtendedCurrentLanes(
+  const std::shared_ptr<const PlannerData> & planner_data)
 {
   const auto & route_handler = planner_data->route_handler;
   const auto current_pose = planner_data->self_pose->pose;
@@ -1923,21 +1922,20 @@ lanelet::ConstLanelets getExtendedCurrentLanes(const std::shared_ptr<const Plann
   }
 
   // For current_lanes with desired length
-  auto current_lanes =  route_handler->getLaneletSequence(
+  auto current_lanes = route_handler->getLaneletSequence(
     current_lane, current_pose, common_parameters.backward_path_length,
     common_parameters.forward_path_length);
 
   // Add next_lanes
   const auto next_lanes = route_handler->getNextLanelets(current_lanes.back());
-  if(!next_lanes.empty()){
+  if (!next_lanes.empty()) {
     // TODO(kosuke55) which lane should be added?
     current_lanes.push_back(next_lanes.front());
   }
 
   // Add prev_lane
   lanelet::ConstLanelets prev_lanes;
-  if (route_handler->getPreviousLaneletsWithinRoute(
-        current_lanes.front(), &prev_lanes)) {
+  if (route_handler->getPreviousLaneletsWithinRoute(current_lanes.front(), &prev_lanes)) {
     // TODO(kosuke55) which lane should be added?
     current_lanes.insert(current_lanes.begin(), 1, prev_lanes.front());
   }

@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef BEHAVIOR_PATH_PLANNER__OCCUPANCY_GRID_MAP_HPP_
-#define BEHAVIOR_PATH_PLANNER__OCCUPANCY_GRID_MAP_HPP_
+#ifndef BEHAVIOR_PATH_PLANNER__OCCUPANCY_GRID_MAP__OCCUPANCY_GRID_MAP_HPP_
+#define BEHAVIOR_PATH_PLANNER__OCCUPANCY_GRID_MAP__OCCUPANCY_GRID_MAP_HPP_
 
 #include <tier4_autoware_utils/geometry/geometry.hpp>
 
@@ -144,4 +144,4 @@ protected:
 
 }  // namespace behavior_path_planner
 
-#endif  // BEHAVIOR_PATH_PLANNER__OCCUPANCY_GRID_MAP_HPP_
+#endif  // BEHAVIOR_PATH_PLANNER__OCCUPANCY_GRID_MAP__OCCUPANCY_GRID_MAP_HPP_

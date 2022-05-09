@@ -95,7 +95,8 @@ BehaviorPathPlannerNode::BehaviorPathPlannerNode(const rclcpp::NodeOptions & nod
     createSubscriptionOptions(this));
   // todo: chnage to ~/input
   occupancy_grid_subscriber_ = create_subscription<OccupancyGrid>(
-    "/perception/occupancy_grid_map/map", 1, std::bind(&BehaviorPathPlannerNode::onOccupancyGrid, this, _1),
+    "/perception/occupancy_grid_map/map", 1,
+    std::bind(&BehaviorPathPlannerNode::onOccupancyGrid, this, _1),
     createSubscriptionOptions(this));
   scenario_subscriber_ = create_subscription<Scenario>(
     "~/input/scenario", 1,

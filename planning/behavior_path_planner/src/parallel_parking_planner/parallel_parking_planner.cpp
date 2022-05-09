@@ -60,11 +60,11 @@ PathWithLaneId ParallelParkingPlanner::getCurrentPath()
   const auto current_target = current_path.points.back();
   const auto self_pose = planner_data_->self_pose->pose;
 
-  const bool is_near_target =
-    tier4_autoware_utils::calcDistance2d(current_target, self_pose) <  parameters_.th_arrived_distance_m;
+  const bool is_near_target = tier4_autoware_utils::calcDistance2d(current_target, self_pose) <
+                              parameters_.th_arrived_distance_m;
 
-  const bool is_stopped =
-    std::abs(planner_data_->self_odometry->twist.twist.linear.x) < parameters_.th_stopped_velocity_mps;
+  const bool is_stopped = std::abs(planner_data_->self_odometry->twist.twist.linear.x) <
+                          parameters_.th_stopped_velocity_mps;
 
   if (is_near_target && is_stopped) {
     current_path_idx_ += 1;
@@ -210,7 +210,8 @@ bool ParallelParkingPlanner::planOneTraial(
   if (is_forward) {
     const float R_front_left =
       std::hypot(R_E_r + common_params.vehicle_width / 2, common_params.base_link2front);
-    const double distance_to_left_bound = util::getDistanceToShoulderBoundary(lanes, offsetted_goal_pose);
+    const double distance_to_left_bound =
+      util::getDistanceToShoulderBoundary(lanes, offsetted_goal_pose);
     const float left_deviation = R_front_left - R_E_r;
     if (std::abs(distance_to_left_bound) < left_deviation) {
       return false;

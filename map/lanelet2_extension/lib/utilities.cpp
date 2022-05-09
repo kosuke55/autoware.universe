@@ -603,7 +603,8 @@ geometry_msgs::msg::Pose getClosestCenterPose(
   lanelet::BasicPoint2d llt_search_point(search_point.x, search_point.y);
   lanelet::ConstLineString3d segment = getClosestSegment(llt_search_point, lanelet.centerline());
 
-  const Eigen::Vector2d direction((segment.back().basicPoint2d() - segment.front().basicPoint2d()).normalized());
+  const Eigen::Vector2d direction(
+    (segment.back().basicPoint2d() - segment.front().basicPoint2d()).normalized());
   const Eigen::Vector2d xf(segment.front().basicPoint2d());
   const Eigen::Vector2d x(search_point.x, search_point.y);
   const Eigen::Vector2d p = xf + (x - xf).dot(direction) * direction;
