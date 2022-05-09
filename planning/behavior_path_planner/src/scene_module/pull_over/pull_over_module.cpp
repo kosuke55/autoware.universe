@@ -188,14 +188,9 @@ Pose PullOverModule::getRefinedGoal()
 
 void PullOverModule::researchGoal()
 {
-  // If the ego has already exceeded modified_goal, do not search.
-  const Pose current_pose = planner_data_->self_pose->pose;
-  if (inverseTransformPose(modified_goal_pose_, current_pose).position.x < 0) {
-    return;
-  }
-
   const auto common_param = occupancy_grid_map_.getParam();
-  auto goal_pose = getRefinedGoal();
+  const Pose current_pose = planner_data_->self_pose->pose;
+  const Pose goal_pose = getRefinedGoal();
   double dx = -parameters_.backward_goal_search_length;
 
   // Avoid adding areas that are in conflict from the start.
