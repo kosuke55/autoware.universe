@@ -379,6 +379,7 @@ PullOverParameters BehaviorPathPlannerNode::getPullOverParam()
   p.margin_from_boundary = dp("margin_from_boundary", 0.3);
   p.decide_path_distance = dp("decide_path_distance", 10.0);
   // goal research
+  p.enable_goal_research = dp("enable_goal_research", true);
   p.forward_goal_search_length = dp("forward_goal_search_length", 20.0);
   p.backward_goal_search_length = dp("backward_goal_search_length", 20.0);
   p.goal_search_interval = dp("goal_search_interval", 5.0);

@@ -54,6 +54,7 @@ struct PullOverParameters
   double margin_from_boundary;
   double decide_path_distance;
   // goal research
+  bool enable_goal_research;
   double forward_goal_search_length;
   double backward_goal_search_length;
   double goal_search_interval;

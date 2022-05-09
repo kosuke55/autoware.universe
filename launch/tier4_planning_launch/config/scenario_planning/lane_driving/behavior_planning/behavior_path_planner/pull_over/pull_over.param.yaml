@@ -8,6 +8,7 @@
       margin_from_boundary: 0.5
       decide_path_distance: 10.0
       # goal research
+      enable_goal_research: true
       forward_goal_search_length: 20.0
       backward_goal_search_length: 20.0
       goal_search_interval: 1.0

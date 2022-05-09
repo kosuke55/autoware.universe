@@ -108,6 +108,14 @@ void PullOverModule::onEntry()
   status_.path_type = PathType::NONE;
   status_.is_safe = false;
 
+  // Use refined goal as modified goal when disabling goal research
+  if (!parameters_.enable_goal_research) {
+    goal_candidates_.clear();
+    GoalCandidate goal_candidate;
+    goal_candidate.goal_pose = getRefinedGoal();
+    goal_candidates_.push_back(goal_candidate);
+  }
+
   approval_handler_.waitApproval();
 }
 
@@ -275,7 +283,8 @@ BehaviorModuleOutput PullOverModule::plan()
   lanes.insert(lanes.end(), current_lanes.begin(), current_lanes.end());
   lanes.insert(lanes.end(), pull_over_lanes.begin(), pull_over_lanes.end());
 
-  if (!status_.has_decided_path) researchGoal();
+  // Research goal when enabling research and final path has not been decieded
+  if (parameters_.enable_goal_research && !status_.has_decided_path) researchGoal();
 
   // Check if we have to deciede path
   if (status_.is_safe) {
@@ -669,12 +678,14 @@ void PullOverModule::publishDebugData()
   goal_pose_pub_->publish(goal_pose_stamped);
 
   // Visualize pull over areas
-  MarkerArray marker_array;
-  for (int32_t i = 0; i < pull_over_areas_.size(); i++) {
-    marker_array.markers.push_back(createParkingAreaMarker(
-      pull_over_areas_.at(i).start_pose, pull_over_areas_.at(i).end_pose, i));
+  if (parameters_.enable_goal_research) {
+    MarkerArray marker_array;
+    for (int32_t i = 0; i < pull_over_areas_.size(); i++) {
+      marker_array.markers.push_back(createParkingAreaMarker(
+        pull_over_areas_.at(i).start_pose, pull_over_areas_.at(i).end_pose, i));
+    }
+    parking_area_pub_->publish(marker_array);
   }
-  parking_area_pub_->publish(marker_array);
 
   // Only for arc paths. Initialize data not to publish them when using other path.
   PoseStamped Cl, Cr, start_pose;
