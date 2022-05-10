@@ -107,7 +107,7 @@ bool ParallelParkingPlanner::plan(
     } else {
       // When turning backward to the left, the front right goes out,
       // so make the parking start point in front for seach no lane departure path
-      // (same to Equivalent to reducing the steer angle)
+      // (same to reducing the steer angle)
       for (double dx = 0; dx < 10; dx += 0.5) {
         if (planOneTraial(goal_pose, dx, R_E_min_, lanes, is_forward)) return true;
       }
