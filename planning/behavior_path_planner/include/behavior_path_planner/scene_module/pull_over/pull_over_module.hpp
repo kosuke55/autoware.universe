@@ -76,6 +76,9 @@ struct PullOverParameters
   // parallel parking
   double after_forward_parking_straight_distance;
   double after_backward_parking_straight_distance;
+  double forward_parking_velocity;
+  double backward_parking_velocity;
+  double arc_path_interval;
   // hazard. Not used now.
   double hazard_on_threshold_dis;
   double hazard_on_threshold_vel;

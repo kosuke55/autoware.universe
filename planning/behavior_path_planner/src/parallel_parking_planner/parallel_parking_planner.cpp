@@ -282,9 +282,9 @@ PathWithLaneId ParallelParkingPlanner::generateArcPath(
 {
   PathWithLaneId path;
 
-  const float velocity = is_forward ? 1.0 : -0.5;
-  const float interval = 1.0;
-  const float yaw_interval = interval / radius;
+  const float velocity =
+    is_forward ? parameters_.forward_parking_velocity : parameters_.backward_parking_velocity;
+  const float yaw_interval = parameters_.arc_path_interval / radius;
   float yaw = start_yaw;
   if (is_left_turn) {
     if (end_yaw < start_yaw) end_yaw += M_PI_2;

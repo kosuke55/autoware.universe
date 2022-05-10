@@ -101,9 +101,14 @@ void PullOverModule::onEntry()
   // Initialize sratus
   parallel_parking_planner_.clear();
   parallel_parking_prameters_ = ParallelParkingParameters{
-    parameters_.th_arrived_distance_m, parameters_.th_stopped_velocity_mps,
+    parameters_.th_arrived_distance_m,
+    parameters_.th_stopped_velocity_mps,
     parameters_.after_forward_parking_straight_distance,
-    parameters_.after_backward_parking_straight_distance, parameters_.decide_path_distance};
+    parameters_.after_backward_parking_straight_distance,
+    parameters_.decide_path_distance,
+    parameters_.forward_parking_velocity,
+    parameters_.backward_parking_velocity,
+    parameters_.arc_path_interval};
   status_.has_decided_path = false;
   status_.path_type = PathType::NONE;
   status_.is_safe = false;

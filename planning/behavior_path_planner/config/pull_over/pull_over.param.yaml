@@ -29,6 +29,9 @@
       # parallel parking path
       after_forward_parking_straight_distance: 0.5
       after_backward_parking_straight_distance: 0.5
+      forward_parking_velocity: 1.0
+      backward_parking_velocity: -0.5
+      arc_path_interval: 1.0
       # hazard. Not used now.
       double hazard_on_threshold_dis: 1.0
       double hazard_on_threshold_vel: 0.5
