@@ -1,7 +1,6 @@
 /**:
   ros__parameters:
     # -- system --
-    ctrl_period: 0.03 # control period [s]
     traj_resample_dist: 0.1 # path resampling interval [m]
     use_steer_prediction: false # flag for using steer prediction (do not use steer measurement)
     admissible_position_error: 5.0 # stop mpc calculation when error is larger than the following value
