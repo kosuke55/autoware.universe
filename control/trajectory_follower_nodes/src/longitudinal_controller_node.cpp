@@ -347,7 +347,7 @@ rcl_interfaces::msg::SetParametersResult LongitudinalController::paramCallback(
   return result;
 }
 
-void LongitudinalController::callbackTimerControl()
+void LongitudinalController::run()
 {
   // wait for initial pointers
   if (
@@ -468,6 +468,7 @@ LongitudinalController::ControlState LongitudinalController::updateControlState(
   const bool8_t departure_condition_from_stopping =
     stop_dist > p.drive_state_stop_dist + p.drive_state_offset_stop_dist;
   const bool8_t departure_condition_from_stopped = stop_dist > p.drive_state_stop_dist;
+  const bool8_t keep_stopped_condition = lateral_sync_data_.steer_converged;
 
   const bool8_t stopping_condition = stop_dist < p.stopping_state_stop_dist;
   if (
@@ -522,7 +523,7 @@ LongitudinalController::ControlState LongitudinalController::updateControlState(
       return ControlState::DRIVE;
     }
   } else if (current_control_state == ControlState::STOPPED) {
-    if (departure_condition_from_stopped) {
+    if (departure_condition_from_stopped && keep_stopped_condition) {
       m_pid_vel.reset();
       m_lpf_vel_error->reset(0.0);
       // prevent the car from taking a long time to start to move
