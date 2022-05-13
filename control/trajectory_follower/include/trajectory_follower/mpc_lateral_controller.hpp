@@ -77,8 +77,7 @@ public:
   virtual ~MpcLateralController();
 
 private:
-  rclcpp::Node * node_;
-  // rclcpp::Node::SharedPtr node_;
+  rclcpp::Node::SharedPtr node_;
 
   //!< @brief topic publisher for control command
   rclcpp::Publisher<autoware_auto_control_msgs::msg::AckermannLateralCommand>::SharedPtr
@@ -148,7 +147,7 @@ private:
   /**
    * @brief compute and publish control command for path follow with a constant control period
    */
-  LateralSyncData run() override;
+  LateralOutput run() override;
 
   /**
    * @brief set m_current_trajectory with received message
@@ -177,10 +176,11 @@ private:
   void onSteering(const autoware_auto_vehicle_msgs::msg::SteeringReport::SharedPtr msg);
 
   /**
-   * @brief publish control command
+   * @brief create control command
    * @param [in] cmd published control command
    */
-  void publishCtrlCmd(autoware_auto_control_msgs::msg::AckermannLateralCommand cmd);
+  autoware_auto_control_msgs::msg::AckermannLateralCommand createCtrlCmdMsg(
+    autoware_auto_control_msgs::msg::AckermannLateralCommand cmd);
 
   /**
    * @brief publish predicted future trajectory

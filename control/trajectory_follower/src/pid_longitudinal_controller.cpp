@@ -39,7 +39,7 @@ PidLongitudinalController::PidLongitudinalController(rclcpp::Node * node)
   using std::placeholders::_1;
 
   // parameters timer
-  m_longitudinal_ctrl_period = node_->declare_parameter<float64_t>("longitudinal_ctrl_period");
+  m_longitudinal_ctrl_period = node_->get_parameter("ctrl_period").as_double();
 
   m_wheel_base = vehicle_info_util::VehicleInfoUtil(*node_).getVehicleInfo().wheel_base_m;
 
@@ -347,13 +347,14 @@ rcl_interfaces::msg::SetParametersResult PidLongitudinalController::paramCallbac
   return result;
 }
 
-LongitudinalSyncData PidLongitudinalController::run()
+LongitudinalOutput PidLongitudinalController::run()
 {
   // wait for initial pointers
   if (
     !m_current_velocity_ptr || !m_prev_velocity_ptr || !m_trajectory_ptr ||
     !m_tf_buffer.canTransform(m_trajectory_ptr->header.frame_id, "base_link", tf2::TimePointZero)) {
-    return longitudinal_sync_data_;
+    LongitudinalOutput output;
+    return output;  // todo
   }
 
   // get current ego pose
@@ -374,9 +375,10 @@ LongitudinalSyncData PidLongitudinalController::run()
     m_control_state = ControlState::EMERGENCY;                          // update control state
     const Motion raw_ctrl_cmd = calcEmergencyCtrlCmd(control_data.dt);  // calculate control command
     m_prev_raw_ctrl_cmd = raw_ctrl_cmd;
-    publishCtrlCmd(raw_ctrl_cmd, control_data.current_motion.vel);  // publish control command
+    const auto cmd_msg = createCtrlCmdMsg(raw_ctrl_cmd, control_data.current_motion.vel);  // create control command
     publishDebugData(raw_ctrl_cmd, control_data);                   // publish debug data
-    return longitudinal_sync_data_;
+    LongitudinalOutput output{cmd_msg};
+    return output;
   }
 
   // update control state
@@ -386,12 +388,13 @@ LongitudinalSyncData PidLongitudinalController::run()
   const Motion ctrl_cmd = calcCtrlCmd(m_control_state, current_pose, control_data);
 
   // publish control command
-  publishCtrlCmd(ctrl_cmd, control_data.current_motion.vel);
+  const auto cmd_msg = createCtrlCmdMsg(ctrl_cmd, control_data.current_motion.vel);
+  LongitudinalOutput output{cmd_msg};
 
   // publish debug data
   publishDebugData(ctrl_cmd, control_data);
 
-  return longitudinal_sync_data_;
+  return output;
 }
 
 PidLongitudinalController::ControlData PidLongitudinalController::getControlData(
@@ -611,14 +614,15 @@ PidLongitudinalController::Motion PidLongitudinalController::calcCtrlCmd(
 }
 
 // Do not use nearest_idx here
-void PidLongitudinalController::publishCtrlCmd(const Motion & ctrl_cmd, float64_t current_vel)
+autoware_auto_control_msgs::msg::LongitudinalCommand PidLongitudinalController::createCtrlCmdMsg(
+  const Motion & ctrl_cmd, float64_t current_vel)
 {
   // publish control command
   autoware_auto_control_msgs::msg::LongitudinalCommand cmd{};
   cmd.stamp = rclcpp::Clock{RCL_ROS_TIME}.now();
   cmd.speed = static_cast<decltype(cmd.speed)>(ctrl_cmd.vel);
   cmd.acceleration = static_cast<decltype(cmd.acceleration)>(ctrl_cmd.acc);
-  m_pub_control_cmd->publish(cmd);
+  // m_pub_control_cmd->publish(cmd);
 
   // store current velocity history
   m_vel_hist.push_back({rclcpp::Clock{RCL_ROS_TIME}.now(), current_vel});
@@ -627,6 +631,8 @@ void PidLongitudinalController::publishCtrlCmd(const Motion & ctrl_cmd, float64_
   }
 
   m_prev_ctrl_cmd = ctrl_cmd;
+
+  return cmd;
 }
 
 void PidLongitudinalController::publishDebugData(

@@ -14,12 +14,11 @@
 
 #include "trajectory_follower_nodes/controller_node.hpp"
 
-#include "trajectory_follower/pid_longitudinal_controller.hpp"
-#include "trajectory_follower/mpc_lateral_controller.hpp"
-
 #include "motion_common/motion_common.hpp"
 #include "motion_common/trajectory_common.hpp"
 #include "time_utils/time_utils.hpp"
+#include "trajectory_follower/mpc_lateral_controller.hpp"
+#include "trajectory_follower/pid_longitudinal_controller.hpp"
 
 #include <algorithm>
 #include <limits>
@@ -36,19 +35,17 @@ namespace control
 {
 namespace trajectory_follower_nodes
 {
-Controller::Controller(const rclcpp::NodeOptions & node_options)
-: Node("controller", node_options)
+Controller::Controller(const rclcpp::NodeOptions & node_options) : Node("controller", node_options)
 {
   using std::placeholders::_1;
 
-  lateral_controller_ =
-    std::make_shared<trajectory_follower::MpcLateralController>(this);
-  longitudinal_controller_ =
-    std::make_shared<trajectory_follower::PidLongitudinalController>(this);
+  const double m_ctrl_period = declare_parameter<float64_t>("ctrl_period", 0.015);
 
-  // parameters timer
-  // const double m_ctrl_period = declare_parameter<float64_t>("ctrl_period");
-  const double m_ctrl_period = 0.03;
+  lateral_controller_ = std::make_shared<trajectory_follower::MpcLateralController>(this);
+  longitudinal_controller_ = std::make_shared<trajectory_follower::PidLongitudinalController>(this);
+
+  m_control_cmd_pub_ = create_publisher<autoware_auto_control_msgs::msg::AckermannControlCommand>(
+    "~/output/control_cmd", rclcpp::QoS{1}.transient_local());
 
   // Timer
   {
@@ -61,11 +58,17 @@ Controller::Controller(const rclcpp::NodeOptions & node_options)
 
 void Controller::callbackTimerControl()
 {
-  const auto longitudinal_sync_data = longitudinal_controller_->run();
-  const auto lateral_sync_data = lateral_controller_->run();
+  const auto longitudinal_output = longitudinal_controller_->run();
+  const auto lateral_output = lateral_controller_->run();
 
-  longitudinal_controller_->sync(lateral_sync_data);
-  lateral_controller_->sync(longitudinal_sync_data);
+  longitudinal_controller_->sync(lateral_output.sync_data);
+  lateral_controller_->sync(longitudinal_output.sync_data);
+
+  autoware_auto_control_msgs::msg::AckermannControlCommand out;
+  out.stamp = this->now();
+  out.lateral = lateral_output.control_cmd;
+  out.longitudinal = longitudinal_output.control_cmd;
+  m_control_cmd_pub_->publish(out);
 }
 
 }  // namespace trajectory_follower_nodes
@@ -74,5 +77,4 @@ void Controller::callbackTimerControl()
 }  // namespace autoware
 
 #include "rclcpp_components/register_node_macro.hpp"
-RCLCPP_COMPONENTS_REGISTER_NODE(
-  autoware::motion::control::trajectory_follower_nodes::Controller)
+RCLCPP_COMPONENTS_REGISTER_NODE(autoware::motion::control::trajectory_follower_nodes::Controller)

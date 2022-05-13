@@ -18,6 +18,8 @@
 #include "rclcpp/rclcpp.hpp"
 #include "trajectory_follower/sync_data.hpp"
 
+#include "autoware_auto_control_msgs/msg/ackermann_lateral_command.hpp"
+
 namespace autoware
 {
 namespace motion
@@ -26,10 +28,16 @@ namespace control
 {
 namespace trajectory_follower
 {
+struct LateralOutput
+{
+  autoware_auto_control_msgs::msg::AckermannLateralCommand control_cmd;
+  LateralSyncData sync_data;
+};
+
 class LateralControllerBase
 {
 public:
-  virtual LateralSyncData run() = 0;
+  virtual LateralOutput run() = 0;
   void sync(LongitudinalSyncData longitudinal_sync_data)
   {
     longitudinal_sync_data_ = longitudinal_sync_data;

@@ -83,8 +83,7 @@ private:
     float64_t slope_angle{0.0};
     float64_t dt{0.0};
   };
-  rclcpp::Node * node_;
-  // rclcpp::Node::SharedPtr node_;
+  rclcpp::Node::SharedPtr node_;
   rclcpp::Logger logger_;
   rclcpp::Clock::SharedPtr clock_;
 
@@ -216,7 +215,6 @@ private:
     std::make_shared<rclcpp::Time>(rclcpp::Clock{RCL_ROS_TIME}.now())};
 
   LateralSyncData lateral_sync_data_;
-  LongitudinalSyncData longitudinal_sync_data_;
 
   /**
    * @brief set current and previous velocity with received message
@@ -234,7 +232,7 @@ private:
    * @brief compute control command, and publish periodically
    */
   // void callbackTimerControl();
-  LongitudinalSyncData run() override;
+  LongitudinalOutput run() override;
 
   /**
    * @brief calculate data for controllers whose type is ControlData
@@ -271,7 +269,8 @@ private:
    * @param [in] ctrl_cmd calculated control command to control velocity
    * @param [in] current_vel current velocity of the vehicle
    */
-  void publishCtrlCmd(const Motion & ctrl_cmd, const float64_t current_vel);
+  autoware_auto_control_msgs::msg::LongitudinalCommand createCtrlCmdMsg(
+    const Motion & ctrl_cmd, const float64_t current_vel);
 
   /**
    * @brief publish debug data

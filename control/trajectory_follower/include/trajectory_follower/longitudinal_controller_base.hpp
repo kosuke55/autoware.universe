@@ -17,6 +17,7 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "trajectory_follower/sync_data.hpp"
+
 #include "autoware_auto_control_msgs/msg/longitudinal_command.hpp"
 
 namespace autoware
@@ -27,10 +28,15 @@ namespace control
 {
 namespace trajectory_follower
 {
+struct LongitudinalOutput
+{
+  autoware_auto_control_msgs::msg::LongitudinalCommand control_cmd;
+  LongitudinalSyncData sync_data;
+};
 class LongitudinalControllerBase
 {
 public:
-  virtual LongitudinalSyncData run() = 0;
+  virtual LongitudinalOutput run() = 0;
   void sync(LateralSyncData lateral_sync_data) { lateral_sync_data_ = lateral_sync_data; };
 
 protected:

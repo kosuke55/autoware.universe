@@ -24,14 +24,15 @@
 #include "tf2_ros/buffer.h"
 #include "tf2_ros/transform_listener.h"
 #include "trajectory_follower/debug_values.hpp"
-#include "trajectory_follower/longitudinal_controller_utils.hpp"
-#include "trajectory_follower/longitudinal_controller_base.hpp"
 #include "trajectory_follower/lateral_controller_base.hpp"
+#include "trajectory_follower/longitudinal_controller_base.hpp"
+#include "trajectory_follower/longitudinal_controller_utils.hpp"
 #include "trajectory_follower/lowpass_filter.hpp"
 #include "trajectory_follower/pid.hpp"
 #include "trajectory_follower/smooth_stop.hpp"
 #include "vehicle_info_util/vehicle_info_util.hpp"
 
+#include "autoware_auto_control_msgs/msg/ackermann_control_command.hpp"
 #include "autoware_auto_control_msgs/msg/longitudinal_command.hpp"
 #include "autoware_auto_planning_msgs/msg/trajectory.hpp"
 #include "autoware_auto_system_msgs/msg/float32_multi_array_diagnostic.hpp"
@@ -71,6 +72,9 @@ private:
 
   std::shared_ptr<trajectory_follower::LongitudinalControllerBase> longitudinal_controller_;
   std::shared_ptr<trajectory_follower::LateralControllerBase> lateral_controller_;
+
+  rclcpp::Publisher<autoware_auto_control_msgs::msg::AckermannControlCommand>::SharedPtr
+    m_control_cmd_pub_;
 
   /**
    * @brief compute control command, and publish periodically

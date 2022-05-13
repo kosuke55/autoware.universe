@@ -53,7 +53,7 @@ MpcLateralController::MpcLateralController(rclcpp::Node * node) : node_{node}
 {
   using std::placeholders::_1;
 
-  m_mpc.m_ctrl_period = node_->declare_parameter<float64_t>("ctrl_period");
+  m_mpc.m_ctrl_period = node_->get_parameter("ctrl_period").as_double();
   m_enable_path_smoothing = node_->declare_parameter<bool8_t>("enable_path_smoothing");
   m_path_filter_moving_ave_num = node_->declare_parameter<int64_t>("path_filter_moving_ave_num");
   m_curvature_smoothing_num_traj = node_->declare_parameter<int64_t>("curvature_smoothing_num_traj");
@@ -166,13 +166,14 @@ MpcLateralController::MpcLateralController(rclcpp::Node * node) : node_{node}
 MpcLateralController::~MpcLateralController()
 {
   autoware_auto_control_msgs::msg::AckermannLateralCommand stop_cmd = getStopControlCommand();
-  publishCtrlCmd(stop_cmd);
+  createCtrlCmdMsg(stop_cmd); //todo
 }
 
-LateralSyncData MpcLateralController::run()
+LateralOutput MpcLateralController::run()
 {
   if (!checkData() || !updateCurrentPose()) {
-    return lateral_sync_data_;
+    LateralOutput output{};
+    return output;  // todo
   }
 
   autoware_auto_control_msgs::msg::AckermannLateralCommand ctrl_cmd;
@@ -196,10 +197,11 @@ LateralSyncData MpcLateralController::run()
     // Use previous command value as previous raw steer command
     m_mpc.m_raw_steer_cmd_prev = m_ctrl_cmd_prev.steering_tire_angle;
 
-    publishCtrlCmd(m_ctrl_cmd_prev);
+    const auto cmd_msg = createCtrlCmdMsg(m_ctrl_cmd_prev);
     publishPredictedTraj(predicted_traj);
     publishDiagnostic(diagnostic);
-    return lateral_sync_data_;
+    LateralOutput output{cmd_msg};
+    return output;
   }
 
   if (!is_mpc_solved) {
@@ -209,11 +211,11 @@ LateralSyncData MpcLateralController::run()
   }
 
   m_ctrl_cmd_prev = ctrl_cmd;
-  publishCtrlCmd(ctrl_cmd);
+  const auto cmd_msg = createCtrlCmdMsg(ctrl_cmd);
   publishPredictedTraj(predicted_traj);
   publishDiagnostic(diagnostic);
-
-  return lateral_sync_data_;
+  LateralOutput output{cmd_msg};
+  return output;
 }
 
 bool8_t MpcLateralController::checkData() const
@@ -350,12 +352,13 @@ bool8_t MpcLateralController::isStoppedState() const
   }
 }
 
-void MpcLateralController::publishCtrlCmd(
+autoware_auto_control_msgs::msg::AckermannLateralCommand MpcLateralController::createCtrlCmdMsg(
   autoware_auto_control_msgs::msg::AckermannLateralCommand ctrl_cmd)
 {
   ctrl_cmd.stamp = node_->now();
-  m_pub_ctrl_cmd->publish(ctrl_cmd);
+  // m_pub_ctrl_cmd->publish(ctrl_cmd);
   m_steer_cmd_prev = ctrl_cmd.steering_tire_angle;
+  return ctrl_cmd;
 }
 
 void MpcLateralController::publishPredictedTraj(
