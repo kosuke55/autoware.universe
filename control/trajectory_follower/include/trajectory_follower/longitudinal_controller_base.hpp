@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TRAJECTORY_FOLLOWER__LONGITUDINAL_CONTROLLER_HPP_
-#define TRAJECTORY_FOLLOWER__LONGITUDINAL_CONTROLLER_HPP_
+#ifndef TRAJECTORY_FOLLOWER__LONGITUDINAL_CONTROLLER_BASE_HPP_
+#define TRAJECTORY_FOLLOWER__LONGITUDINAL_CONTROLLER_BASE_HPP_
 
 #include "rclcpp/rclcpp.hpp"
 #include "trajectory_follower/sync_data.hpp"
+#include "autoware_auto_control_msgs/msg/longitudinal_command.hpp"
 
 namespace autoware
 {
@@ -26,11 +27,11 @@ namespace control
 {
 namespace trajectory_follower
 {
-class LongitudinalController
+class LongitudinalControllerBase
 {
 public:
   virtual LongitudinalSyncData run() = 0;
-  void sync(LateralSyncData lateral_sync_data);
+  void sync(LateralSyncData lateral_sync_data) { lateral_sync_data_ = lateral_sync_data; };
 
 protected:
   LateralSyncData lateral_sync_data_;
@@ -41,4 +42,4 @@ protected:
 }  // namespace motion
 }  // namespace autoware
 
-#endif  // TRAJECTORY_FOLLOWER__LONGITUDINAL_CONTROLLER_HPP_
+#endif  // TRAJECTORY_FOLLOWER__LONGITUDINAL_CONTROLLER_BASE_HPP_

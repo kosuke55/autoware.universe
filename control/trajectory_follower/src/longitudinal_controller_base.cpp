@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TRAJECTORY_FOLLOWER__LONGITUDINAL_CONTROLLER_HPP_
-#define TRAJECTORY_FOLLOWER__LONGITUDINAL_CONTROLLER_HPP_
+// hppに全部書けばよい。このファイル要らなそう。
 
-#include "rclcpp/rclcpp.hpp"
-#include "trajectory_follower/sync_data.hpp"
+#include "trajectory_follower/longitudinal_controller_base.hpp"
 
 namespace autoware
 {
@@ -26,19 +24,11 @@ namespace control
 {
 namespace trajectory_follower
 {
-class LongitudinalController
-{
-public:
-  virtual LongitudinalSyncData run() = 0;
-  void sync(LateralSyncData lateral_sync_data);
-
-protected:
-  LateralSyncData lateral_sync_data_;
-};
+void LongitudinalControllerBase::sync(LateralSyncData lateral_sync_data) {
+    lateral_sync_data_ =lateral_sync_data ;
+}
 
 }  // namespace trajectory_follower
 }  // namespace control
 }  // namespace motion
 }  // namespace autoware
-
-#endif  // TRAJECTORY_FOLLOWER__LONGITUDINAL_CONTROLLER_HPP_
