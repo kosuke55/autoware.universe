@@ -51,6 +51,8 @@ PidLongitudinalController::PidLongitudinalController(rclcpp::Node * node)
   m_enable_smooth_stop = node_->declare_parameter<bool8_t>("enable_smooth_stop");
   m_enable_overshoot_emergency = node_->declare_parameter<bool8_t>("enable_overshoot_emergency");
   m_enable_slope_compensation = node_->declare_parameter<bool8_t>("enable_slope_compensation");
+  m_enable_keep_stopped_until_steer_convergence =
+    node_->declare_parameter<bool8_t>("enable_keep_stopped_until_steer_convergence");
 
   // parameters for state transition
   {
@@ -385,7 +387,8 @@ LongitudinalOutput PidLongitudinalController::run()
     const auto cmd_msg =
       createCtrlCmdMsg(raw_ctrl_cmd, control_data.current_motion.vel);  // create control command
     publishDebugData(raw_ctrl_cmd, control_data);                       // publish debug data
-    LongitudinalOutput output{cmd_msg};
+    LongitudinalOutput output;
+    output.control_cmd = cmd_msg;
     return output;
   }
 
@@ -397,7 +400,8 @@ LongitudinalOutput PidLongitudinalController::run()
 
   // publish control command
   const auto cmd_msg = createCtrlCmdMsg(ctrl_cmd, control_data.current_motion.vel);
-  LongitudinalOutput output{cmd_msg};
+  LongitudinalOutput output;
+  output.control_cmd = cmd_msg;
 
   // publish debug data
   publishDebugData(ctrl_cmd, control_data);
@@ -480,7 +484,7 @@ PidLongitudinalController::ControlState PidLongitudinalController::updateControl
   const bool8_t departure_condition_from_stopping =
     stop_dist > p.drive_state_stop_dist + p.drive_state_offset_stop_dist;
   const bool8_t departure_condition_from_stopped = stop_dist > p.drive_state_stop_dist;
-  const bool8_t keep_stopped_condition = lateral_sync_data_.is_steer_converged;
+  const bool8_t keep_stopped_condition = !lateral_sync_data_.is_steer_converged;
 
   const bool8_t stopping_condition = stop_dist < p.stopping_state_stop_dist;
   if (
@@ -535,7 +539,9 @@ PidLongitudinalController::ControlState PidLongitudinalController::updateControl
       return ControlState::DRIVE;
     }
   } else if (current_control_state == ControlState::STOPPED) {
-    if (departure_condition_from_stopped && !keep_stopped_condition) {
+    if (
+      departure_condition_from_stopped &&
+      (!m_enable_keep_stopped_until_steer_convergence || !keep_stopped_condition)) {
       m_pid_vel.reset();
       m_lpf_vel_error->reset(0.0);
       // prevent the car from taking a long time to start to move
