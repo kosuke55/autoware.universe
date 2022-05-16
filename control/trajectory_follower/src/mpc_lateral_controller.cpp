@@ -72,6 +72,9 @@ MpcLateralController::MpcLateralController(rclcpp::Node * node) : node_{node}
   m_stop_state_entry_ego_speed = node_->declare_parameter<float64_t>("stop_state_entry_ego_speed");
   m_stop_state_entry_target_speed =
     node_->declare_parameter<float64_t>("stop_state_entry_target_speed");
+  m_converged_steer_rad = node_->declare_parameter<float64_t>("converged_steer_rad");
+  m_check_steer_converged_for_stopped_state =
+    node_->declare_parameter<bool8_t>("check_steer_converged_for_stopped_state");
 
   /* mpc parameters */
   const float64_t steer_lim_deg = node_->declare_parameter<float64_t>("steer_lim_deg");
@@ -180,7 +183,7 @@ MpcLateralController::~MpcLateralController()
 LateralOutput MpcLateralController::run()
 {
   if (!checkData() || !updateCurrentPose()) {
-    LateralOutput output{};
+    LateralOutput output;
     return output;  // todo
   }
 
@@ -208,7 +211,11 @@ LateralOutput MpcLateralController::run()
     const auto cmd_msg = createCtrlCmdMsg(m_ctrl_cmd_prev);
     publishPredictedTraj(predicted_traj);
     publishDiagnostic(diagnostic);
-    LateralOutput output{cmd_msg};
+    LateralOutput output;
+    output.control_cmd = cmd_msg;
+    output.sync_data.is_steer_converged =
+      std::abs(cmd_msg.steering_tire_angle - m_current_steering_ptr->steering_tire_angle) <
+      m_converged_steer_rad;
     return output;
   }
 
@@ -223,7 +230,11 @@ LateralOutput MpcLateralController::run()
   const auto cmd_msg = createCtrlCmdMsg(ctrl_cmd);
   publishPredictedTraj(predicted_traj);
   publishDiagnostic(diagnostic);
-  LateralOutput output{cmd_msg};
+  LateralOutput output;
+  output.control_cmd = cmd_msg;
+  output.sync_data.is_steer_converged =
+    std::abs(cmd_msg.steering_tire_angle - m_current_steering_ptr->steering_tire_angle) <
+    m_converged_steer_rad;
   return output;
 }
 
@@ -358,7 +369,10 @@ bool8_t MpcLateralController::isStoppedState() const
     m_current_trajectory_ptr->points.at(static_cast<size_t>(nearest)).longitudinal_velocity_mps;
   if (
     std::fabs(current_vel) < m_stop_state_entry_ego_speed &&
-    std::fabs(target_vel) < m_stop_state_entry_target_speed) {
+    std::fabs(target_vel) < m_stop_state_entry_target_speed &&
+    (!m_check_steer_converged_for_stopped_state ||
+     std::abs(m_ctrl_cmd_prev.steering_tire_angle - m_current_steering_ptr->steering_tire_angle) <
+       m_converged_steer_rad)) {
     return true;
   } else {
     return false;
