@@ -46,6 +46,18 @@ rclcpp_components_register_node(${LATLON_MUXER_NODE}
   EXECUTABLE ${LATLON_MUXER_NODE}_exe
 )
 
+set(CONTROLLER_NODE controller_node)
+ament_auto_add_library(${CONTROLLER_NODE} SHARED
+include/trajectory_follower_nodes/controller_node.hpp
+  src/controller_node.cpp
+)
+
+target_compile_options(${CONTROLLER_NODE} PRIVATE -Wno-error=old-style-cast)
+rclcpp_components_register_node(${CONTROLLER_NODE}
+  PLUGIN "autoware::motion::control::trajectory_follower_nodes::Controller"
+  EXECUTABLE ${CONTROLLER_NODE}_exe
+)
+
 if(BUILD_TESTING)
   set(TRAJECTORY_FOLLOWER_NODES_TEST test_trajectory_follower_nodes)
   ament_add_ros_isolated_gtest(${TRAJECTORY_FOLLOWER_NODES_TEST}
@@ -57,10 +69,16 @@ if(BUILD_TESTING)
   ament_target_dependencies(${TRAJECTORY_FOLLOWER_NODES_TEST} fake_test_node)
   target_link_libraries(${TRAJECTORY_FOLLOWER_NODES_TEST} ${LATLON_MUXER_NODE} ${LATERAL_CONTROLLER_NODE} ${LONGITUDINAL_CONTROLLER_NODE})
 
-  #find_package(autoware_testing REQUIRED)
-  #add_smoke_test(${PROJECT_NAME} ${LATLON_MUXER_NODE}_exe PARAM_FILENAME latlon_muxer_defaults.param.yaml)
-  #add_smoke_test(${PROJECT_NAME} ${LATERAL_CONTROLLER_NODE}_exe PARAM_FILENAME lateral_controller_defaults.param.yaml)
-  #add_smoke_test(${PROJECT_NAME} ${LONGITUDINAL_CONTROLLER_NODE}_exe PARAM_FILENAME longitudinal_controller_defaults.param.yaml)
+  find_package(autoware_testing REQUIRED)
+  add_smoke_test(${PROJECT_NAME} ${LATLON_MUXER_NODE}_exe
+    PARAM_FILENAMES "latlon_muxer_defaults.param.yaml"
+  )
+  add_smoke_test(${PROJECT_NAME} ${LATERAL_CONTROLLER_NODE}_exe
+    PARAM_FILENAMES "lateral_controller_defaults.param.yaml test_vehicle_info.param.yaml"
+  )
+  add_smoke_test(${PROJECT_NAME} ${LONGITUDINAL_CONTROLLER_NODE}_exe
+    PARAM_FILENAMES "longitudinal_controller_defaults.param.yaml test_vehicle_info.param.yaml"
+  )
 endif()
 
 ament_auto_package(
