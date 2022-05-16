@@ -129,6 +129,7 @@ private:
   bool8_t m_enable_smooth_stop;
   bool8_t m_enable_overshoot_emergency;
   bool8_t m_enable_slope_compensation;
+  bool8_t m_enable_keep_stopped_until_steer_convergence;
 
   // smooth stop transition
   struct StateTransitionParams
@@ -213,8 +214,6 @@ private:
 
   std::shared_ptr<rclcpp::Time> m_last_running_time{
     std::make_shared<rclcpp::Time>(rclcpp::Clock{RCL_ROS_TIME}.now())};
-
-  LateralSyncData lateral_sync_data_;
 
   /**
    * @brief set current and previous velocity with received message

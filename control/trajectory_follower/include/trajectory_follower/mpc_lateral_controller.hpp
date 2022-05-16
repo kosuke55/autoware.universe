@@ -115,6 +115,8 @@ private:
   /* parameters for stop state */
   float64_t m_stop_state_entry_ego_speed;
   float64_t m_stop_state_entry_target_speed;
+  float64_t m_converged_steer_rad;
+  bool m_check_steer_converged_for_stopped_state;
 
   // MPC object
   trajectory_follower::MPC m_mpc;
