@@ -48,7 +48,7 @@ rclcpp_components_register_node(${LATLON_MUXER_NODE}
 
 set(CONTROLLER_NODE controller_node)
 ament_auto_add_library(${CONTROLLER_NODE} SHARED
-include/trajectory_follower_nodes/controller_node.hpp
+  include/trajectory_follower_nodes/controller_node.hpp
   src/controller_node.cpp
 )
 
