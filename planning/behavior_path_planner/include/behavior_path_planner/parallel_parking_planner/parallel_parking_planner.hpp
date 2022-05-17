@@ -64,6 +64,7 @@ public:
   bool plan(const Pose goal_pose, lanelet::ConstLanelets lanes, const bool is_forward);
   void setParams(
     const std::shared_ptr<const PlannerData> & planner_data, ParallelParkingParameters parameters);
+  void incrementPathIndex();
   PathWithLaneId getCurrentPath();
   PathWithLaneId getFullPath();
   void clear();

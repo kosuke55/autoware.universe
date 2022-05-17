@@ -54,23 +54,13 @@ using tier4_autoware_utils::transformPose;
 
 namespace behavior_path_planner
 {
+void ParallelParkingPlanner::incrementPathIndex()
+{
+  current_path_idx_ = std::min(current_path_idx_ + 1, paths_.size() - 1);
+}
+
 PathWithLaneId ParallelParkingPlanner::getCurrentPath()
 {
-  const auto current_path = paths_.at(current_path_idx_);
-  const auto current_target = current_path.points.back();
-  const auto self_pose = planner_data_->self_pose->pose;
-
-  const bool is_near_target = tier4_autoware_utils::calcDistance2d(current_target, self_pose) <
-                              parameters_.th_arrived_distance_m;
-
-  const bool is_stopped = std::abs(planner_data_->self_odometry->twist.twist.linear.x) <
-                          parameters_.th_stopped_velocity_mps;
-
-  if (is_near_target && is_stopped) {
-    current_path_idx_ += 1;
-  }
-  current_path_idx_ = std::min(current_path_idx_, paths_.size() - 1);
-
   return paths_.at(current_path_idx_);
 }
 

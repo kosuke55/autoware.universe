@@ -297,7 +297,7 @@ BehaviorModuleOutput PullOverModule::plan()
     if (status_.path_type == PathType::SHIFT) {
       parking_start_pose = shift_parking_path_.shift_point.start;
     } else if (
-      status_.path_type == PathType::ARC_FORWARD || status_.path_type == PathType::ARC_BACK) {
+      status_.path_type == PathType::ARC_FORWARD || status_.path_type == PathType::ARC_BACKWARD) {
       parking_start_pose = parallel_parking_planner_.getStartPose().pose;
     }
     const auto dist_to_parking_start_pose = calcSignedArcLength(
@@ -311,7 +311,8 @@ BehaviorModuleOutput PullOverModule::plan()
 
   // Use decided path
   if (status_.has_decided_path) {
-    if (status_.path_type == PathType::ARC_FORWARD || status_.path_type == PathType::ARC_BACK) {
+    if (status_.path_type == PathType::ARC_FORWARD || status_.path_type == PathType::ARC_BACKWARD) {
+      if (hasFinishedCurrentPath()) parallel_parking_planner_.incrementPathIndex();
       status_.path = parallel_parking_planner_.getCurrentPath();
     }
   }
@@ -336,7 +337,7 @@ BehaviorModuleOutput PullOverModule::plan()
             !occupancy_grid_map_.hasObstacleOnPath(
               parallel_parking_planner_.getFullPath(), false)) {
             status_.path = parallel_parking_planner_.getCurrentPath();
-            status_.path_type = is_forward ? PathType::ARC_FORWARD : PathType::ARC_BACK;
+            status_.path_type = is_forward ? PathType::ARC_FORWARD : PathType::ARC_BACKWARD;
             status_.is_safe = true;
             break;
           }
@@ -382,7 +383,7 @@ BehaviorModuleOutput PullOverModule::planWaitingApproval()
   out.path_candidate = std::make_shared<PathWithLaneId>(*(plan().path));
   if (
     status_.is_safe &&
-    (status_.path_type == PathType::ARC_FORWARD || status_.path_type == PathType::ARC_BACK)) {
+    (status_.path_type == PathType::ARC_FORWARD || status_.path_type == PathType::ARC_BACKWARD)) {
     out.path_candidate = std::make_shared<PathWithLaneId>(parallel_parking_planner_.getFullPath());
   }
   return out;
@@ -578,6 +579,39 @@ bool PullOverModule::isLongEnough(
   return distance_to_goal > calcMinimumShiftPathDistance() + buffer;
 }
 
+bool PullOverModule::hasFinishedCurrentPath()
+{
+  if (
+    status_.has_decided_path &&
+    (status_.path_type == PathType::ARC_FORWARD || status_.path_type == PathType::ARC_BACKWARD)) {
+    const auto current_path_end = status_.path.points.back();
+    const auto self_pose = planner_data_->self_pose->pose;
+    const bool is_near_target = tier4_autoware_utils::calcDistance2d(current_path_end, self_pose) <
+                                parameters_.th_arrived_distance_m;
+
+    odometry_buffer_.push_back(planner_data_->self_odometry);
+    // Delete old data in buffer
+    while (true) {
+      const auto time_diff = rclcpp::Time(odometry_buffer_.back()->header.stamp) -
+                             rclcpp::Time(odometry_buffer_.front()->header.stamp);
+      if (time_diff.seconds() < parameters_.th_stopped_time_sec) {
+        break;
+      }
+      odometry_buffer_.pop_front();
+    }
+    bool is_stopped = true;
+    for (const auto odometry : odometry_buffer_) {
+      const double ego_vel = util::l2Norm(odometry->twist.twist.linear);
+      if (ego_vel > parameters_.th_stopped_velocity_mps) {
+        is_stopped = false;
+        break;
+      }
+    }
+    return is_near_target && is_stopped;
+  }
+  return false;
+}
+
 bool PullOverModule::hasFinishedPullOver()
 {
   // check ego car is close enough to goal pose
@@ -701,7 +735,7 @@ void PullOverModule::publishDebugData()
   path_pose_array.header = header;
   if (
     (status_.path_type == PathType::ARC_FORWARD) ||
-    (status_.path_type == PathType::ARC_BACK) && status_.is_safe) {
+    (status_.path_type == PathType::ARC_BACKWARD) && status_.is_safe) {
     Cl = parallel_parking_planner_.getCl();
     Cr = parallel_parking_planner_.getCr();
     start_pose = parallel_parking_planner_.getStartPose();
