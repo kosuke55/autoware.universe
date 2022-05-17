@@ -653,7 +653,7 @@ PidLongitudinalController::Motion PidLongitudinalController::calcCtrlCmd(
 
 // Do not use nearest_idx here
 autoware_auto_control_msgs::msg::LongitudinalCommand PidLongitudinalController::createCtrlCmdMsg(
-  const Motion & ctrl_cmd, float64_t current_vel)
+  const Motion & ctrl_cmd, const float64_t & current_vel)
 {
   // publish control command
   autoware_auto_control_msgs::msg::LongitudinalCommand cmd{};

@@ -179,10 +179,10 @@ private:
 
   /**
    * @brief create control command
-   * @param [in] cmd published control command
+   * @param [in] ctrl_cmd published control command
    */
   autoware_auto_control_msgs::msg::AckermannLateralCommand createCtrlCmdMsg(
-    autoware_auto_control_msgs::msg::AckermannLateralCommand cmd);
+    autoware_auto_control_msgs::msg::AckermannLateralCommand ctrl_cmd);
 
   /**
    * @brief publish predicted future trajectory

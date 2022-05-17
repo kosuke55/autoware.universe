@@ -37,7 +37,7 @@ class LongitudinalControllerBase
 {
 public:
   virtual LongitudinalOutput run() = 0;
-  void sync(LateralSyncData lateral_sync_data) { lateral_sync_data_ = lateral_sync_data; };
+  void sync(LateralSyncData const & lateral_sync_data) { lateral_sync_data_ = lateral_sync_data; };
 
 protected:
   LateralSyncData lateral_sync_data_;
