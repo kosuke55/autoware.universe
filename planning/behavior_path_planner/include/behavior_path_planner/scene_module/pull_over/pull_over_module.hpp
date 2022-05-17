@@ -98,7 +98,7 @@ enum PathType {
   NONE = 0,
   SHIFT,
   ARC_FORWARD,
-  ARC_BACK,
+  ARC_BACKWARD,
 };
 
 struct PUllOverStatus
@@ -188,6 +188,7 @@ private:
   double calcMinimumShiftPathDistance() const;
   bool isLongEnough(
     const lanelet::ConstLanelets & lanelets, const Pose goal_pose, const double buffer = 0) const;
+  bool hasFinishedCurrentPath();
   bool hasFinishedPullOver();
   void updateOccupancyGrid();
   Pose getRefinedGoal();
