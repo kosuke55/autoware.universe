@@ -39,6 +39,7 @@
 #include "nav_msgs/msg/odometry.hpp"
 #include "tf2_msgs/msg/tf_message.hpp"
 
+#include <deque>
 #include <memory>
 #include <string>
 #include <utility>
@@ -131,6 +132,9 @@ private:
   bool8_t m_enable_slope_compensation;
   bool8_t m_enable_keep_stopped_until_steer_convergence;
 
+  // trajectory beffer for detecting new trajectory
+  std::deque<autoware_auto_planning_msgs::msg::Trajectory> m_trajectory_buffer;
+
   // smooth stop transition
   struct StateTransitionParams
   {
@@ -143,6 +147,8 @@ private:
     float64_t stopped_state_entry_duration_time;
     float64_t stopped_state_entry_vel;
     float64_t stopped_state_entry_acc;
+    float64_t stopped_state_new_traj_duration_time;
+    float64_t stopped_state_new_traj_end_dist;
     // emergency
     float64_t emergency_state_overshoot_stop_dist;
     float64_t emergency_state_traj_trans_dev;
@@ -246,6 +252,8 @@ private:
    * @param [in] dt time between previous and current one
    */
   Motion calcEmergencyCtrlCmd(const float64_t dt) const;
+
+  bool checkNewTrajectory();
 
   /**
    * @brief update control state according to the current situation
