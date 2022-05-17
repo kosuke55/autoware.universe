@@ -56,12 +56,8 @@ std::vector<ShiftParkingPath> selectValidPaths(
   const lanelet::routing::RoutingGraphContainer & overall_graphs, const Pose & current_pose,
   const bool isInGoalRouteSection, const Pose & goal_pose);
 bool selectSafePath(
-  const std::vector<ShiftParkingPath> & paths, const lanelet::ConstLanelets & current_lanes,
-  const lanelet::ConstLanelets & target_lanes,
-  const PredictedObjects::ConstSharedPtr & dynamic_objects, const Pose & current_pose,
-  const Twist & current_twist, const double vehicle_width,
-  const behavior_path_planner::PullOverParameters & ros_parameters,
-  const OccupancyGridMap & occupancy_grid_map, ShiftParkingPath * selected_path);
+  const std::vector<ShiftParkingPath> & paths, const OccupancyGridMap & occupancy_grid_map,
+  ShiftParkingPath & selected_path);
 bool isPullOverPathSafe(
   const PathWithLaneId & path, const lanelet::ConstLanelets & current_lanes,
   const lanelet::ConstLanelets & target_lanes,
