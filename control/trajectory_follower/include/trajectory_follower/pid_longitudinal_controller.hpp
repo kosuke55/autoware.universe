@@ -277,7 +277,7 @@ private:
    * @param [in] current_vel current velocity of the vehicle
    */
   autoware_auto_control_msgs::msg::LongitudinalCommand createCtrlCmdMsg(
-    const Motion & ctrl_cmd, const float64_t current_vel);
+    const Motion & ctrl_cmd, const float64_t & current_vel);
 
   /**
    * @brief publish debug data
