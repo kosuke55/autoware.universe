@@ -18,6 +18,8 @@
 #include "motion_common/trajectory_common.hpp"
 #include "time_utils/time_utils.hpp"
 
+#include <tier4_autoware_utils/tier4_autoware_utils.hpp>
+
 #include <algorithm>
 #include <limits>
 #include <memory>
@@ -71,6 +73,10 @@ PidLongitudinalController::PidLongitudinalController(rclcpp::Node * node)
       node_->declare_parameter<float64_t>("stopped_state_entry_vel");  // [m/s]
     p.stopped_state_entry_acc =
       node_->declare_parameter<float64_t>("stopped_state_entry_acc");  // [m/s²]
+    p.stopped_state_new_traj_duration_time =
+      node_->declare_parameter<float64_t>("stopped_state_new_traj_duration_time");  // [s]
+    p.stopped_state_new_traj_end_dist =
+      node_->declare_parameter<float64_t>("stopped_state_new_traj_end_dist");  // [m]
     // emergency
     p.emergency_state_overshoot_stop_dist =
       node_->declare_parameter<float64_t>("emergency_state_overshoot_stop_dist");  // [m]
@@ -191,15 +197,6 @@ PidLongitudinalController::PidLongitudinalController(rclcpp::Node * node)
     node_->create_publisher<autoware_auto_system_msgs::msg::Float32MultiArrayDiagnostic>(
       "~/output/longitudinal_diagnostic", rclcpp::QoS{1});
 
-  // Timer
-  // {
-  //   const auto period_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-  //     std::chrono::duration<float64_t>(m_longitudinal_ctrl_period));
-  //   m_timer_control = rclcpp::create_timer(
-  //     this, get_clock(), period_ns, std::bind(&PidLongitudinalController::callbackTimerControl,
-  //     this));
-  // }
-
   // set parameter callback
   m_set_param_res = node_->add_on_set_parameters_callback(
     std::bind(&PidLongitudinalController::paramCallback, this, _1));
@@ -258,6 +255,8 @@ rcl_interfaces::msg::SetParametersResult PidLongitudinalController::paramCallbac
     update_param("stopped_state_entry_duration_time", p.stopped_state_entry_duration_time);
     update_param("stopped_state_entry_vel", p.stopped_state_entry_vel);
     update_param("stopped_state_entry_acc", p.stopped_state_entry_acc);
+    update_param("stopped_state_new_traj_duration_time", p.stopped_state_new_traj_duration_time);
+    update_param("stopped_state_new_traj_end_dist", p.stopped_state_new_traj_end_dist);
     update_param("emergency_state_overshoot_stop_dist", p.emergency_state_overshoot_stop_dist);
     update_param("emergency_state_traj_trans_dev", p.emergency_state_traj_trans_dev);
     update_param("emergency_state_traj_rot_dev", p.emergency_state_traj_rot_dev);
@@ -471,6 +470,32 @@ PidLongitudinalController::Motion PidLongitudinalController::calcEmergencyCtrlCm
   return Motion{vel, acc};
 }
 
+bool PidLongitudinalController::checkNewTrajectory()
+{
+  // flags for state transition
+  const auto & p = m_state_transition_params;
+
+  m_trajectory_buffer.push_back(*m_trajectory_ptr);
+  while (true) {
+    const auto time_diff = rclcpp::Time(m_trajectory_buffer.back().header.stamp) -
+                           rclcpp::Time(m_trajectory_buffer.front().header.stamp);
+    if (time_diff.seconds() < p.stopped_state_new_traj_duration_time) {
+      break;
+    }
+    m_trajectory_buffer.pop_front();
+  }
+
+  for (const auto trajectory : m_trajectory_buffer) {
+    if (
+      tier4_autoware_utils::calcDistance2d(
+        trajectory.points.back().pose, m_trajectory_ptr->points.back().pose) >
+      p.stopped_state_new_traj_end_dist) {
+      return true;
+    }
+  }
+  return false;
+}
+
 PidLongitudinalController::ControlState PidLongitudinalController::updateControlState(
   const ControlState current_control_state, const ControlData & control_data)
 {
@@ -484,7 +509,8 @@ PidLongitudinalController::ControlState PidLongitudinalController::updateControl
   const bool8_t departure_condition_from_stopping =
     stop_dist > p.drive_state_stop_dist + p.drive_state_offset_stop_dist;
   const bool8_t departure_condition_from_stopped = stop_dist > p.drive_state_stop_dist;
-  const bool8_t keep_stopped_condition = lateral_sync_data_.is_steer_converged;
+  const bool8_t keep_stopped_condition =
+    !lateral_sync_data_.is_steer_converged || checkNewTrajectory();
 
   const bool8_t stopping_condition = stop_dist < p.stopping_state_stop_dist;
   if (
