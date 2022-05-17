@@ -59,10 +59,7 @@ void ParallelParkingPlanner::incrementPathIndex()
   current_path_idx_ = std::min(current_path_idx_ + 1, paths_.size() - 1);
 }
 
-PathWithLaneId ParallelParkingPlanner::getCurrentPath()
-{
-  return paths_.at(current_path_idx_);
-}
+PathWithLaneId ParallelParkingPlanner::getCurrentPath() { return paths_.at(current_path_idx_); }
 
 PathWithLaneId ParallelParkingPlanner::getFullPath()
 {
