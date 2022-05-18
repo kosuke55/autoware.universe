@@ -63,7 +63,7 @@ namespace motion_common = ::autoware::motion::motion_common;
 class TRAJECTORY_FOLLOWER_PUBLIC PidLongitudinalController : public LongitudinalControllerBase
 {
 public:
-  explicit PidLongitudinalController(rclcpp::Node * node);
+  explicit PidLongitudinalController(rclcpp::Node & node);
 
 private:
   struct Motion
@@ -85,8 +85,6 @@ private:
     float64_t dt{0.0};
   };
   rclcpp::Node::SharedPtr node_;
-  rclcpp::Logger logger_;
-  rclcpp::Clock::SharedPtr clock_;
 
   // ros variables
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr m_sub_current_velocity;
@@ -218,8 +216,7 @@ private:
   // debug values
   trajectory_follower::DebugValues m_debug_values;
 
-  std::shared_ptr<rclcpp::Time> m_last_running_time{
-    std::make_shared<rclcpp::Time>(rclcpp::Clock{RCL_ROS_TIME}.now())};
+  std::shared_ptr<rclcpp::Time> m_last_running_time{std::make_shared<rclcpp::Time>(node_->now())};
 
   /**
    * @brief set current and previous velocity with received message

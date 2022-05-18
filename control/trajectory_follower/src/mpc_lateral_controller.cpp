@@ -49,7 +49,7 @@ void update_param(
 }
 }  // namespace
 
-MpcLateralController::MpcLateralController(rclcpp::Node * node) : node_{node}
+MpcLateralController::MpcLateralController(rclcpp::Node & node) : node_{&node}
 {
   using std::placeholders::_1;
 

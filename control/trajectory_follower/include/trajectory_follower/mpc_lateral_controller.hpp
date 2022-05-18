@@ -69,7 +69,7 @@ public:
   /**
    * @brief constructor
    */
-  explicit MpcLateralController(rclcpp::Node * node);
+  explicit MpcLateralController(rclcpp::Node & node);
 
   /**
    * @brief destructor

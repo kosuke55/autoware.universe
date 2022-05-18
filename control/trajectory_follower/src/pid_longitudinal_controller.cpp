@@ -35,8 +35,7 @@ namespace control
 {
 namespace trajectory_follower
 {
-PidLongitudinalController::PidLongitudinalController(rclcpp::Node * node)
-: node_{node}, logger_{node->get_logger()}, clock_{node->get_clock()}
+PidLongitudinalController::PidLongitudinalController(rclcpp::Node & node) : node_{&node}
 {
   using std::placeholders::_1;
 
@@ -218,12 +217,14 @@ void PidLongitudinalController::callbackTrajectory(
   const autoware_auto_planning_msgs::msg::Trajectory::ConstSharedPtr msg)
 {
   if (!trajectory_follower::longitudinal_utils::isValidTrajectory(*msg)) {
-    RCLCPP_ERROR_THROTTLE(logger_, *clock_, 3000, "received invalid trajectory. ignore.");
+    RCLCPP_ERROR_THROTTLE(
+      node_->get_logger(), *node_->get_clock(), 3000, "received invalid trajectory. ignore.");
     return;
   }
 
   if (msg->points.size() < 2) {
-    RCLCPP_WARN_THROTTLE(logger_, *clock_, 3000, "Unexpected trajectory size < 2. Ignored.");
+    RCLCPP_WARN_THROTTLE(
+      node_->get_logger(), *node_->get_clock(), 3000, "Unexpected trajectory size < 2. Ignored.");
     return;
   }
 
@@ -464,8 +465,9 @@ PidLongitudinalController::Motion PidLongitudinalController::calcEmergencyCtrlCm
   const float64_t acc = trajectory_follower::longitudinal_utils::applyDiffLimitFilter(
     p.acc, m_prev_raw_ctrl_cmd.acc, dt, p.jerk);
 
-  auto clock = rclcpp::Clock{RCL_ROS_TIME};
-  RCLCPP_ERROR_THROTTLE(logger_, clock, 3000, "[Emergency stop] vel: %3.3f, acc: %3.3f", vel, acc);
+  RCLCPP_ERROR_THROTTLE(
+    node_->get_logger(), *node_->get_clock(), 3000, "[Emergency stop] vel: %3.3f, acc: %3.3f", vel,
+    acc);
 
   return Motion{vel, acc};
 }
@@ -516,12 +518,12 @@ PidLongitudinalController::ControlState PidLongitudinalController::updateControl
   if (
     std::fabs(current_vel) > p.stopped_state_entry_vel ||
     std::fabs(current_acc) > p.stopped_state_entry_acc) {
-    m_last_running_time = std::make_shared<rclcpp::Time>(rclcpp::Clock{RCL_ROS_TIME}.now());
+    m_last_running_time = std::make_shared<rclcpp::Time>(node_->now());
   }
   const bool8_t stopped_condition =
-    m_last_running_time ? (rclcpp::Clock{RCL_ROS_TIME}.now() - *m_last_running_time).seconds() >
-                            p.stopped_state_entry_duration_time
-                        : false;
+    m_last_running_time
+      ? (node_->now() - *m_last_running_time).seconds() > p.stopped_state_entry_duration_time
+      : false;
 
   const bool8_t emergency_condition =
     m_enable_overshoot_emergency && stop_dist < -p.emergency_state_overshoot_stop_dist;
@@ -613,7 +615,7 @@ PidLongitudinalController::Motion PidLongitudinalController::calcCtrlCmd(
     raw_ctrl_cmd.vel = target_motion.vel;
     raw_ctrl_cmd.acc = applyVelocityFeedback(target_motion, control_data.dt, pred_vel_in_target);
     RCLCPP_DEBUG(
-      logger_,
+      node_->get_logger(),
       "[feedback control]  vel: %3.3f, acc: %3.3f, dt: %3.3f, v_curr: %3.3f, v_ref: %3.3f "
       "feedback_ctrl_cmd.ac: %3.3f",
       raw_ctrl_cmd.vel, raw_ctrl_cmd.acc, control_data.dt, current_vel, target_motion.vel,
@@ -624,8 +626,8 @@ PidLongitudinalController::Motion PidLongitudinalController::calcCtrlCmd(
     raw_ctrl_cmd.vel = m_stopped_state_params.vel;
 
     RCLCPP_DEBUG(
-      logger_, "[smooth stop]: Smooth stopping. vel: %3.3f, acc: %3.3f", raw_ctrl_cmd.vel,
-      raw_ctrl_cmd.acc);
+      node_->get_logger(), "[smooth stop]: Smooth stopping. vel: %3.3f, acc: %3.3f",
+      raw_ctrl_cmd.vel, raw_ctrl_cmd.acc);
   } else if (current_control_state == ControlState::STOPPED) {
     // This acceleration is without slope compensation
     const auto & p = m_stopped_state_params;
@@ -633,7 +635,8 @@ PidLongitudinalController::Motion PidLongitudinalController::calcCtrlCmd(
     raw_ctrl_cmd.acc = trajectory_follower::longitudinal_utils::applyDiffLimitFilter(
       p.acc, m_prev_raw_ctrl_cmd.acc, control_data.dt, p.jerk);
 
-    RCLCPP_DEBUG(logger_, "[Stopped]. vel: %3.3f, acc: %3.3f", raw_ctrl_cmd.vel, raw_ctrl_cmd.acc);
+    RCLCPP_DEBUG(
+      node_->get_logger(), "[Stopped]. vel: %3.3f, acc: %3.3f", raw_ctrl_cmd.vel, raw_ctrl_cmd.acc);
   } else if (current_control_state == ControlState::EMERGENCY) {
     raw_ctrl_cmd = calcEmergencyCtrlCmd(control_data.dt);
   }
@@ -657,13 +660,13 @@ autoware_auto_control_msgs::msg::LongitudinalCommand PidLongitudinalController::
 {
   // publish control command
   autoware_auto_control_msgs::msg::LongitudinalCommand cmd{};
-  cmd.stamp = rclcpp::Clock{RCL_ROS_TIME}.now();
+  cmd.stamp = node_->now();
   cmd.speed = static_cast<decltype(cmd.speed)>(ctrl_cmd.vel);
   cmd.acceleration = static_cast<decltype(cmd.acceleration)>(ctrl_cmd.acc);
   // m_pub_control_cmd->publish(cmd);
 
   // store current velocity history
-  m_vel_hist.push_back({rclcpp::Clock{RCL_ROS_TIME}.now(), current_vel});
+  m_vel_hist.push_back({node_->now(), current_vel});
   while (m_vel_hist.size() > static_cast<size_t>(0.5 / m_longitudinal_ctrl_period)) {
     m_vel_hist.erase(m_vel_hist.begin());
   }
@@ -688,7 +691,7 @@ void PidLongitudinalController::publishDebugData(
 
   // publish debug values
   autoware_auto_system_msgs::msg::Float32MultiArrayDiagnostic debug_msg{};
-  debug_msg.diag_header.data_stamp = rclcpp::Clock{RCL_ROS_TIME}.now();
+  debug_msg.diag_header.data_stamp = node_->now();
   for (const auto & v : m_debug_values.getValues()) {
     debug_msg.diag_array.data.push_back(
       static_cast<decltype(debug_msg.diag_array.data)::value_type>(v));
@@ -697,7 +700,7 @@ void PidLongitudinalController::publishDebugData(
 
   // slope angle
   autoware_auto_system_msgs::msg::Float32MultiArrayDiagnostic slope_msg{};
-  slope_msg.diag_header.data_stamp = rclcpp::Clock{RCL_ROS_TIME}.now();
+  slope_msg.diag_header.data_stamp = node_->now();
   slope_msg.diag_array.data.push_back(
     static_cast<decltype(slope_msg.diag_array.data)::value_type>(control_data.slope_angle));
   m_pub_slope->publish(slope_msg);
@@ -708,10 +711,10 @@ float64_t PidLongitudinalController::getDt()
   float64_t dt;
   if (!m_prev_control_time) {
     dt = m_longitudinal_ctrl_period;
-    m_prev_control_time = std::make_shared<rclcpp::Time>(rclcpp::Clock{RCL_ROS_TIME}.now());
+    m_prev_control_time = std::make_shared<rclcpp::Time>(node_->now());
   } else {
-    dt = (rclcpp::Clock{RCL_ROS_TIME}.now() - *m_prev_control_time).seconds();
-    *m_prev_control_time = rclcpp::Clock{RCL_ROS_TIME}.now();
+    dt = (node_->now() - *m_prev_control_time).seconds();
+    *m_prev_control_time = node_->now();
   }
   const float64_t max_dt = m_longitudinal_ctrl_period * 2.0;
   const float64_t min_dt = m_longitudinal_ctrl_period * 0.5;
@@ -778,7 +781,7 @@ void PidLongitudinalController::storeAccelCmd(const float64_t accel)
   if (m_control_state == ControlState::DRIVE) {
     // convert format
     autoware_auto_control_msgs::msg::LongitudinalCommand cmd;
-    cmd.stamp = rclcpp::Clock{RCL_ROS_TIME}.now();
+    cmd.stamp = node_->now();
     cmd.acceleration = static_cast<decltype(cmd.acceleration)>(accel);
 
     // store published ctrl cmd
@@ -792,9 +795,7 @@ void PidLongitudinalController::storeAccelCmd(const float64_t accel)
   if (m_ctrl_cmd_vec.size() <= 2) {
     return;
   }
-  if (
-    (rclcpp::Clock{RCL_ROS_TIME}.now() - m_ctrl_cmd_vec.at(1).stamp).seconds() >
-    m_delay_compensation_time) {
+  if ((node_->now() - m_ctrl_cmd_vec.at(1).stamp).seconds() > m_delay_compensation_time) {
     m_ctrl_cmd_vec.erase(m_ctrl_cmd_vec.begin());
   }
 }
@@ -893,11 +894,9 @@ float64_t PidLongitudinalController::predictedVelocityInTargetPoint(
   float64_t pred_vel = current_vel_abs;
 
   const auto past_delay_time =
-    rclcpp::Clock{RCL_ROS_TIME}.now() - rclcpp::Duration::from_seconds(delay_compensation_time);
+    node_->now() - rclcpp::Duration::from_seconds(delay_compensation_time);
   for (std::size_t i = 0; i < m_ctrl_cmd_vec.size(); ++i) {
-    if (
-      (rclcpp::Clock{RCL_ROS_TIME}.now() - m_ctrl_cmd_vec.at(i).stamp).seconds() <
-      m_delay_compensation_time) {
+    if ((node_->now() - m_ctrl_cmd_vec.at(i).stamp).seconds() < m_delay_compensation_time) {
       if (i == 0) {
         // size of m_ctrl_cmd_vec is less than m_delay_compensation_time
         pred_vel = current_vel_abs + static_cast<float64_t>(m_ctrl_cmd_vec.at(i).acceleration) *
@@ -916,8 +915,7 @@ float64_t PidLongitudinalController::predictedVelocityInTargetPoint(
 
   const float64_t last_acc = m_ctrl_cmd_vec.at(m_ctrl_cmd_vec.size() - 1).acceleration;
   const float64_t time_to_current =
-    (rclcpp::Clock{RCL_ROS_TIME}.now() - m_ctrl_cmd_vec.at(m_ctrl_cmd_vec.size() - 1).stamp)
-      .seconds();
+    (node_->now() - m_ctrl_cmd_vec.at(m_ctrl_cmd_vec.size() - 1).stamp).seconds();
   pred_vel += last_acc * time_to_current;
 
   // avoid to change sign of current_vel and pred_vel
