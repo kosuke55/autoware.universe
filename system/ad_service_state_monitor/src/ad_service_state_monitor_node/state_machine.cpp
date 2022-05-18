@@ -194,8 +194,9 @@ bool StateMachine::hasArrivedGoal() const
 {
   geometry_msgs::msg::Pose goal_pose = *state_input_.goal_pose;
   if (
+    state_input_.modified_goal_pose != nullptr &&
     rclcpp::Time(state_input_.route->header.stamp).seconds() ==
-    rclcpp::Time(state_input_.modified_goal_pose->header.stamp).seconds()) {
+      rclcpp::Time(state_input_.modified_goal_pose->header.stamp).seconds()) {
     goal_pose = state_input_.modified_goal_pose->pose;
   }
 
