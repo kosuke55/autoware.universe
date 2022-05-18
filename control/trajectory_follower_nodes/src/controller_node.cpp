@@ -41,8 +41,9 @@ Controller::Controller(const rclcpp::NodeOptions & node_options) : Node("control
 
   const double m_ctrl_period = declare_parameter<float64_t>("ctrl_period", 0.015);
 
-  lateral_controller_ = std::make_shared<trajectory_follower::MpcLateralController>(this);
-  longitudinal_controller_ = std::make_shared<trajectory_follower::PidLongitudinalController>(this);
+  lateral_controller_ = std::make_shared<trajectory_follower::MpcLateralController>(*this);
+  longitudinal_controller_ =
+    std::make_shared<trajectory_follower::PidLongitudinalController>(*this);
 
   m_control_cmd_pub_ = create_publisher<autoware_auto_control_msgs::msg::AckermannControlCommand>(
     "~/output/control_cmd", rclcpp::QoS{1}.transient_local());
