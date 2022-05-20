@@ -63,6 +63,18 @@ rclcpp_components_register_node(${LATLON_MUXER_NODE}
   EXECUTABLE ${LATLON_MUXER_NODE}_exe
 )
 
+set(CONTROLLER_NODE controller_node)
+ament_auto_add_library(${CONTROLLER_NODE} SHARED
+  include/trajectory_follower_nodes/controller_node.hpp
+  src/controller_node.cpp
+)
+
+target_compile_options(${CONTROLLER_NODE} PRIVATE -Wno-error=old-style-cast)
+rclcpp_components_register_node(${CONTROLLER_NODE}
+  PLUGIN "autoware::motion::control::trajectory_follower_nodes::Controller"
+  EXECUTABLE ${CONTROLLER_NODE}_exe
+)
+
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()

@@ -75,7 +75,7 @@ bool PathShifter::generate(
   shifted_path->shift_length.resize(reference_path_.points.size(), 0.0);
 
   if (shift_points_.empty()) {
-    RCLCPP_DEBUG_STREAM(logger_, "shift_points_ is empty. Return reference with base offset.");
+    RCLCPP_ERROR(logger_, "shift_points_ is empty. Return reference with base offset.");
     shiftBaseLength(shifted_path, base_offset_);
     return true;
   }

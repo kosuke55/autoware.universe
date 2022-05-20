@@ -80,6 +80,7 @@ private:
   rclcpp::Subscription<HADMapBin>::SharedPtr vector_map_subscriber_;
   rclcpp::Subscription<Odometry>::SharedPtr velocity_subscriber_;
   rclcpp::Subscription<PredictedObjects>::SharedPtr perception_subscriber_;
+  rclcpp::Subscription<OccupancyGrid>::SharedPtr occupancy_grid_subscriber_;
   rclcpp::Subscription<ApprovalMsg>::SharedPtr external_approval_subscriber_;
   rclcpp::Subscription<PathChangeModule>::SharedPtr force_approval_subscriber_;
   rclcpp::Publisher<PathWithLaneId>::SharedPtr path_publisher_;
@@ -118,6 +119,7 @@ private:
   // callback
   void onVelocity(const Odometry::ConstSharedPtr msg);
   void onPerception(const PredictedObjects::ConstSharedPtr msg);
+  void onOccupancyGrid(const OccupancyGrid::ConstSharedPtr msg);
   void onExternalApproval(const ApprovalMsg::ConstSharedPtr msg);
   void onForceApproval(const PathChangeModule::ConstSharedPtr msg);
   void onMap(const HADMapBin::ConstSharedPtr map_msg);
