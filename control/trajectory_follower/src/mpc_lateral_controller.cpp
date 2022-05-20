@@ -215,7 +215,7 @@ LateralOutput MpcLateralController::run()
     output.control_cmd = cmd_msg;
     output.sync_data.is_steer_converged =
       std::abs(cmd_msg.steering_tire_angle - m_current_steering_ptr->steering_tire_angle) <
-      m_converged_steer_rad;
+      static_cast<float>(m_converged_steer_rad);
     return output;
   }
 
@@ -234,7 +234,7 @@ LateralOutput MpcLateralController::run()
   output.control_cmd = cmd_msg;
   output.sync_data.is_steer_converged =
     std::abs(cmd_msg.steering_tire_angle - m_current_steering_ptr->steering_tire_angle) <
-    m_converged_steer_rad;
+    static_cast<float>(m_converged_steer_rad);
   return output;
 }
 
@@ -372,7 +372,7 @@ bool8_t MpcLateralController::isStoppedState() const
     std::fabs(target_vel) < m_stop_state_entry_target_speed &&
     (!m_check_steer_converged_for_stopped_state ||
      std::abs(m_ctrl_cmd_prev.steering_tire_angle - m_current_steering_ptr->steering_tire_angle) <
-       m_converged_steer_rad)) {
+       static_cast<float>(m_converged_steer_rad))) {
     return true;
   } else {
     return false;
