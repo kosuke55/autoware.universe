@@ -641,7 +641,12 @@ MPTOptimizer::ValueMatrix MPTOptimizer::generateValueMatrix(
     }();
 
     const auto adaptive_error_weight = [&]() -> std::array<double, 2> {
-      if (near_kinematic_state_while_planning_from_ego) {
+      if (i == N_ref - 1 && is_containing_path_terminal_point) {
+        return {
+          mpt_param_.terminal_path_lat_error_weight, mpt_param_.terminal_path_yaw_error_weight};
+      } else if (i == N_ref - 1) {
+        return {mpt_param_.terminal_lat_error_weight, mpt_param_.terminal_yaw_error_weight};
+      } else if (near_kinematic_state_while_planning_from_ego) {
         constexpr double obstacle_avoid_error_weight_ratio = 1 / 100.0;
         return {
           mpt_param_.obstacle_avoid_lat_error_weight * obstacle_avoid_error_weight_ratio,
@@ -649,11 +654,6 @@ MPTOptimizer::ValueMatrix MPTOptimizer::generateValueMatrix(
       } else if (ref_points.at(i).near_objects) {
         return {
           mpt_param_.obstacle_avoid_lat_error_weight, mpt_param_.obstacle_avoid_yaw_error_weight};
-      } else if (i == N_ref - 1 && is_containing_path_terminal_point) {
-        return {
-          mpt_param_.terminal_path_lat_error_weight, mpt_param_.terminal_path_yaw_error_weight};
-      } else if (i == N_ref - 1) {
-        return {mpt_param_.terminal_lat_error_weight, mpt_param_.terminal_yaw_error_weight};
       }
       // NOTE: may be better to add decreasing weights in a narrow and sharp curve
       // else if (std::abs(ref_points[i].k) > 0.3) {
