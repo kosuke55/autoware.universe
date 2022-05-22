@@ -107,8 +107,7 @@ Pose ParallelParkingPlanner::getStartPose(
   const Pose goal_pose, const double start_pose_offset, const double R_E_r, const bool is_forward)
 {
   // Not use shoulder lanes.
-  // auto current_lanes = util::getExtendedCurrentLanes(planner_data_);
-  auto current_lanes = util::getCurrentLanes(planner_data_);
+  const auto current_lanes = util::getExtendedCurrentLanes(planner_data_);
   const auto arc_coordinates = lanelet::utils::getArcCoordinates(current_lanes, goal_pose);
 
   // todo
@@ -116,21 +115,15 @@ Pose ParallelParkingPlanner::getStartPose(
   // But the left turn should also have a minimum turning radius.
   float dx = 2 * std::sqrt(std::pow(R_E_r, 2) - std::pow(-arc_coordinates.distance / 2 + R_E_r, 2));
   dx = is_forward ? -dx : dx;
-
   Pose start_pose = calcOffsetPose(goal_pose, dx + start_pose_offset, -arc_coordinates.distance, 0);
 
   return start_pose;
 }
 
-void ParallelParkingPlanner::getStraightPath(
-  const Pose goal_pose, const double start_pose_offset, const double R_E_r, const bool is_forward)
+void ParallelParkingPlanner::generateStraightPath(const Pose start_pose)
 {
   // get stright path before parking.
-
-  // Not use shoulder lanes.
-  auto current_lanes = util::getCurrentLanes(planner_data_);
-
-  const Pose start_pose = getStartPose(goal_pose, start_pose_offset, R_E_r, is_forward);
+  const auto current_lanes = util::getExtendedCurrentLanes(planner_data_);
   const auto start_arc_position = lanelet::utils::getArcCoordinates(current_lanes, start_pose);
 
   const Pose current_pose = planner_data_->self_pose->pose;
@@ -161,9 +154,10 @@ bool ParallelParkingPlanner::planOneTraial(
     is_forward ? -parameters_.after_forward_parking_straight_distance
                : parameters_.after_backward_parking_straight_distance;
   const Pose offsetted_goal_pose = calcOffsetPose(goal_pose, after_parking_straight_distance, 0, 0);
-  getStraightPath(offsetted_goal_pose, start_pose_offset, R_E_r, is_forward);
 
   const Pose start_pose = getStartPose(offsetted_goal_pose, start_pose_offset, R_E_r, is_forward);
+  generateStraightPath(start_pose);
+
   const Pose current_pose = planner_data_->self_pose->pose;
   const Pose current2start = inverseTransformPose(start_pose, current_pose);
   if (is_forward && current2start.position.x < parameters_.decide_path_distance) {

@@ -101,9 +101,7 @@ private:
   Pose getStartPose(
     const Pose goal_pose, const double start_pose_offset, const double R_E_r,
     const bool is_forward);
-  void getStraightPath(
-    const Pose goal_pose, const double start_pose_offset, const double R_E_r,
-    const bool is_forward);
+  void generateStraightPath(const Pose start_pose);
 
   // debug data
   PoseStamped Cr_;
