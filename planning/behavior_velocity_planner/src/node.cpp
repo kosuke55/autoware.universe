@@ -337,7 +337,7 @@ void BehaviorVelocityPlannerNode::onTrigger(
   // NOTE: planner_data must not be referenced for multithreading
   const auto planner_data = planner_data_;
 
-  Path output_path_msg;
+  autoware_auto_planning_msgs::msg::Path output_path_msg;
   if (std::any_of(
         input_path_msg->points.begin(), input_path_msg->points.end(),
         [&](const auto & p) { return p.point.longitudinal_velocity_mps < 0; })) {
