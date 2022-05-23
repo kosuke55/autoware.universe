@@ -70,6 +70,16 @@ PathWithLaneId ParallelParkingPlanner::getFullPath()
   return path;
 }
 
+PathWithLaneId ParallelParkingPlanner::getArcPath()
+{
+  PathWithLaneId path{};
+  for (size_t i = 1; i < paths_.size(); i++) {
+    const auto p = paths_.at(i);
+    path.points.insert(path.points.end(), p.points.begin(), p.points.end());
+  }
+  return path;
+}
+
 void ParallelParkingPlanner::clear()
 {
   current_path_idx_ = 0;

@@ -334,8 +334,7 @@ BehaviorModuleOutput PullOverModule::plan()
           parallel_parking_planner_.setParams(planner_data_, parallel_parking_prameters_);
           if (
             parallel_parking_planner_.plan(modified_goal_pose_, lanes, is_forward) &&
-            !occupancy_grid_map_.hasObstacleOnPath(
-              parallel_parking_planner_.getFullPath(), false)) {
+            !occupancy_grid_map_.hasObstacleOnPath(parallel_parking_planner_.getArcPath(), false)) {
             status_.path = parallel_parking_planner_.getCurrentPath();
             status_.path_type = is_forward ? PathType::ARC_FORWARD : PathType::ARC_BACKWARD;
             status_.is_safe = true;

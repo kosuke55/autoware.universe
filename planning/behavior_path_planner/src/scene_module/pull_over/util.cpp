@@ -263,6 +263,7 @@ std::vector<ShiftParkingPath> getShiftParkingPaths(
           std::max(0.0, (distance_to_goal / distance_pull_over_end_to_goal * pull_over_velocity)));
         point.lane_ids = reference_path2.points.front().lane_ids;
       }
+      candidate_path.straight_path = reference_path1;
       candidate_path.shifted_path = shifted_path;
       // resample is needed for adding orientation to path points for collision check
       candidate_path.path =
@@ -312,7 +313,7 @@ bool selectSafePath(
   ShiftParkingPath & selected_path)
 {
   for (const auto & path : paths) {
-    if (!occupancy_grid_map.hasObstacleOnPath(path.path, false)) {
+    if (!occupancy_grid_map.hasObstacleOnPath(path.shifted_path.path, false)) {
       selected_path = path;
       return true;
     }
