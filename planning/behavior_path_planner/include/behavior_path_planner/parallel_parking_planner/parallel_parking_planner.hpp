@@ -67,6 +67,7 @@ public:
   void incrementPathIndex();
   PathWithLaneId getCurrentPath();
   PathWithLaneId getFullPath();
+  PathWithLaneId getArcPath();
   void clear();
 
   // debug

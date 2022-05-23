@@ -25,6 +25,7 @@ using autoware_auto_planning_msgs::msg::PathWithLaneId;
 struct ShiftParkingPath
 {
   PathWithLaneId path;
+  PathWithLaneId straight_path;
   ShiftedPath shifted_path;
   ShiftPoint shift_point;
   double acceleration{0.0};
