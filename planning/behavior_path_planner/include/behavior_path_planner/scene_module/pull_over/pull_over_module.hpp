@@ -137,6 +137,7 @@ public:
   bool isExecutionRequested() const override;
   bool isExecutionReady() const override;
   BT::NodeStatus updateState() override;
+  void onTimer();
   BehaviorModuleOutput plan() override;
   BehaviorModuleOutput planWaitingApproval() override;
   PathWithLaneId planCandidate() const override;
@@ -146,6 +147,7 @@ public:
   void setParameters(const PullOverParameters & parameters);
 
 private:
+  rclcpp::TimerBase::SharedPtr timer_;
   PullOverParameters parameters_;
   ShiftParkingPath shift_parking_path_;
   rclcpp::Node * node_;

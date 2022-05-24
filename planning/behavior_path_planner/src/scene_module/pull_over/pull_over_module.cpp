@@ -64,6 +64,12 @@ PullOverModule::PullOverModule(
   Cr_pub_ = node.create_publisher<PoseStamped>("~/pull_over/debug/Cr", 1);
   start_pose_pub_ = node.create_publisher<PoseStamped>("~/pull_over/debug/start_pose", 1);
   path_pose_array_pub_ = node.create_publisher<PoseArray>("~/pull_over/debug/path_pose_array", 1);
+
+  // Timer for searching goal and planing path.
+  // const auto period_ns =
+  //   std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(1.0));
+  // timer_ = rclcpp::create_timer(
+  //   &node, node.get_clock(), period_ns, std::bind(&PullOverModule::onTimer, this));
 }
 
 // This function is needed for waiting for planner_data_
@@ -279,6 +285,11 @@ BT::NodeStatus PullOverModule::updateState()
 
   return current_state_;
 }
+
+// void PullOverModule::onTimer()
+// {
+//   if (current_state_ != BT::NodeStatus::RUNNING) return;
+// }
 
 BehaviorModuleOutput PullOverModule::plan()
 {
