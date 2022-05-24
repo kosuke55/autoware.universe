@@ -7,6 +7,7 @@
       pull_over_velocity: 3.0
       margin_from_boundary: 0.5
       decide_path_distance: 10.0
+      min_acc: -0.5
       # goal research
       enable_goal_research: true
       forward_goal_search_length: 20.0
