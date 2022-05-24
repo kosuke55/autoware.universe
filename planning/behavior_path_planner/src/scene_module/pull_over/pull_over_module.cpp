@@ -111,10 +111,10 @@ void PullOverModule::onEntry()
     parameters_.th_stopped_velocity_mps,
     parameters_.after_forward_parking_straight_distance,
     parameters_.after_backward_parking_straight_distance,
-    parameters_.decide_path_distance,
     parameters_.forward_parking_velocity,
     parameters_.backward_parking_velocity,
-    parameters_.arc_path_interval};
+    parameters_.arc_path_interval,
+    parameters_.min_acc};
   status_.has_decided_path = false;
   status_.path_type = PathType::NONE;
   status_.is_safe = false;
@@ -208,7 +208,6 @@ Pose PullOverModule::getRefinedGoal()
 void PullOverModule::researchGoal()
 {
   const auto common_param = occupancy_grid_map_.getParam();
-  const Pose current_pose = planner_data_->self_pose->pose;
   const Pose goal_pose = getRefinedGoal();
   double dx = -parameters_.backward_goal_search_length;
 
@@ -256,11 +255,9 @@ void PullOverModule::researchGoal()
     for (const auto area : pull_over_areas_) {
       const Pose start_to_search = inverseTransformPose(search_pose, area.start_pose);
       const Pose end_to_search = inverseTransformPose(search_pose, area.end_pose);
-      const Pose search_to_current = inverseTransformPose(current_pose, search_pose);
       if (
         start_to_search.position.x > parameters_.goal_to_obj_margin &&
-        end_to_search.position.x < -parameters_.goal_to_obj_margin &&
-        search_to_current.position.x < parameters_.backward_ignore_distance) {
+        end_to_search.position.x < -parameters_.goal_to_obj_margin) {
         GoalCandidate goal_candidate;
         goal_candidate.goal_pose = search_pose;
         goal_candidate.distance_from_original_goal =
@@ -485,7 +482,8 @@ PathWithLaneId PullOverModule::getStopPath()
   const auto current_lanes = util::getExtendedCurrentLanes(planner_data_);
 
   const double current_vel = util::l2Norm(planner_data_->self_odometry->twist.twist.linear);
-  const double current_to_stop_distance = std::pow(current_vel, 2) / std::abs(parameters_.min_acc) / 2;
+  const double current_to_stop_distance =
+    std::pow(current_vel, 2) / std::abs(parameters_.min_acc) / 2;
   const auto arclength_current_pose =
     lanelet::utils::getArcCoordinates(current_lanes, current_pose).length;
 
