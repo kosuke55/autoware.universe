@@ -51,10 +51,10 @@ struct ParallelParkingParameters
   double th_stopped_velocity_mps;
   double after_forward_parking_straight_distance;
   double after_backward_parking_straight_distance;
-  double decide_path_distance;
   double forward_parking_velocity;
   double backward_parking_velocity;
   double arc_path_interval;
+  double min_acc;
 };
 
 class ParallelParkingPlanner
