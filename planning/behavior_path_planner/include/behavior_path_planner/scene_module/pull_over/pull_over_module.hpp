@@ -58,7 +58,7 @@ struct PullOverParameters
   double forward_goal_search_length;
   double backward_goal_search_length;
   double goal_search_interval;
-  double goal2obj_margin;
+  double goal_to_obj_margin;
   double backward_ignore_distance;
   // occupancy grid map
   double collision_check_margin;

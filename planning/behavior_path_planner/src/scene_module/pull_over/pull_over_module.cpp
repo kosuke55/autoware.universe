@@ -252,8 +252,8 @@ void PullOverModule::researchGoal()
       const Pose end_to_search = inverseTransformPose(search_pose, area.end_pose);
       const Pose search_to_current = inverseTransformPose(current_pose, search_pose);
       if (
-        start_to_search.position.x > parameters_.goal2obj_margin &&
-        end_to_search.position.x < -parameters_.goal2obj_margin &&
+        start_to_search.position.x > parameters_.goal_to_obj_margin &&
+        end_to_search.position.x < -parameters_.goal_to_obj_margin &&
         search_to_current.position.x < parameters_.backward_ignore_distance) {
         GoalCandidate goal_candidate;
         goal_candidate.goal_pose = search_pose;
