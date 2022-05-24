@@ -364,7 +364,7 @@ BehaviorModuleOutput PullOverModule::plan()
 
   BehaviorModuleOutput output;
   output.path = status_.is_safe ? std::make_shared<PathWithLaneId>(status_.path)
-                                : std::make_shared<PathWithLaneId>(getReferencePath());
+                                : std::make_shared<PathWithLaneId>(getStopPath());
 
   publishDebugData();
 
@@ -456,6 +456,42 @@ PathWithLaneId PullOverModule::getReferencePath() const
     *route_handler, reference_path, current_lanes, parameters_.after_pull_over_straight_distance,
     common_parameters.minimum_pull_over_length, parameters_.before_pull_over_straight_distance,
     parameters_.deceleration_interval, goal_pose);
+
+  reference_path.drivable_area = util::generateDrivableArea(
+    current_lanes, common_parameters.drivable_area_resolution, common_parameters.vehicle_length,
+    planner_data_);
+
+  return reference_path;
+}
+
+PathWithLaneId PullOverModule::getStopPath()
+{
+  PathWithLaneId reference_path;
+
+  const auto & route_handler = planner_data_->route_handler;
+  const auto current_pose = planner_data_->self_pose->pose;
+  const auto common_parameters = planner_data_->parameters;
+  const auto current_lanes = util::getExtendedCurrentLanes(planner_data_);
+
+  const double current_vel = util::l2Norm(planner_data_->self_odometry->twist.twist.linear);
+  const double current_to_stop_distance = std::pow(current_vel, 2) / std::abs(parameters_.min_acc) / 2;
+  const auto arclength_current_pose =
+    lanelet::utils::getArcCoordinates(current_lanes, current_pose).length;
+
+  reference_path = util::getCenterLinePath(
+    *route_handler, current_lanes, current_pose, common_parameters.backward_path_length,
+    common_parameters.forward_path_length, common_parameters);
+
+  for (auto & point : reference_path.points) {
+    const auto arclength =
+      lanelet::utils::getArcCoordinates(current_lanes, point.point.pose).length;
+    if (current_to_stop_distance < arclength - arclength_current_pose) {
+      point.point.longitudinal_velocity_mps = 0;
+    } else {
+      point.point.longitudinal_velocity_mps =
+        std::min(point.point.longitudinal_velocity_mps, static_cast<float>(current_vel));
+    }
+  }
 
   reference_path.drivable_area = util::generateDrivableArea(
     current_lanes, common_parameters.drivable_area_resolution, common_parameters.vehicle_length,

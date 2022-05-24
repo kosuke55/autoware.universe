@@ -53,6 +53,7 @@ struct PullOverParameters
   double th_stopped_time_sec;
   double margin_from_boundary;
   double decide_path_distance;
+  double min_acc;
   // goal research
   bool enable_goal_research;
   double forward_goal_search_length;
@@ -171,6 +172,7 @@ private:
   std::deque<nav_msgs::msg::Odometry::ConstSharedPtr> odometry_buffer_;
 
   PathWithLaneId getReferencePath() const;
+  PathWithLaneId getStopPath();
   // lanelet::ConstLanelets getCurrentLanes() const;
   lanelet::ConstLanelets getPullOverLanes(const lanelet::ConstLanelets & current_lanes) const;
   std::pair<bool, bool> getSafePath(
