@@ -216,6 +216,10 @@ LateralOutput MpcLateralController::run()
     output.sync_data.is_steer_converged =
       std::abs(cmd_msg.steering_tire_angle - m_current_steering_ptr->steering_tire_angle) <
       static_cast<float>(m_converged_steer_rad);
+    std::cerr << "mpc: is_steer_converged: " << output.sync_data.is_steer_converged
+              << " steer diff: "
+              << std::abs(cmd_msg.steering_tire_angle - m_current_steering_ptr->steering_tire_angle)
+              << " th: " << static_cast<float>(m_converged_steer_rad) << std::endl;
     return output;
   }
 
