@@ -567,6 +567,13 @@ PidLongitudinalController::ControlState PidLongitudinalController::updateControl
       return ControlState::DRIVE;
     }
   } else if (current_control_state == ControlState::STOPPED) {
+    std::cerr << "departure_condition_from_stopped: " << departure_condition_from_stopped
+              << "stop_dist: " << stop_dist << std::endl;
+    std::cerr << "keep_stopped_condition:" << keep_stopped_condition << std::endl;
+    std::cerr << "lateral_sync_data_.is_steer_converged: " << lateral_sync_data_.is_steer_converged
+              << std::endl;
+    std::cerr << "checkNewTrajectory(): " << checkNewTrajectory() << std::endl;
+
     if (
       departure_condition_from_stopped &&
       (!m_enable_keep_stopped_until_steer_convergence || !keep_stopped_condition)) {
