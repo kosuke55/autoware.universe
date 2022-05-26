@@ -150,15 +150,6 @@ MpcLateralController::MpcLateralController(rclcpp::Node & node) : node_{&node}
   m_pub_diagnostic =
     node_->create_publisher<autoware_auto_system_msgs::msg::Float32MultiArrayDiagnostic>(
       "~/output/lateral_diagnostic", 1);
-  m_sub_ref_path = node_->create_subscription<autoware_auto_planning_msgs::msg::Trajectory>(
-    "~/input/current_trajectory", rclcpp::QoS{1},
-    std::bind(&MpcLateralController::onTrajectory, this, _1));
-  m_sub_steering = node_->create_subscription<autoware_auto_vehicle_msgs::msg::SteeringReport>(
-    "~/input/current_steering", rclcpp::QoS{1},
-    std::bind(&MpcLateralController::onSteering, this, _1));
-  m_sub_odometry = node_->create_subscription<nav_msgs::msg::Odometry>(
-    "~/input/current_odometry", rclcpp::QoS{1},
-    std::bind(&MpcLateralController::onOdometry, this, _1));
 
   // TODO(Frederik.Beaujean) ctor is too long, should factor out parameter declarations
   declareMPCparameters();
@@ -235,7 +226,16 @@ LateralOutput MpcLateralController::run()
   output.sync_data.is_steer_converged =
     std::abs(cmd_msg.steering_tire_angle - m_current_steering_ptr->steering_tire_angle) <
     static_cast<float>(m_converged_steer_rad);
+
+
   return output;
+}
+
+void MpcLateralController::setInputData(InputData const & input_data)
+{
+  setTrajectory(input_data.current_trajectory_ptr);
+  m_current_odometry_ptr = input_data.current_odometry_ptr;
+  m_current_steering_ptr = input_data.current_steering_ptr;
 }
 
 bool8_t MpcLateralController::checkData() const
@@ -271,9 +271,11 @@ bool8_t MpcLateralController::checkData() const
   return true;
 }
 
-void MpcLateralController::onTrajectory(
+void MpcLateralController::setTrajectory(
   const autoware_auto_planning_msgs::msg::Trajectory::SharedPtr msg)
 {
+  if (!msg) return;
+
   m_current_trajectory_ptr = msg;
 
   if (!m_current_pose_ptr && !updateCurrentPose()) {
@@ -319,17 +321,6 @@ bool8_t MpcLateralController::updateCurrentPose()
   ps.pose.orientation = transform.transform.rotation;
   m_current_pose_ptr = std::make_shared<geometry_msgs::msg::PoseStamped>(ps);
   return true;
-}
-
-void MpcLateralController::onOdometry(const nav_msgs::msg::Odometry::SharedPtr msg)
-{
-  m_current_odometry_ptr = msg;
-}
-
-void MpcLateralController::onSteering(
-  const autoware_auto_vehicle_msgs::msg::SteeringReport::SharedPtr msg)
-{
-  m_current_steering_ptr = msg;
 }
 
 autoware_auto_control_msgs::msg::AckermannLateralCommand

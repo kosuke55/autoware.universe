@@ -29,7 +29,6 @@
 #include "trajectory_follower/mpc_utils.hpp"
 #include "trajectory_follower/qp_solver/qp_solver_osqp.hpp"
 #include "trajectory_follower/qp_solver/qp_solver_unconstr_fast.hpp"
-#include "trajectory_follower/sync_data.hpp"
 #include "trajectory_follower/vehicle_model/vehicle_model_bicycle_dynamics.hpp"
 #include "trajectory_follower/vehicle_model/vehicle_model_bicycle_kinematics.hpp"
 #include "trajectory_follower/vehicle_model/vehicle_model_bicycle_kinematics_no_delay.hpp"
@@ -87,12 +86,6 @@ private:
   //!< @brief topic publisher for control diagnostic
   rclcpp::Publisher<autoware_auto_system_msgs::msg::Float32MultiArrayDiagnostic>::SharedPtr
     m_pub_diagnostic;
-  //!< @brief topic subscription for reference waypoints
-  rclcpp::Subscription<autoware_auto_planning_msgs::msg::Trajectory>::SharedPtr m_sub_ref_path;
-  //!< @brief subscription for current velocity
-  rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr m_sub_odometry;
-  //!< @brief subscription for current steering
-  rclcpp::Subscription<autoware_auto_vehicle_msgs::msg::SteeringReport>::SharedPtr m_sub_steering;
   //!< @brief timer to update after a given interval
   rclcpp::TimerBase::SharedPtr m_timer;
   //!< @brief subscription for transform messages
@@ -142,8 +135,6 @@ private:
   tf2::BufferCore m_tf_buffer{tf2::BUFFER_CORE_DEFAULT_CACHE_TIME};
   tf2_ros::TransformListener m_tf_listener{m_tf_buffer};
 
-  LateralSyncData lateral_sync_data_;
-
   //!< initialize timer to work in real, simulation, and replay
   void initTimer(float64_t period_s);
   /**
@@ -152,9 +143,14 @@ private:
   LateralOutput run() override;
 
   /**
+   * @brief set input data like current odometry, trajectory and steering.
+   */
+  void setInputData(InputData const & input_data) override;
+
+  /**
    * @brief set m_current_trajectory with received message
    */
-  void onTrajectory(const autoware_auto_planning_msgs::msg::Trajectory::SharedPtr);
+  void setTrajectory(const autoware_auto_planning_msgs::msg::Trajectory::SharedPtr);
 
   /**
    * @brief update current_pose from tf
@@ -166,16 +162,6 @@ private:
    * @brief check if the received data is valid.
    */
   bool8_t checkData() const;
-
-  /**
-   * @brief set current_velocity with received message
-   */
-  void onOdometry(const nav_msgs::msg::Odometry::SharedPtr msg);
-
-  /**
-   * @brief set current_steering with received message
-   */
-  void onSteering(const autoware_auto_vehicle_msgs::msg::SteeringReport::SharedPtr msg);
 
   /**
    * @brief create control command
