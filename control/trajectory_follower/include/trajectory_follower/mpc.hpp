@@ -71,6 +71,8 @@ struct MPCParam
   float64_t acceleration_limit;
 //!< @brief for trajectory velocity calculation
   float64_t velocity_time_constant;
+//!< @brief minimum prediction dist for low velocity
+  float64_t min_prediction_length;
 //!< @brief time constant for steer model
   float64_t steer_tau;
 // for weight matrix Q
@@ -180,6 +182,8 @@ private:
   float64_t m_sign_vx = 0.0;
   //!< @brief buffer of sent command
   std::vector<autoware_auto_control_msgs::msg::AckermannLateralCommand> m_ctrl_cmd_vec;
+  //!< @brief minimum prediction distance
+  float64_t m_min_prediction_length = 5.0;
 
   /**
    * @brief get variables for mpc calculation
@@ -225,7 +229,7 @@ private:
    * @brief generate MPC matrix with trajectory and vehicle model
    * @param [in] reference_trajectory used for linearization around reference trajectory
    */
-  MPCMatrix generateMPCMatrix(const trajectory_follower::MPCTrajectory & reference_trajectory);
+  MPCMatrix generateMPCMatrix(const trajectory_follower::MPCTrajectory & reference_trajectory, const float64_t max_dt);
   /**
    * @brief generate MPC matrix with trajectory and vehicle model
    * @param [in] mpc_matrix parameters matrix to use for optimization
@@ -233,13 +237,14 @@ private:
    * @param [out] Uex optimized input vector
    */
   bool8_t executeOptimization(
-    const MPCMatrix & mpc_matrix, const Eigen::VectorXd & x0, Eigen::VectorXd * Uex);
+    const MPCMatrix & mpc_matrix, const Eigen::VectorXd & x0, Eigen::VectorXd * Uex, const float64_t max_dt);
   /**
    * @brief resample trajectory with mpc resampling time
    */
   bool8_t resampleMPCTrajectoryByTime(
     float64_t start_time, const trajectory_follower::MPCTrajectory & input,
-    trajectory_follower::MPCTrajectory * output) const;
+    trajectory_follower::MPCTrajectory * output, float64_t & max_dt,
+    const geometry_msgs::msg::Pose & current_pose) const;
   /**
    * @brief apply velocity dynamics filter with v0 from closest index
    */
@@ -249,15 +254,15 @@ private:
   /**
    * @brief get total prediction time of mpc
    */
-  float64_t getPredictionTime() const;
+  float64_t getPredictionTime(const float64_t max_dt) const;
   /**
    * @brief add weights related to lateral_jerk, steering_rate, steering_acc into R
    */
-  void addSteerWeightR(Eigen::MatrixXd * R) const;
+  void addSteerWeightR(Eigen::MatrixXd * R, const float64_t max_dt) const;
   /**
    * @brief add weights related to lateral_jerk, steering_rate, steering_acc into f
    */
-  void addSteerWeightF(Eigen::MatrixXd * f) const;
+  void addSteerWeightF(Eigen::MatrixXd * f, const float64_t max_dt) const;
   /**
    * @brief check if the matrix has invalid value
    */
