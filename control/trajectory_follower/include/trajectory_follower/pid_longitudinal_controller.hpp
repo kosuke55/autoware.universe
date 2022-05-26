@@ -87,8 +87,6 @@ private:
   rclcpp::Node::SharedPtr node_;
 
   // ros variables
-  rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr m_sub_current_velocity;
-  rclcpp::Subscription<autoware_auto_planning_msgs::msg::Trajectory>::SharedPtr m_sub_trajectory;
   rclcpp::Publisher<autoware_auto_control_msgs::msg::LongitudinalCommand>::SharedPtr
     m_pub_control_cmd;
   rclcpp::Publisher<autoware_auto_system_msgs::msg::Float32MultiArrayDiagnostic>::SharedPtr
@@ -222,19 +220,23 @@ private:
    * @brief set current and previous velocity with received message
    * @param [in] msg current state message
    */
-  void callbackCurrentVelocity(const nav_msgs::msg::Odometry::ConstSharedPtr msg);
+  void setCurrentVelocity(const nav_msgs::msg::Odometry::ConstSharedPtr msg);
 
   /**
    * @brief set reference trajectory with received message
    * @param [in] msg trajectory message
    */
-  void callbackTrajectory(const autoware_auto_planning_msgs::msg::Trajectory::ConstSharedPtr msg);
+  void setTrajectory(const autoware_auto_planning_msgs::msg::Trajectory::ConstSharedPtr msg);
 
   /**
    * @brief compute control command, and publish periodically
    */
-  // void callbackTimerControl();
   LongitudinalOutput run() override;
+
+  /**
+   * @brief set input data like current odometry and trajectory.
+   */
+  void setInputData(InputData const & input_data) override;
 
   /**
    * @brief calculate data for controllers whose type is ControlData
