@@ -68,18 +68,26 @@ public:
 
 private:
   // ros variables
-  rclcpp::TimerBase::SharedPtr m_timer_control_;
+  rclcpp::TimerBase::SharedPtr timer_control_;
+
+  trajectory_follower::InputData input_data_;
 
   std::shared_ptr<trajectory_follower::LongitudinalControllerBase> longitudinal_controller_;
   std::shared_ptr<trajectory_follower::LateralControllerBase> lateral_controller_;
 
+  rclcpp::Subscription<autoware_auto_planning_msgs::msg::Trajectory>::SharedPtr sub_ref_path_;
+  rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr sub_odometry_;
+  rclcpp::Subscription<autoware_auto_vehicle_msgs::msg::SteeringReport>::SharedPtr sub_steering_;
   rclcpp::Publisher<autoware_auto_control_msgs::msg::AckermannControlCommand>::SharedPtr
-    m_control_cmd_pub_;
+    control_cmd_pub_;
 
   /**
    * @brief compute control command, and publish periodically
    */
   void callbackTimerControl();
+  void onTrajectory(const autoware_auto_planning_msgs::msg::Trajectory::SharedPtr);
+  void onOdometry(const nav_msgs::msg::Odometry::SharedPtr msg);
+  void onSteering(const autoware_auto_vehicle_msgs::msg::SteeringReport::SharedPtr msg);
 };
 }  // namespace trajectory_follower_nodes
 }  // namespace control

@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -44,6 +44,7 @@ set(LATERAL_CONTROLLER_LIB_HEADERS
   include/trajectory_follower/lateral_controller_base.hpp
   include/trajectory_follower/mpc_lateral_controller.hpp
   include/trajectory_follower/sync_data.hpp
+  include/trajectory_follower/input_data.hpp
   include/trajectory_follower/visibility_control.hpp
   include/trajectory_follower/interpolate.hpp
   include/trajectory_follower/lowpass_filter.hpp
@@ -80,6 +81,7 @@ set(LONGITUDINAL_CONTROLLER_LIB_HEADERS
   include/trajectory_follower/longitudinal_controller_base.hpp
   include/trajectory_follower/pid_longitudinal_controller.hpp
   include/trajectory_follower/sync_data.hpp
+  include/trajectory_follower/input_data.hpp
   include/trajectory_follower/debug_values.hpp
   include/trajectory_follower/pid.hpp
   include/trajectory_follower/smooth_stop.hpp

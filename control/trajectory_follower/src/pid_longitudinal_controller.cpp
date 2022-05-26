@@ -181,12 +181,6 @@ PidLongitudinalController::PidLongitudinalController(rclcpp::Node & node) : node
   m_min_pitch_rad = node_->declare_parameter<float64_t>("min_pitch_rad");  // [rad]
 
   // subscriber, publisher
-  m_sub_current_velocity = node_->create_subscription<nav_msgs::msg::Odometry>(
-    "~/input/current_odometry", rclcpp::QoS{1},
-    std::bind(&PidLongitudinalController::callbackCurrentVelocity, this, _1));
-  m_sub_trajectory = node_->create_subscription<autoware_auto_planning_msgs::msg::Trajectory>(
-    "~/input/current_trajectory", rclcpp::QoS{1},
-    std::bind(&PidLongitudinalController::callbackTrajectory, this, _1));
   m_pub_control_cmd = node_->create_publisher<autoware_auto_control_msgs::msg::LongitudinalCommand>(
     "~/output/longitudinal_control_cmd", rclcpp::QoS{1});
   m_pub_slope =
@@ -203,19 +197,28 @@ PidLongitudinalController::PidLongitudinalController(rclcpp::Node & node) : node
   // set lowpass filter for acc
   m_lpf_acc = std::make_shared<trajectory_follower::LowpassFilter1d>(0.0, 0.2);
 }
+void PidLongitudinalController::setInputData(InputData const & input_data)
+{
+  setTrajectory(input_data.current_trajectory_ptr);
+  setCurrentVelocity(input_data.current_odometry_ptr);
+}
 
-void PidLongitudinalController::callbackCurrentVelocity(
+void PidLongitudinalController::setCurrentVelocity(
   const nav_msgs::msg::Odometry::ConstSharedPtr msg)
 {
+  if (!msg) return;
+
   if (m_current_velocity_ptr) {
     m_prev_velocity_ptr = m_current_velocity_ptr;
   }
   m_current_velocity_ptr = std::make_shared<nav_msgs::msg::Odometry>(*msg);
 }
 
-void PidLongitudinalController::callbackTrajectory(
+void PidLongitudinalController::setTrajectory(
   const autoware_auto_planning_msgs::msg::Trajectory::ConstSharedPtr msg)
 {
+  if (!msg) return;
+
   if (!trajectory_follower::longitudinal_utils::isValidTrajectory(*msg)) {
     RCLCPP_ERROR_THROTTLE(
       node_->get_logger(), *node_->get_clock(), 3000, "received invalid trajectory. ignore.");

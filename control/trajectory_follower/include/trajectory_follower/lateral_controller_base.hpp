@@ -16,6 +16,7 @@
 #define TRAJECTORY_FOLLOWER__LATERAL_CONTROLLER_BASE_HPP_
 
 #include "rclcpp/rclcpp.hpp"
+#include "trajectory_follower/input_data.hpp"
 #include "trajectory_follower/sync_data.hpp"
 
 #include "autoware_auto_control_msgs/msg/ackermann_lateral_command.hpp"
@@ -38,6 +39,7 @@ class LateralControllerBase
 {
 public:
   virtual LateralOutput run() = 0;
+  virtual void setInputData(InputData const & input_data) = 0;
   void sync(LongitudinalSyncData const & longitudinal_sync_data)
   {
     longitudinal_sync_data_ = longitudinal_sync_data;

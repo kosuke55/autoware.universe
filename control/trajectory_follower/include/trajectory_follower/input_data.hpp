@@ -12,14 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef TRAJECTORY_FOLLOWER__LONGITUDINAL_CONTROLLER_BASE_HPP_
-#define TRAJECTORY_FOLLOWER__LONGITUDINAL_CONTROLLER_BASE_HPP_
+#ifndef TRAJECTORY_FOLLOWER__INPUT_DATA_HPP_
+#define TRAJECTORY_FOLLOWER__INPUT_DATA_HPP_
 
-#include "rclcpp/rclcpp.hpp"
-#include "trajectory_follower/input_data.hpp"
-#include "trajectory_follower/sync_data.hpp"
-
-#include "autoware_auto_control_msgs/msg/longitudinal_command.hpp"
+#include "autoware_auto_planning_msgs/msg/trajectory.hpp"
+#include "autoware_auto_vehicle_msgs/msg/steering_report.hpp"
+#include "nav_msgs/msg/odometry.hpp"
 
 namespace autoware
 {
@@ -29,25 +27,15 @@ namespace control
 {
 namespace trajectory_follower
 {
-struct LongitudinalOutput
+struct InputData
 {
-  autoware_auto_control_msgs::msg::LongitudinalCommand control_cmd;
-  LongitudinalSyncData sync_data;
+  autoware_auto_planning_msgs::msg::Trajectory::SharedPtr current_trajectory_ptr;
+  nav_msgs::msg::Odometry::SharedPtr current_odometry_ptr;
+  autoware_auto_vehicle_msgs::msg::SteeringReport::SharedPtr current_steering_ptr;
 };
-class LongitudinalControllerBase
-{
-public:
-  virtual LongitudinalOutput run() = 0;
-  virtual void setInputData(InputData const & input_data) = 0;
-  void sync(LateralSyncData const & lateral_sync_data) { lateral_sync_data_ = lateral_sync_data; };
-
-protected:
-  LateralSyncData lateral_sync_data_;
-};
-
 }  // namespace trajectory_follower
 }  // namespace control
 }  // namespace motion
 }  // namespace autoware
 
-#endif  // TRAJECTORY_FOLLOWER__LONGITUDINAL_CONTROLLER_BASE_HPP_
+#endif  // TRAJECTORY_FOLLOWER__INPUT_DATA_HPP_
