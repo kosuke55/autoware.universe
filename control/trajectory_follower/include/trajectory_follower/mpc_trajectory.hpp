@@ -15,11 +15,13 @@
 #ifndef TRAJECTORY_FOLLOWER__MPC_TRAJECTORY_HPP_
 #define TRAJECTORY_FOLLOWER__MPC_TRAJECTORY_HPP_
 
-#include <iostream>
-#include <vector>
-
 #include "common/types.hpp"
 #include "trajectory_follower/visibility_control.hpp"
+
+#include "geometry_msgs/msg/point.hpp"
+
+#include <iostream>
+#include <vector>
 
 namespace autoware
 {
@@ -65,9 +67,19 @@ public:
   /**
    * @return true if the compensents sizes are all 0 or are inconsistent
    */
-  inline bool empty() const
+  inline bool empty() const { return size() == 0; }
+
+  std::vector<geometry_msgs::msg::Point> toPoints() const
   {
-    return size() == 0;
+    std::vector<geometry_msgs::msg::Point> points;
+    for (size_t i = 0; i < x.size(); ++i) {
+      geometry_msgs::msg::Point point;
+      point.x = x.at(i);
+      point.y = y.at(i);
+      point.z = z.at(i);
+      points.push_back(point);
+    }
+    return points;
   }
 };
 }  // namespace trajectory_follower
