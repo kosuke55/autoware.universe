@@ -39,26 +39,50 @@ Controller::Controller(const rclcpp::NodeOptions & node_options) : Node("control
 {
   using std::placeholders::_1;
 
-  const double m_ctrl_period = declare_parameter<float64_t>("ctrl_period", 0.015);
+  const double ctrl_period = declare_parameter<float64_t>("ctrl_period", 0.015);
 
   lateral_controller_ = std::make_shared<trajectory_follower::MpcLateralController>(*this);
   longitudinal_controller_ =
     std::make_shared<trajectory_follower::PidLongitudinalController>(*this);
 
-  m_control_cmd_pub_ = create_publisher<autoware_auto_control_msgs::msg::AckermannControlCommand>(
+  sub_ref_path_ = create_subscription<autoware_auto_planning_msgs::msg::Trajectory>(
+    "~/input/reference_trajectory", rclcpp::QoS{1}, std::bind(&Controller::onTrajectory, this, _1));
+  sub_steering_ = create_subscription<autoware_auto_vehicle_msgs::msg::SteeringReport>(
+    "~/input/current_steering", rclcpp::QoS{1}, std::bind(&Controller::onSteering, this, _1));
+  sub_odometry_ = create_subscription<nav_msgs::msg::Odometry>(
+    "~/input/current_odometry", rclcpp::QoS{1}, std::bind(&Controller::onOdometry, this, _1));
+  control_cmd_pub_ = create_publisher<autoware_auto_control_msgs::msg::AckermannControlCommand>(
     "~/output/control_cmd", rclcpp::QoS{1}.transient_local());
 
   // Timer
   {
     const auto period_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-      std::chrono::duration<float64_t>(m_ctrl_period));
-    m_timer_control_ = rclcpp::create_timer(
+      std::chrono::duration<float64_t>(ctrl_period));
+    timer_control_ = rclcpp::create_timer(
       this, get_clock(), period_ns, std::bind(&Controller::callbackTimerControl, this));
   }
 }
 
+void Controller::onTrajectory(const autoware_auto_planning_msgs::msg::Trajectory::SharedPtr msg)
+{
+  input_data_.current_trajectory_ptr = msg;
+}
+
+void Controller::onOdometry(const nav_msgs::msg::Odometry::SharedPtr msg)
+{
+  input_data_.current_odometry_ptr = msg;
+}
+
+void Controller::onSteering(const autoware_auto_vehicle_msgs::msg::SteeringReport::SharedPtr msg)
+{
+  input_data_.current_steering_ptr = msg;
+}
+
 void Controller::callbackTimerControl()
 {
+  longitudinal_controller_->setInputData(input_data_);  // trajectory, odometry
+  lateral_controller_->setInputData(input_data_);       // trajectory, odometry, steering
+
   const auto longitudinal_output = longitudinal_controller_->run();
   const auto lateral_output = lateral_controller_->run();
 
@@ -69,7 +93,7 @@ void Controller::callbackTimerControl()
   out.stamp = this->now();
   out.lateral = lateral_output.control_cmd;
   out.longitudinal = longitudinal_output.control_cmd;
-  m_control_cmd_pub_->publish(out);
+  control_cmd_pub_->publish(out);
 }
 
 }  // namespace trajectory_follower_nodes
