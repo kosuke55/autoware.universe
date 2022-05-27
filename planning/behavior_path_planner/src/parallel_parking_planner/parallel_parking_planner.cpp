@@ -97,7 +97,7 @@ bool ParallelParkingPlanner::plan(
     if (is_forward) {
       // When turning forward to the right, the front left goes out,
       // so reduce the steer angle at that time for seach no lane departure path.
-      for (double steer = max_steer_rad_; steer > 0.05; steer -= 0.05) {
+      for (double steer = max_steer_rad_; steer > 0.05; steer -= 0.1) {
         const double R_E_r = common_params.wheel_base / std::tan(steer);
         if (planOneTraial(goal_pose, 0, R_E_r, lanes, is_forward)) return true;
       }
@@ -105,7 +105,7 @@ bool ParallelParkingPlanner::plan(
       // When turning backward to the left, the front right goes out,
       // so make the parking start point in front for seach no lane departure path
       // (same to reducing the steer angle)
-      for (double dx = 0; dx < 10; dx += 0.5) {
+      for (double dx = 0; dx < 5; dx += 1.0) {
         if (planOneTraial(goal_pose, dx, R_E_min_, lanes, is_forward)) return true;
       }
     }
