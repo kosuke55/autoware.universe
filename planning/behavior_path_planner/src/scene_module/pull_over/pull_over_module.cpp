@@ -650,6 +650,8 @@ bool PullOverModule::hasFinishedCurrentPath()
         break;
       }
     }
+    std::cerr << "[pullover] is_near_target: " << is_near_target << "is_stopped: " << is_stopped
+              << std::endl;
     return is_near_target && is_stopped;
   }
   return false;
