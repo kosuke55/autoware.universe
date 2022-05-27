@@ -264,7 +264,6 @@ std::vector<ShiftParkingPath> getShiftParkingPaths(
         point.lane_ids = reference_path2.points.front().lane_ids;
       }
       candidate_path.straight_path = reference_path1;
-      candidate_path.shifted_path = shifted_path;
       // resample is needed for adding orientation to path points for collision check
       candidate_path.path =
         util::resamplePathWithSpline(combineReferencePath(reference_path1, shifted_path.path), 1.0);
@@ -272,6 +271,9 @@ std::vector<ShiftParkingPath> getShiftParkingPaths(
         candidate_path.path.points, shift_point.start.position);
       shift_point.end_idx = tier4_autoware_utils::findNearestIndex(
         candidate_path.path.points, shift_point.end.position);
+      for (size_t i = shift_point.start_idx; i <= shift_point.end_idx; i++) {
+        candidate_path.shifted_path.path.points.push_back(candidate_path.path.points.at(i));
+      }
       candidate_path.shift_point = shift_point;
       // candidate_path.acceleration = acceleration;
       candidate_path.preparation_length = straight_distance;
