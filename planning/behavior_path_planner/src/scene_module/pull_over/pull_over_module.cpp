@@ -650,7 +650,9 @@ bool PullOverModule::hasFinishedCurrentPath()
         break;
       }
     }
-    std::cerr << "[pullover] is_near_target: " << is_near_target << "is_stopped: " << is_stopped
+    std::cerr << "[pullover] distance_to_path_end: "
+              << tier4_autoware_utils::calcDistance2d(current_path_end, self_pose)
+              << " is_near_target : " << is_near_target << " is_stopped : " << is_stopped
               << std::endl;
     return is_near_target && is_stopped;
   }
