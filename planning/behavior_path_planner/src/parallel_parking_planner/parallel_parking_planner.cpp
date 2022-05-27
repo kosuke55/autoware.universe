@@ -175,8 +175,6 @@ bool ParallelParkingPlanner::planOneTraial(
     return false;
   }
 
-  generateStraightPath(start_pose);
-
   const float self_yaw = tf2::getYaw(start_pose.orientation);
   const float goal_yaw = tf2::getYaw(offsetted_goal_pose.orientation);
   const float psi = normalizeRadian(self_yaw - goal_yaw);
@@ -221,6 +219,8 @@ bool ParallelParkingPlanner::planOneTraial(
       return false;
     }
   }
+
+  generateStraightPath(start_pose);
 
   // Generate arc path(left turn -> right turn)
   Pose Cl = calcOffsetPose(start_pose, 0, R_E_l, 0);
