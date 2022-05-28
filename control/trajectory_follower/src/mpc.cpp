@@ -69,7 +69,7 @@ bool8_t MPC::calculateMPC(
   /* resample ref_traj with mpc sampling time */
   trajectory_follower::MPCTrajectory mpc_resampled_ref_traj;
   const float64_t mpc_start_time = mpc_data.nearest_time + m_param.input_delay;
-  double max_dt;
+  float64_t max_dt;
   if (!resampleMPCTrajectoryByTime(mpc_start_time, reference_trajectory, &mpc_resampled_ref_traj, max_dt)) {
     RCLCPP_WARN_THROTTLE(m_logger, *m_clock, 1000 /*ms*/, "trajectory resampling failed.");
     return false;
@@ -326,7 +326,8 @@ bool8_t MPC::getData(
   }
 
   /* check trajectory time length */
-  const double max_prediction_time = 5.0 / m_param.prediction_horizon;
+  const float64_t max_prediction_time =
+    m_min_prediction_dist / static_cast<float64_t>(m_param.prediction_horizon);
   auto end_time = data->nearest_time + m_param.input_delay + max_prediction_time;
   if (end_time > traj.relative_time.back()) {
     RCLCPP_WARN_SKIPFIRST_THROTTLE(
@@ -412,30 +413,28 @@ void MPC::storeSteerCmd(const float64_t steer)
 
 bool8_t MPC::resampleMPCTrajectoryByTime(
   float64_t ts, const trajectory_follower::MPCTrajectory & input,
-  trajectory_follower::MPCTrajectory * output, double & max_dt) const
+  trajectory_follower::MPCTrajectory * output, float64_t & max_dt) const
 {
-  double sum_dist = 0;
-  const double target_time = [&]() {
+  float64_t sum_dist = 0;
+  const float64_t target_time = [&]() {
     for (size_t i = 0; i < input.relative_time.size(); i++) {
-      bool is_found = false;
       if (i == 0) {
         continue;
       }
-      const double segment_dist =
+      const float64_t segment_dist =
         std::hypot(input.x.at(i) - input.x.at(i - 1), input.y.at(i) - input.y.at(i - 1));
       sum_dist += segment_dist;
-      if (1.0 < sum_dist && i == input.relative_time.size() - 1) {
-        const double prev_sum_dist = sum_dist - segment_dist;
-        const double ratio = (5.0 - prev_sum_dist) / segment_dist;
-        is_found = true;
+      if (m_min_prediction_dist < sum_dist && i > 0) {
+        const float64_t prev_sum_dist = sum_dist - segment_dist;
+        const float64_t ratio = (m_min_prediction_dist - prev_sum_dist) / segment_dist;
         return input.relative_time.at(i - 1) +
                (input.relative_time.at(i) - input.relative_time.at(i - 1)) * ratio;
       }
-      if (i == input.relative_time.size() - 1 && !is_found) return m_param.prediction_dt;
     }
+    return input.relative_time.back();
   }();
 
-  const double dt = target_time / m_param.prediction_horizon;
+  const float64_t dt = target_time / static_cast<float64_t>(m_param.prediction_horizon);
   max_dt = std::max(dt, m_param.prediction_dt);
 
   std::vector<float64_t> mpc_time_v;
@@ -560,7 +559,7 @@ trajectory_follower::MPCTrajectory MPC::applyVelocityDynamicsFilter(
  * cost function: J = Xex' * Qex * Xex + (Uex - Uref)' * R1ex * (Uex - Uref_ex) + Uex' * R2ex * Uex
  * Qex = diag([Q,Q,...]), R1ex = diag([R,R,...])
  */
-MPCMatrix MPC::generateMPCMatrix(const trajectory_follower::MPCTrajectory & reference_trajectory, const double max_dt)
+MPCMatrix MPC::generateMPCMatrix(const trajectory_follower::MPCTrajectory & reference_trajectory, const float64_t max_dt)
 {
   using Eigen::MatrixXd;
 
@@ -694,7 +693,7 @@ MPCMatrix MPC::generateMPCMatrix(const trajectory_follower::MPCTrajectory & refe
  * [    -au_lim * dt    ] < [uN-uN-1] < [     au_lim * dt    ] (*N... DIM_U)
  */
 bool8_t MPC::executeOptimization(
-  const MPCMatrix & m, const Eigen::VectorXd & x0, Eigen::VectorXd * Uex, const double max_dt)
+  const MPCMatrix & m, const Eigen::VectorXd & x0, Eigen::VectorXd * Uex, const float64_t max_dt)
 {
   using Eigen::MatrixXd;
   using Eigen::VectorXd;
@@ -752,7 +751,7 @@ bool8_t MPC::executeOptimization(
   return true;
 }
 
-void MPC::addSteerWeightR(Eigen::MatrixXd * R_ptr, const double max_dt) const
+void MPC::addSteerWeightR(Eigen::MatrixXd * R_ptr, const float64_t max_dt) const
 {
   const int64_t N = m_param.prediction_horizon;
   const float64_t DT = max_dt;
@@ -797,7 +796,7 @@ void MPC::addSteerWeightR(Eigen::MatrixXd * R_ptr, const double max_dt) const
   }
 }
 
-void MPC::addSteerWeightF(Eigen::MatrixXd * f_ptr, const double max_dt) const
+void MPC::addSteerWeightF(Eigen::MatrixXd * f_ptr, const float64_t max_dt) const
 {
   if (f_ptr->rows() < 2) {
     return;
@@ -823,7 +822,7 @@ void MPC::addSteerWeightF(Eigen::MatrixXd * f_ptr, const double max_dt) const
   f(0, 1) += (2.0 * m_raw_steer_cmd_prev * steer_acc_r_cp1) * 0.5;
 }
 
-[[maybe_unused]] float64_t MPC::getPredictionTime(const double max_dt) const
+[[maybe_unused]] float64_t MPC::getPredictionTime(const float64_t max_dt) const
 {
   return static_cast<float64_t>(m_param.prediction_horizon - 1) * max_dt +
          m_param.input_delay + m_ctrl_period;
