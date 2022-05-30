@@ -55,6 +55,7 @@ struct PullOverParameters
   double decide_path_distance;
   double min_acc;
   // goal research
+  std::string search_priority;  // "efficient_path" or "close_goal"
   bool enable_goal_research;
   double forward_goal_search_length;
   double backward_goal_search_length;
@@ -138,6 +139,10 @@ public:
   bool isExecutionReady() const override;
   BT::NodeStatus updateState() override;
   void onTimer();
+  bool planWithEfficientPath(
+    const lanelet::ConstLanelets & current_lanes, const lanelet::ConstLanelets & lanes);
+  bool planWithCloseGoal(
+    const lanelet::ConstLanelets & current_lanes, const lanelet::ConstLanelets & lanes);
   BehaviorModuleOutput plan() override;
   BehaviorModuleOutput planWaitingApproval() override;
   PathWithLaneId planCandidate() const override;
