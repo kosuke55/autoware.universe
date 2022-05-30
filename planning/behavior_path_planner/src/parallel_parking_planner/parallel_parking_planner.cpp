@@ -174,6 +174,13 @@ bool ParallelParkingPlanner::planOneTraial(
   if (current_to_start.position.x < stop_distance) {
     return false;
   }
+  // not enogh to restart from stopped
+  if (
+    current_vel < parameters_.th_stopped_velocity_mps &&
+    current_to_start.position.x > parameters_.th_arrived_distance_m &&
+    current_to_start.position.x < 3.0) {
+    return false;
+  }
 
   const float self_yaw = tf2::getYaw(start_pose.orientation);
   const float goal_yaw = tf2::getYaw(offsetted_goal_pose.orientation);
