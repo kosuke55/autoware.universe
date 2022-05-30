@@ -340,6 +340,7 @@ BehaviorModuleOutput PullOverModule::plan()
         }
       }
     }
+
     // Decelerate before the minimum shift distance from the goal search area.
     const Pose goal_pose = getRefinedGoal();
     const auto arc_coordinates = lanelet::utils::getArcCoordinates(current_lanes, goal_pose);
@@ -351,11 +352,15 @@ BehaviorModuleOutput PullOverModule::plan()
     double dist_sum = 0;
     for (size_t i = 0; i < status_.path.points.size() - 1; i++) {
       dist_sum += calcDistance2d(status_.path.points.at(i), status_.path.points.at(i + 1));
-      if (dist_sum > *search_start_signed_arg_length - calcMinimumShiftPathDistance()) {
-        status_.path.points.at(i).point.longitudinal_velocity_mps = std::min(
-          status_.path.points.at(i).point.longitudinal_velocity_mps,
-          static_cast<float>(parameters_.pull_over_velocity));
-      }
+      const double distance_to_decelation_end =
+        std::max(0.0, *search_start_signed_arg_length - calcMinimumShiftPathDistance() - dist_sum);
+      status_.path.points.at(i).point.longitudinal_velocity_mps = std::min(
+        status_.path.points.at(i).point.longitudinal_velocity_mps,
+        static_cast<float>(
+          (distance_to_decelation_end / parameters_.deceleration_interval) *
+            (status_.path.points.at(i).point.longitudinal_velocity_mps -
+             parameters_.pull_over_velocity) +
+          parameters_.pull_over_velocity));
     }
   }
 
@@ -483,8 +488,13 @@ PathWithLaneId PullOverModule::getStopPath()
   for (auto & point : reference_path.points) {
     const auto arclength =
       lanelet::utils::getArcCoordinates(current_lanes, point.point.pose).length;
-    if (current_to_stop_distance < arclength - arclength_current_pose) {
-      point.point.longitudinal_velocity_mps = 0;
+    const auto arclength_current_to_point = arclength - arclength_current_pose;
+    if (0 < arclength_current_to_point) {
+      point.point.longitudinal_velocity_mps = std::min(
+        point.point.longitudinal_velocity_mps,
+        static_cast<float>(std::max(
+          0.0, current_vel * (current_to_stop_distance - arclength_current_to_point) /
+                 current_to_stop_distance)));
     } else {
       point.point.longitudinal_velocity_mps =
         std::min(point.point.longitudinal_velocity_mps, static_cast<float>(current_vel));
