@@ -9,6 +9,7 @@
       decide_path_distance: 10.0
       min_acc: -0.5
       # goal research
+      search_priority: "efficient_path" # "efficient_path" or "close_goal"
       enable_goal_research: true
       forward_goal_search_length: 20.0
       backward_goal_search_length: 20.0

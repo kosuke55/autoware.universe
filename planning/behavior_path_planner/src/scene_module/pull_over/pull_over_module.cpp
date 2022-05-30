@@ -277,6 +277,82 @@ BT::NodeStatus PullOverModule::updateState()
   return current_state_;
 }
 
+bool PullOverModule::planWithEfficientPath(
+  const lanelet::ConstLanelets & current_lanes, const lanelet::ConstLanelets & lanes)
+{
+  // shift parking path
+  for (const auto goal_candidate : goal_candidates_) {
+    modified_goal_pose_ = goal_candidate.goal_pose;
+    if (isLongEnough(current_lanes, modified_goal_pose_) && planShiftPath()) {
+      // shift parking path already confirm safe in it's own function.
+      status_.path = shift_parking_path_.path;
+      status_.path_type = PathType::SHIFT;
+      status_.is_safe = true;
+      return true;
+    }
+  }
+
+  // forward arc path
+  for (const auto goal_candidate : goal_candidates_) {
+    modified_goal_pose_ = goal_candidate.goal_pose;
+    parallel_parking_planner_.setParams(planner_data_, parallel_parking_prameters_);
+    if (
+      parallel_parking_planner_.plan(modified_goal_pose_, lanes, true) &&
+      !occupancy_grid_map_.hasObstacleOnPath(parallel_parking_planner_.getArcPath(), false)) {
+      status_.path = parallel_parking_planner_.getCurrentPath();
+      status_.path_type = PathType::ARC_FORWARD;
+      status_.is_safe = true;
+      return true;
+    }
+  }
+
+  // backward arc path
+  for (const auto goal_candidate : goal_candidates_) {
+    modified_goal_pose_ = goal_candidate.goal_pose;
+    parallel_parking_planner_.setParams(planner_data_, parallel_parking_prameters_);
+    if (
+      parallel_parking_planner_.plan(modified_goal_pose_, lanes, false) &&
+      !occupancy_grid_map_.hasObstacleOnPath(parallel_parking_planner_.getArcPath(), false)) {
+      status_.path = parallel_parking_planner_.getCurrentPath();
+      status_.path_type = PathType::ARC_BACKWARD;
+      status_.is_safe = true;
+      return true;
+    }
+  }
+
+  return false;
+}
+
+bool PullOverModule::planWithCloseGoal(
+  const lanelet::ConstLanelets & current_lanes, const lanelet::ConstLanelets & lanes)
+{
+  for (const auto goal_candidate : goal_candidates_) {
+    if (status_.is_safe) break;
+    modified_goal_pose_ = goal_candidate.goal_pose;
+    if (isLongEnough(current_lanes, modified_goal_pose_) && planShiftPath()) {
+      // shift parking path already confirm safe in it's own function.
+      status_.path = shift_parking_path_.path;
+      status_.path_type = PathType::SHIFT;
+      status_.is_safe = true;
+    } else {
+      // Generate arc forward path then arc backward path.
+      for (const auto is_forward : {true, false}) {
+        parallel_parking_planner_.setParams(planner_data_, parallel_parking_prameters_);
+        if (
+          parallel_parking_planner_.plan(modified_goal_pose_, lanes, is_forward) &&
+          !occupancy_grid_map_.hasObstacleOnPath(parallel_parking_planner_.getArcPath(), false)) {
+          status_.path = parallel_parking_planner_.getCurrentPath();
+          status_.path_type = is_forward ? PathType::ARC_FORWARD : PathType::ARC_BACKWARD;
+          status_.is_safe = true;
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
 BehaviorModuleOutput PullOverModule::plan()
 {
   const auto current_lanes = util::getExtendedCurrentLanes(planner_data_);
@@ -317,28 +393,15 @@ BehaviorModuleOutput PullOverModule::plan()
   else {
     status_.path_type = PathType::NONE;
     status_.is_safe = false;
-    for (const auto goal_candidate : goal_candidates_) {
-      if (status_.is_safe) break;
-      modified_goal_pose_ = goal_candidate.goal_pose;
-      if (isLongEnough(current_lanes, modified_goal_pose_) && planShiftPath()) {
-        // shift parking path already confirm safe in it's own function.
-        status_.path = shift_parking_path_.path;
-        status_.path_type = PathType::SHIFT;
-        status_.is_safe = true;
-      } else {
-        // Generate arc forward path then arc backward path.
-        for (const auto is_forward : {true, false}) {
-          parallel_parking_planner_.setParams(planner_data_, parallel_parking_prameters_);
-          if (
-            parallel_parking_planner_.plan(modified_goal_pose_, lanes, is_forward) &&
-            !occupancy_grid_map_.hasObstacleOnPath(parallel_parking_planner_.getArcPath(), false)) {
-            status_.path = parallel_parking_planner_.getCurrentPath();
-            status_.path_type = is_forward ? PathType::ARC_FORWARD : PathType::ARC_BACKWARD;
-            status_.is_safe = true;
-            break;
-          }
-        }
-      }
+
+    if (parameters_.search_priority == "efficient_path") {
+      planWithEfficientPath(current_lanes, lanes);
+    } else if (parameters_.search_priority == "close_goal") {
+      planWithCloseGoal(current_lanes, lanes);
+    } else {
+      RCLCPP_ERROR(
+        getLogger(), "search_priority shoudbe efficient_path or close_goal, but %s is given.",
+        parameters_.search_priority.c_str());
     }
 
     // Decelerate before the minimum shift distance from the goal search area.
