@@ -167,11 +167,11 @@ bool ParallelParkingPlanner::planOneTraial(
 
   const Pose start_pose = getStartPose(offsetted_goal_pose, start_pose_offset, R_E_r, is_forward);
   const Pose current_pose = planner_data_->self_pose->pose;
-  const Pose current2start = inverseTransformPose(start_pose, current_pose);
+  const Pose current_to_start = inverseTransformPose(start_pose, current_pose);
 
   const double current_vel = util::l2Norm(planner_data_->self_odometry->twist.twist.linear);
   const double stop_distance = std::pow(current_vel, 2) / std::abs(parameters_.min_acc) / 2;
-  if (current2start.position.x < stop_distance) {
+  if (current_to_start.position.x < stop_distance) {
     return false;
   }
 
