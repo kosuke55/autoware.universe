@@ -68,7 +68,8 @@ bool8_t MPC::calculateMPC(
   trajectory_follower::MPCTrajectory mpc_resampled_ref_traj;
   const float64_t mpc_start_time = mpc_data.nearest_time + m_param.input_delay;
   float64_t max_dt;
-  if (!resampleMPCTrajectoryByTime(mpc_start_time, reference_trajectory, &mpc_resampled_ref_traj, max_dt, current_pose)) {
+  if (!resampleMPCTrajectoryByTime(
+        mpc_start_time, reference_trajectory, &mpc_resampled_ref_traj, max_dt, current_pose)) {
     RCLCPP_WARN_THROTTLE(m_logger, *m_clock, 1000 /*ms*/, "trajectory resampling failed.");
     return false;
   }
@@ -541,7 +542,8 @@ trajectory_follower::MPCTrajectory MPC::applyVelocityDynamicsFilter(
  * cost function: J = Xex' * Qex * Xex + (Uex - Uref)' * R1ex * (Uex - Uref_ex) + Uex' * R2ex * Uex
  * Qex = diag([Q,Q,...]), R1ex = diag([R,R,...])
  */
-MPCMatrix MPC::generateMPCMatrix(const trajectory_follower::MPCTrajectory & reference_trajectory, const float64_t max_dt)
+MPCMatrix MPC::generateMPCMatrix(
+  const trajectory_follower::MPCTrajectory & reference_trajectory, const float64_t max_dt)
 {
   using Eigen::MatrixXd;
 
@@ -806,8 +808,8 @@ void MPC::addSteerWeightF(Eigen::MatrixXd * f_ptr, const float64_t max_dt) const
 
 [[maybe_unused]] float64_t MPC::getPredictionTime(const float64_t max_dt) const
 {
-  return static_cast<float64_t>(m_param.prediction_horizon - 1) * max_dt +
-         m_param.input_delay + m_ctrl_period;
+  return static_cast<float64_t>(m_param.prediction_horizon - 1) * max_dt + m_param.input_delay +
+         m_ctrl_period;
 }
 
 bool8_t MPC::isValid(const MPCMatrix & m) const

@@ -226,7 +226,8 @@ private:
    * @brief generate MPC matrix with trajectory and vehicle model
    * @param [in] reference_trajectory used for linearization around reference trajectory
    */
-  MPCMatrix generateMPCMatrix(const trajectory_follower::MPCTrajectory & reference_trajectory, const float64_t max_dt);
+  MPCMatrix generateMPCMatrix(
+    const trajectory_follower::MPCTrajectory & reference_trajectory, const float64_t max_dt);
   /**
    * @brief generate MPC matrix with trajectory and vehicle model
    * @param [in] mpc_matrix parameters matrix to use for optimization
@@ -234,7 +235,8 @@ private:
    * @param [out] Uex optimized input vector
    */
   bool8_t executeOptimization(
-    const MPCMatrix & mpc_matrix, const Eigen::VectorXd & x0, Eigen::VectorXd * Uex, const float64_t max_dt);
+    const MPCMatrix & mpc_matrix, const Eigen::VectorXd & x0, Eigen::VectorXd * Uex,
+    const float64_t max_dt);
   /**
    * @brief resample trajectory with mpc resampling time
    */
