@@ -36,18 +36,17 @@
 #include <vector>
 
 using nav_msgs::msg::OccupancyGrid;
-using tier4_autoware_utils::calcOffsetPose;
-using tier4_autoware_utils::createQuaternionFromYaw;
-using tier4_autoware_utils::inverseTransformPose;
-using tier4_autoware_utils::transformPose;
-
 using tier4_autoware_utils::calcDistance2d;
+using tier4_autoware_utils::calcOffsetPose;
 using tier4_autoware_utils::calcSignedArcLength;
 using tier4_autoware_utils::createDefaultMarker;
 using tier4_autoware_utils::createMarkerColor;
 using tier4_autoware_utils::createMarkerScale;
 using tier4_autoware_utils::createPoint;
+using tier4_autoware_utils::createQuaternionFromYaw;
 using tier4_autoware_utils::findNearestIndex;
+using tier4_autoware_utils::inverseTransformPose;
+using tier4_autoware_utils::transformPose;
 
 namespace behavior_path_planner
 {
