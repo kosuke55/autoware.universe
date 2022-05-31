@@ -174,6 +174,7 @@ private:
   ParallelParkingPlanner parallel_parking_planner_;
   ParallelParkingParameters parallel_parking_prameters_;
   std::deque<nav_msgs::msg::Odometry::ConstSharedPtr> odometry_buffer_;
+  std::unique_ptr<LaneDepartureChecker> lane_departure_checker_;
 
   PathWithLaneId getReferencePath() const;
   PathWithLaneId getStopPath();
