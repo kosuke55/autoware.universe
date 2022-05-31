@@ -22,6 +22,7 @@
 #include "behavior_path_planner/scene_module/scene_module_interface.hpp"
 #include "behavior_path_planner/utilities.hpp"
 
+#include <lane_departure_checker/lane_departure_checker.hpp>
 #include <lanelet2_extension/utility/message_conversion.hpp>
 #include <lanelet2_extension/utility/utilities.hpp>
 #include <vehicle_info_util/vehicle_info_util.hpp>
@@ -42,6 +43,7 @@ namespace behavior_path_planner
 {
 using autoware_auto_vehicle_msgs::msg::HazardLightsCommand;
 using geometry_msgs::msg::PoseArray;
+using lane_departure_checker::LaneDepartureChecker;
 using tier4_autoware_utils::calcAveragePose;
 using visualization_msgs::msg::Marker;
 using visualization_msgs::msg::MarkerArray;
