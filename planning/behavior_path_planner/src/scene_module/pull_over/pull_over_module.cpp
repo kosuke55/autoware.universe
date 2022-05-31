@@ -65,6 +65,9 @@ PullOverModule::PullOverModule(
   start_pose_pub_ = node.create_publisher<PoseStamped>("~/pull_over/debug/start_pose", 1);
   path_pose_array_pub_ = node.create_publisher<PoseArray>("~/pull_over/debug/path_pose_array", 1);
 
+  lane_departure_checker_ = std::make_unique<LaneDepartureChecker>();
+  lane_departure_checker_->setVehicleInfo(
+    vehicle_info_util::VehicleInfoUtil(node).getVehicleInfo());
   // Timer for searching goal and planing path.
   // const auto period_ns =
   //   std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(1.0));
@@ -294,7 +297,10 @@ bool PullOverModule::planWithEfficientPath(
   // shift parking path
   for (const auto goal_candidate : goal_candidates_) {
     modified_goal_pose_ = goal_candidate.goal_pose;
-    if (isLongEnough(current_lanes, modified_goal_pose_) && planShiftPath()) {
+    if (
+      isLongEnough(current_lanes, modified_goal_pose_) && planShiftPath() &&
+      !lane_departure_checker_->checkPathWillLeaveLane(
+        lanes, shift_parking_path_.shifted_path.path)) {
       // shift parking path already confirm safe in it's own function.
       status_.path = shift_parking_path_.path;
       status_.path_type = PathType::SHIFT;
@@ -309,7 +315,9 @@ bool PullOverModule::planWithEfficientPath(
     parallel_parking_planner_.setParams(planner_data_, parallel_parking_prameters_);
     if (
       parallel_parking_planner_.plan(modified_goal_pose_, lanes, true) &&
-      !occupancy_grid_map_.hasObstacleOnPath(parallel_parking_planner_.getArcPath(), false)) {
+      !occupancy_grid_map_.hasObstacleOnPath(parallel_parking_planner_.getArcPath(), false) &&
+      !lane_departure_checker_->checkPathWillLeaveLane(
+        lanes, parallel_parking_planner_.getArcPath())) {
       status_.path = parallel_parking_planner_.getCurrentPath();
       status_.path_type = PathType::ARC_FORWARD;
       status_.is_safe = true;
@@ -323,7 +331,9 @@ bool PullOverModule::planWithEfficientPath(
     parallel_parking_planner_.setParams(planner_data_, parallel_parking_prameters_);
     if (
       parallel_parking_planner_.plan(modified_goal_pose_, lanes, false) &&
-      !occupancy_grid_map_.hasObstacleOnPath(parallel_parking_planner_.getArcPath(), false)) {
+      !occupancy_grid_map_.hasObstacleOnPath(parallel_parking_planner_.getArcPath(), false) &&
+      !lane_departure_checker_->checkPathWillLeaveLane(
+        lanes, parallel_parking_planner_.getArcPath())) {
       status_.path = parallel_parking_planner_.getCurrentPath();
       status_.path_type = PathType::ARC_BACKWARD;
       status_.is_safe = true;
@@ -340,7 +350,10 @@ bool PullOverModule::planWithCloseGoal(
   for (const auto goal_candidate : goal_candidates_) {
     if (status_.is_safe) break;
     modified_goal_pose_ = goal_candidate.goal_pose;
-    if (isLongEnough(current_lanes, modified_goal_pose_) && planShiftPath()) {
+    if (
+      isLongEnough(current_lanes, modified_goal_pose_) && planShiftPath() &&
+      !lane_departure_checker_->checkPathWillLeaveLane(
+        lanes, shift_parking_path_.shifted_path.path)) {
       // shift parking path already confirm safe in it's own function.
       status_.path = shift_parking_path_.path;
       status_.path_type = PathType::SHIFT;
@@ -351,7 +364,9 @@ bool PullOverModule::planWithCloseGoal(
         parallel_parking_planner_.setParams(planner_data_, parallel_parking_prameters_);
         if (
           parallel_parking_planner_.plan(modified_goal_pose_, lanes, is_forward) &&
-          !occupancy_grid_map_.hasObstacleOnPath(parallel_parking_planner_.getArcPath(), false)) {
+          !occupancy_grid_map_.hasObstacleOnPath(parallel_parking_planner_.getArcPath(), false) &&
+          !lane_departure_checker_->checkPathWillLeaveLane(
+            lanes, parallel_parking_planner_.getArcPath())) {
           status_.path = parallel_parking_planner_.getCurrentPath();
           status_.path_type = is_forward ? PathType::ARC_FORWARD : PathType::ARC_BACKWARD;
           status_.is_safe = true;
