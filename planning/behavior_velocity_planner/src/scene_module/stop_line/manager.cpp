@@ -19,20 +19,57 @@
 #include <string>
 #include <vector>
 
+namespace tier4_autoware_utils
+{
+template <>
+inline geometry_msgs::msg::Pose getPose(
+  const autoware_auto_planning_msgs::msg::PathPointWithLaneId & p)
+{
+  return p.point.pose;
+}
+}  // namespace tier4_autoware_utils
+
 namespace behavior_velocity_planner
 {
-namespace
+using tier4_autoware_utils::calcSignedArcLength;
+using tier4_autoware_utils::findNearestIndex;
+
+StopLineModuleManager::StopLineModuleManager(rclcpp::Node & node)
+: SceneModuleManagerInterface(node, getModuleName())
 {
-using TrafficSignsWithLaneId = std::vector<std::pair<lanelet::TrafficSignConstPtr, int64_t>>;
-using StopLineWithLaneId = std::pair<lanelet::ConstLineString3d, int64_t>;
-TrafficSignsWithLaneId getTrafficSignRegElemsOnPath(
+  const std::string ns(getModuleName());
+  auto & p = planner_param_;
+  p.stop_margin = node.declare_parameter(ns + ".stop_margin", 0.0);
+  p.stop_check_dist = node.declare_parameter(ns + ".stop_check_dist", 2.0);
+  p.stop_duration_sec = node.declare_parameter(ns + ".stop_duration_sec", 1.0);
+}
+
+TrafficSignsWithLaneId StopLineModuleManager::getTrafficSignRegElemsOnPath(
   const autoware_auto_planning_msgs::msg::PathWithLaneId & path,
   const lanelet::LaneletMapPtr lanelet_map)
 {
   TrafficSignsWithLaneId traffic_signs_reg_elems_with_id;
   std::set<int64_t> unique_lane_ids;
-  for (const auto & p : path.points) {
-    unique_lane_ids.insert(p.lane_ids.at(0));  // should we iterate ids? keep as it was.
+
+  // Add current_pose lane_id
+  lanelet::ConstLanelet closest_lanelet;
+  planner_data_->route_handler_->getClosestLaneletWithinRoute(
+    planner_data_->current_pose.pose, &closest_lanelet);
+  unique_lane_ids.insert(closest_lanelet.id());
+
+  // Add forward path lane_id
+  size_t start_idx = 0;
+  const auto nearest_idx = findNearestIndex(
+    path.points, planner_data_->current_pose.pose, std::numeric_limits<double>::max(), M_PI_2);
+  if (nearest_idx) {
+    const auto arc_length = calcSignedArcLength(
+      path.points, planner_data_->current_pose.pose.position,
+      path.points.at(*nearest_idx).point.pose.position);
+    start_idx = arc_length > 0 ? *nearest_idx : *nearest_idx + 1;
+  }
+  for (size_t i = start_idx < path.points.size(); i++;) {
+    unique_lane_ids.insert(
+      path.points.at(i).lane_ids.at(0));  // should we iterate ids? keep as it was.
   }
 
   for (const auto lane_id : unique_lane_ids) {
@@ -47,7 +84,7 @@ TrafficSignsWithLaneId getTrafficSignRegElemsOnPath(
   return traffic_signs_reg_elems_with_id;
 }
 
-std::vector<StopLineWithLaneId> getStopLinesWithLaneIdOnPath(
+std::vector<StopLineWithLaneId> StopLineModuleManager::getStopLinesWithLaneIdOnPath(
   const autoware_auto_planning_msgs::msg::PathWithLaneId & path,
   const lanelet::LaneletMapPtr lanelet_map)
 {
@@ -70,7 +107,7 @@ std::vector<StopLineWithLaneId> getStopLinesWithLaneIdOnPath(
   return stop_lines_with_lane_id;
 }
 
-std::set<int64_t> getStopLineIdSetOnPath(
+std::set<int64_t> StopLineModuleManager::getStopLineIdSetOnPath(
   const autoware_auto_planning_msgs::msg::PathWithLaneId & path,
   const lanelet::LaneletMapPtr lanelet_map)
 {
@@ -81,18 +118,6 @@ std::set<int64_t> getStopLineIdSetOnPath(
   }
 
   return stop_line_id_set;
-}
-
-}  // namespace
-
-StopLineModuleManager::StopLineModuleManager(rclcpp::Node & node)
-: SceneModuleManagerInterface(node, getModuleName())
-{
-  const std::string ns(getModuleName());
-  auto & p = planner_param_;
-  p.stop_margin = node.declare_parameter(ns + ".stop_margin", 0.0);
-  p.stop_check_dist = node.declare_parameter(ns + ".stop_check_dist", 2.0);
-  p.stop_duration_sec = node.declare_parameter(ns + ".stop_duration_sec", 1.0);
 }
 
 void StopLineModuleManager::launchNewModules(
