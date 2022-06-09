@@ -177,6 +177,8 @@ private:
   ParallelParkingParameters parallel_parking_prameters_;
   std::deque<nav_msgs::msg::Odometry::ConstSharedPtr> odometry_buffer_;
   std::unique_ptr<LaneDepartureChecker> lane_departure_checker_;
+  bool has_requested_approval_;
+  rclcpp::Time last_received_time_;
 
   PathWithLaneId getReferencePath() const;
   PathWithLaneId getStopPath();
@@ -186,6 +188,7 @@ private:
     const lanelet::ConstLanelets & pull_over_lanes, const double check_distance,
     const Pose goal_pose, ShiftParkingPath & safe_path) const;
   TurnSignalInfo getTurnSignalAndDistance(const PathWithLaneId & path) const;
+  Pose getRefinedGoal() const;
 
   // turn signal
   std::pair<HazardLightsCommand, double> getHazard(
@@ -197,11 +200,12 @@ private:
   double calcMinimumShiftPathDistance() const;
   bool isLongEnough(
     const lanelet::ConstLanelets & lanelets, const Pose goal_pose, const double buffer = 0) const;
+  bool isStopped();
   bool hasFinishedCurrentPath();
   bool hasFinishedPullOver();
   void updateOccupancyGrid();
-  Pose getRefinedGoal();
   void researchGoal();
+  void resetStatus();
   // debug
   Marker createParkingAreaMarker(const Pose back_pose, const Pose front_pose, const int32_t id);
   void publishDebugData();

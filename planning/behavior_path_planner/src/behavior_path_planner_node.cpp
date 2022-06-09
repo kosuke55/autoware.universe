@@ -569,17 +569,27 @@ void BehaviorPathPlannerNode::run()
   mutex_pd_.unlock();
 
   // get running moudle name
-  std::string running_module_name = "";
-  const auto statuses = bt_manager_->getModulesStatus();
-  const auto running_module_itr = std::find_if(
-    statuses.begin(), statuses.end(), [](auto s) { return s->status == BT::NodeStatus::RUNNING; });
-  if (running_module_itr != statuses.end()) {
-    running_module_name = (*running_module_itr)->module_name;
+  // std::string success_module_name = "";
+  // const auto statuses = bt_manager_->getModulesStatus();
+  // const auto running_module_itr = std::find_if(statuses.begin(), statuses.end(), [](auto s) {
+  //   return s->status == BT::NodeStatus::SUCCESS || s->status == BT::NodeStatus::RUNNING;
+  // });
+  // if (running_module_itr != statuses.end()) {
+  //   success_module_name = (*running_module_itr)->module_name;
+  // }
+  // for (const auto & s : statuses) {
+  // std::cerr << "module name: " << s->module_name << " status: " << s->status << std::endl;
+  // }
+
+  bool skip_smooth_goal_connection = ready_module_.module.type == PathChangeModuleId::PULL_OVER;
+  for (const auto & m : running_modules_.modules) {
+    if (skip_smooth_goal_connection = m.type == PathChangeModuleId::PULL_OVER) {
+      skip_smooth_goal_connection = true;
+    }
   }
 
   PathWithLaneId clipped_path;
-  if (running_module_name == "PullOver") {
-    // skip SmoothGoalConnection
+  if (skip_smooth_goal_connection) {
     clipped_path = *path;
   } else {
     clipped_path = modifyPathForSmoothGoalConnection(*path);
@@ -679,8 +689,7 @@ void BehaviorPathPlannerNode::publishModuleStatus(
 
   const auto now = this->now();
 
-  PathChangeModule ready_module{};
-  PathChangeModuleArray running_modules{};
+  running_modules_ = PathChangeModuleArray{};
   PathChangeModuleArray force_available{};
 
   bool is_ready{false};
@@ -688,7 +697,7 @@ void BehaviorPathPlannerNode::publishModuleStatus(
     if (status->status == BT::NodeStatus::RUNNING) {
       PathChangeModuleId module{};
       module.type = getModuleType(status->module_name);
-      running_modules.modules.push_back(module);
+      running_modules_.modules.push_back(module);
     }
     if (status->module_name == "LaneChange") {
       const auto force_approval = planner_data->approval.is_force_approved;
@@ -696,7 +705,7 @@ void BehaviorPathPlannerNode::publishModuleStatus(
         force_approval.module_name == "ForceLaneChange" &&
         (now - force_approval.stamp).seconds() < 0.5) {
         is_ready = true;
-        ready_module.module.type = getModuleType("ForceLaneChange");
+        ready_module_.module.type = getModuleType("ForceLaneChange");
       }
       if (status->is_requested && !status->is_ready) {
         PathChangeModuleId module;
@@ -713,20 +722,20 @@ void BehaviorPathPlannerNode::publishModuleStatus(
       RCLCPP_DEBUG(
         get_logger(), "%s is Ready : ready = %s, is_approved = %s", status->module_name.c_str(),
         status->is_ready ? "true" : "false", status->is_waiting_approval ? "true" : "false");
-      ready_module.module.type = getModuleType(status->module_name);
+      ready_module_.module.type = getModuleType(status->module_name);
     }
   }
 
   if (!is_ready) {
     prev_ready_module_name_ = "NONE";
-    ready_module.module.type = PathChangeModuleId::NONE;
+    ready_module_.module.type = PathChangeModuleId::NONE;
   }
 
-  ready_module.header.stamp = now;
-  plan_ready_publisher_->publish(ready_module);
+  ready_module_.header.stamp = now;
+  plan_ready_publisher_->publish(ready_module_);
 
-  running_modules.header.stamp = now;
-  plan_running_publisher_->publish(running_modules);
+  running_modules_.header.stamp = now;
+  plan_running_publisher_->publish(running_modules_);
 
   force_available.header.stamp = now;
   force_available_publisher_->publish(force_available);

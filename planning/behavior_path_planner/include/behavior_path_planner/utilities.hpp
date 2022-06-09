@@ -296,6 +296,10 @@ PathWithLaneId setDecelerationVelocity(
 bool checkLaneIsInIntersection(
   const RouteHandler & route_handler, const PathWithLaneId & ref,
   const lanelet::ConstLanelets & lanelet_sequence, double & additional_length_to_add);
+PathWithLaneId setDecelerationVelocity(
+  const RouteHandler & route_handler, const PathWithLaneId & input,
+  const lanelet::ConstLanelets & lanelet_sequence, const double target_velocity,
+  const Pose target_pose, const double buffer, const double deceleration_interval);
 
 // object label
 std::uint8_t getHighestProbLabel(const std::vector<ObjectClassification> & classification);
