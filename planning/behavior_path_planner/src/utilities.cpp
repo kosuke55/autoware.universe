@@ -1431,9 +1431,12 @@ PathPointWithLaneId insertStopPoint(double length, PathWithLaneId * path)
   stop_point.point.pose = stop_pose;
   path->points.insert(path->points.begin() + insert_idx, stop_point);
   for (size_t i = insert_idx; i < path->points.size(); i++) {
-    path->points.at(insert_idx).point.longitudinal_velocity_mps = 0.0;
-    path->points.at(insert_idx).point.lateral_velocity_mps = 0.0;
+    path->points.at(i).point.longitudinal_velocity_mps = 0.0;
+    path->points.at(i).point.lateral_velocity_mps = 0.0;
+
   }
+  std::cerr << "insert_idx: " << insert_idx << "size " << path->points.size() << "length " << length
+            << std::endl;
   return stop_point;
 }
 
@@ -1744,6 +1747,41 @@ PathWithLaneId setDecelerationVelocity(
   const auto stop_point = util::insertStopPoint(distance_to_pull_over_start, &reference_path);
 
   return reference_path;
+}
+
+PathWithLaneId setDecelerationVelocity(
+  const RouteHandler & route_handler, const PathWithLaneId & input,
+  const lanelet::ConstLanelets & lanelet_sequence, const double target_velocity,
+  const Pose target_pose, const double buffer, const double deceleration_interval)
+{
+  auto reference_path = input;
+
+  const auto arclength_target_pose =
+    lanelet::utils::getArcCoordinates(lanelet_sequence, target_pose).length;
+
+  if (route_handler.isDeadEndLanelet(lanelet_sequence.back())) {
+    for (auto & point : reference_path.points) {
+      const auto arclength =
+        lanelet::utils::getArcCoordinates(lanelet_sequence, point.point.pose).length;
+      const double distance_to_target_pose =
+        std::max(0.0, arclength_target_pose + buffer - arclength);
+      point.point.longitudinal_velocity_mps = std::min(
+        point.point.longitudinal_velocity_mps,
+        static_cast<float>(
+          (distance_to_target_pose / deceleration_interval) *
+            (point.point.longitudinal_velocity_mps - target_velocity) +
+          target_velocity));
+    }
+
+    const auto arclength_first_path_point =
+      lanelet::utils::getArcCoordinates(lanelet_sequence, input.points.front().point.pose).length;
+    const double stop_point_length = arclength_target_pose - arclength_first_path_point + buffer;
+    if (target_velocity == 0.0 && stop_point_length > 0) {
+      const auto stop_point = util::insertStopPoint(stop_point_length, &reference_path);
+    }
+  }
+
+    return reference_path;
 }
 
 std::uint8_t getHighestProbLabel(const std::vector<ObjectClassification> & classification)

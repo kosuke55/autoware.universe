@@ -71,10 +71,10 @@ public:
   void clear();
 
   // debug
-  PoseStamped getCr() { return Cr_; };
-  PoseStamped getCl() { return Cl_; };
-  PoseStamped getStartPose() { return start_pose_; };
-  PoseArray getPathPoseArray() { return path_pose_array_; };
+  PoseStamped getCr() const { return Cr_; };
+  PoseStamped getCl() const { return Cl_; };
+  PoseStamped getStartPose() const { return start_pose_; };
+  PoseArray getPathPoseArray() const { return path_pose_array_; };
 
 private:
   std::shared_ptr<const PlannerData> planner_data_;

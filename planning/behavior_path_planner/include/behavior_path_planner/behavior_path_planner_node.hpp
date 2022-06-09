@@ -97,6 +97,8 @@ private:
   tier4_autoware_utils::SelfPoseListener self_pose_listener_{this};
 
   std::string prev_ready_module_name_ = "NONE";
+  PathChangeModule ready_module_{};
+  PathChangeModuleArray running_modules_{};
 
   TurnSignalDecider turn_signal_decider_;
 

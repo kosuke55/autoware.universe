@@ -217,9 +217,6 @@ std::vector<ShiftParkingPath> getShiftParkingPaths(
     // offset front side from reference path
     bool offset_back = false;
     if (!path_shifter.generate(&shifted_path, offset_back)) {
-      RCLCPP_ERROR_STREAM(
-        rclcpp::get_logger("behavior_path_planner").get_child("pull_over").get_child("util"),
-        "failed to generate shifted path.");
       continue;
     }
 

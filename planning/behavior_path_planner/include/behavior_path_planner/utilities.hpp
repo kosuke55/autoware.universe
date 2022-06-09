@@ -279,6 +279,11 @@ PathWithLaneId setDecelerationVelocity(
   const double pullover_distance_min, const double distance_before_pull_over,
   const double deceleration_interval, Pose goal_pose);
 
+PathWithLaneId setDecelerationVelocity(
+  const RouteHandler & route_handler, const PathWithLaneId & input,
+  const lanelet::ConstLanelets & lanelet_sequence, const double target_velocity,
+  const Pose target_pose, const double buffer, const double deceleration_interval);
+
 // object label
 std::uint8_t getHighestProbLabel(const std::vector<ObjectClassification> & classification);
 
