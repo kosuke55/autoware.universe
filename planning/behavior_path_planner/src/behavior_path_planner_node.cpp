@@ -528,26 +528,11 @@ void BehaviorPathPlannerNode::run()
   planner_data_->prev_output_path = path;
   mutex_pd_.unlock();
 
-  // get running moudle name
-  // std::string success_module_name = "";
-  // const auto statuses = bt_manager_->getModulesStatus();
-  // const auto running_module_itr = std::find_if(statuses.begin(), statuses.end(), [](auto s) {
-  //   return s->status == BT::NodeStatus::SUCCESS || s->status == BT::NodeStatus::RUNNING;
-  // });
-  // if (running_module_itr != statuses.end()) {
-  //   success_module_name = (*running_module_itr)->module_name;
-  // }
-  // for (const auto & s : statuses) {
-  // std::cerr << "module name: " << s->module_name << " status: " << s->status << std::endl;
-  // }
-
-  bool skip_smooth_goal_connection = ready_module_.module.type == PathChangeModuleId::PULL_OVER;
-  for (const auto & m : running_modules_.modules) {
-    if (skip_smooth_goal_connection = m.type == PathChangeModuleId::PULL_OVER) {
-      skip_smooth_goal_connection = true;
-    }
-  }
-
+  bool skip_smooth_goal_connection =
+    ready_module_.module.type == PathChangeModuleId::PULL_OVER ||
+    std::any_of(running_modules_.modules.begin(), running_modules_.modules.end(), [](const auto m) {
+      return m.type == PathChangeModuleId::PULL_OVER;
+    });
   PathWithLaneId clipped_path;
   if (skip_smooth_goal_connection) {
     clipped_path = *path;
