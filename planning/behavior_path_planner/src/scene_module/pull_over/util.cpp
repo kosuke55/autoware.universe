@@ -268,7 +268,7 @@ std::vector<ShiftParkingPath> getShiftParkingPaths(
         candidate_path.path.points, shift_point.start.position);
       shift_point.end_idx = tier4_autoware_utils::findNearestIndex(
         candidate_path.path.points, shift_point.end.position);
-      for (size_t i = shift_point.start_idx; i <= shift_point.end_idx; i++) {
+      for (size_t i = shift_point.start_idx; i < candidate_path.path.points.size(); i++) {
         candidate_path.shifted_path.path.points.push_back(candidate_path.path.points.at(i));
       }
       candidate_path.shift_point = shift_point;
