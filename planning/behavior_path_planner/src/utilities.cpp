@@ -1435,8 +1435,6 @@ PathPointWithLaneId insertStopPoint(double length, PathWithLaneId * path)
     path->points.at(i).point.lateral_velocity_mps = 0.0;
 
   }
-  std::cerr << "insert_idx: " << insert_idx << "size " << path->points.size() << "length " << length
-            << std::endl;
   return stop_point;
 }
 
