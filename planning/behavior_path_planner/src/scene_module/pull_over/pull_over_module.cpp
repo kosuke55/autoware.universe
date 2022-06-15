@@ -295,7 +295,6 @@ BT::NodeStatus PullOverModule::updateState()
   //   current_state_ = BT::NodeStatus::SUCCESS;
   //   return current_state_;
   // }
-  current_state_ = BT::NodeStatus::RUNNING;
 
   return current_state_;
 }
