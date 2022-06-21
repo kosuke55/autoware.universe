@@ -264,13 +264,18 @@ std::vector<ShiftParkingPath> getShiftParkingPaths(
       // resample is needed for adding orientation to path points for collision check
       candidate_path.path =
         util::resamplePathWithSpline(combineReferencePath(reference_path1, shifted_path.path), 1.0);
-      shift_point.start_idx = tier4_autoware_utils::findNearestIndex(
+      const auto shift_start_idx = tier4_autoware_utils::findNearestIndex(
         candidate_path.path.points, shift_point.start.position);
-      shift_point.end_idx = tier4_autoware_utils::findNearestIndex(
-        candidate_path.path.points, shift_point.end.position);
-      for (size_t i = shift_point.start_idx; i < candidate_path.path.points.size(); i++) {
+      for (size_t i = shift_start_idx; i < candidate_path.path.points.size(); i++) {
         candidate_path.shifted_path.path.points.push_back(candidate_path.path.points.at(i));
       }
+      // The idx of the shift point should be in shifted_pagth (not full path)
+      // for `getPathTurnSignal`
+      shift_point.start_idx = shift_point.end_idx = tier4_autoware_utils::findNearestIndex(
+        candidate_path.shifted_path.path.points, shift_point.start.position);
+      shift_point.end_idx = tier4_autoware_utils::findNearestIndex(
+        candidate_path.shifted_path.path.points, shift_point.end.position);
+      candidate_path.shifted_path.shift_length = shifted_path.shift_length;
       candidate_path.shift_point = shift_point;
       // candidate_path.acceleration = acceleration;
       candidate_path.preparation_length = straight_distance;

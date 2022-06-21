@@ -65,15 +65,16 @@ public:
   void setParams(
     const std::shared_ptr<const PlannerData> & planner_data, ParallelParkingParameters parameters);
   void incrementPathIndex();
-  PathWithLaneId getCurrentPath();
-  PathWithLaneId getFullPath();
-  PathWithLaneId getArcPath();
   void clear();
 
-  // debug
+  PathWithLaneId getCurrentPath() const;
+  PathWithLaneId getFullPath() const;
+  PathWithLaneId getArcPath() const;
   PoseStamped getCr() const { return Cr_; };
   PoseStamped getCl() const { return Cl_; };
   PoseStamped getStartPose() const { return start_pose_; };
+  PoseStamped getArcEndPose() const { return arc_end_pose_; };
+
   PoseArray getPathPoseArray() const { return path_pose_array_; };
 
 private:
@@ -99,15 +100,15 @@ private:
   PathPointWithLaneId generateArcPathPoint(
     const Pose & center, const float radius, const float yaw, const bool is_left_turn,
     const bool is_forward);
-  Pose getStartPose(
+  Pose calcStartPose(
     const Pose goal_pose, const double start_pose_offset, const double R_E_r,
     const bool is_forward);
   void generateStraightPath(const Pose start_pose);
 
-  // debug data
   PoseStamped Cr_;
   PoseStamped Cl_;
   PoseStamped start_pose_;
+  PoseStamped arc_end_pose_;
   PoseArray path_pose_array_;
 };
 }  // namespace behavior_path_planner

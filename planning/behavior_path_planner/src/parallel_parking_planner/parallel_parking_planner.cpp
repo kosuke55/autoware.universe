@@ -59,9 +59,12 @@ void ParallelParkingPlanner::incrementPathIndex()
   current_path_idx_ = std::min(current_path_idx_ + 1, paths_.size() - 1);
 }
 
-PathWithLaneId ParallelParkingPlanner::getCurrentPath() { return paths_.at(current_path_idx_); }
+PathWithLaneId ParallelParkingPlanner::getCurrentPath() const
+{
+  return paths_.at(current_path_idx_);
+}
 
-PathWithLaneId ParallelParkingPlanner::getFullPath()
+PathWithLaneId ParallelParkingPlanner::getFullPath() const
 {
   PathWithLaneId path{};
   for (const auto & p : paths_) {
@@ -70,7 +73,7 @@ PathWithLaneId ParallelParkingPlanner::getFullPath()
   return path;
 }
 
-PathWithLaneId ParallelParkingPlanner::getArcPath()
+PathWithLaneId ParallelParkingPlanner::getArcPath() const
 {
   PathWithLaneId path{};
   for (size_t i = 1; i < paths_.size(); i++) {
@@ -113,7 +116,7 @@ bool ParallelParkingPlanner::plan(
   return false;
 }
 
-Pose ParallelParkingPlanner::getStartPose(
+Pose ParallelParkingPlanner::calcStartPose(
   const Pose goal_pose, const double start_pose_offset, const double R_E_r, const bool is_forward)
 {
   // Not use shoulder lanes.
@@ -163,11 +166,8 @@ bool ParallelParkingPlanner::planOneTraial(
   const double after_parking_straight_distance =
     is_forward ? -parameters_.after_forward_parking_straight_distance
                : parameters_.after_backward_parking_straight_distance;
-  const Pose offsetted_goal_pose = calcOffsetPose(goal_pose, after_parking_straight_distance, 0, 0);
-
-  const Pose start_pose = getStartPose(offsetted_goal_pose, start_pose_offset, R_E_r, is_forward);
-  generateStraightPath(start_pose);
-
+  const Pose arc_end_pose = calcOffsetPose(goal_pose, after_parking_straight_distance, 0, 0);
+  const Pose start_pose = calcStartPose(arc_end_pose, start_pose_offset, R_E_r, is_forward);
   const Pose current_pose = planner_data_->self_pose->pose;
   const Pose current_to_start = inverseTransformPose(start_pose, current_pose);
 
@@ -185,16 +185,16 @@ bool ParallelParkingPlanner::planOneTraial(
   }
 
   const float self_yaw = tf2::getYaw(start_pose.orientation);
-  const float goal_yaw = tf2::getYaw(offsetted_goal_pose.orientation);
+  const float goal_yaw = tf2::getYaw(arc_end_pose.orientation);
   const float psi = normalizeRadian(self_yaw - goal_yaw);
   const auto common_params = planner_data_->parameters;
 
-  Pose Cr = calcOffsetPose(offsetted_goal_pose, 0, -R_E_r, 0);
+  Pose Cr = calcOffsetPose(arc_end_pose, 0, -R_E_r, 0);
   const float d_Cr_Einit = calcDistance2d(Cr, start_pose);
 
-  geometry_msgs::msg::Point Cr_goalcoords = inverseTransformPoint(Cr.position, offsetted_goal_pose);
+  geometry_msgs::msg::Point Cr_goalcoords = inverseTransformPoint(Cr.position, arc_end_pose);
   geometry_msgs::msg::Point self_point_goalcoords =
-    inverseTransformPoint(start_pose.position, offsetted_goal_pose);
+    inverseTransformPoint(start_pose.position, arc_end_pose);
 
   const float alpha =
     M_PI_2 - psi + std::asin((self_point_goalcoords.y - Cr_goalcoords.y) / d_Cr_Einit);
@@ -212,7 +212,7 @@ bool ParallelParkingPlanner::planOneTraial(
     const float R_front_left =
       std::hypot(R_E_r + common_params.vehicle_width / 2, common_params.base_link2front);
     const double distance_to_left_bound =
-      util::getDistanceToShoulderBoundary(lanes, offsetted_goal_pose);
+      util::getDistanceToShoulderBoundary(lanes, arc_end_pose);
     const float left_deviation = R_front_left - R_E_r;
     if (std::abs(distance_to_left_bound) < left_deviation) {
       return false;
@@ -265,13 +265,14 @@ bool ParallelParkingPlanner::planOneTraial(
     lanes, common_params.drivable_area_resolution, common_params.vehicle_length, planner_data_);
   paths_.push_back(path_turn_right);
 
-  // debug
   Cr_.pose = Cr;
   Cr_.header = planner_data_->route_handler->getRouteHeader();
   Cl_.pose = Cl;
   Cl_.header = planner_data_->route_handler->getRouteHeader();
   start_pose_.pose = start_pose;
   start_pose_.header = planner_data_->route_handler->getRouteHeader();
+  arc_end_pose_.pose = arc_end_pose;
+  arc_end_pose_.header = planner_data_->route_handler->getRouteHeader();
   path_pose_array_ = convertToGeometryPoseArray(getFullPath());
   path_pose_array_.header = planner_data_->route_handler->getRouteHeader();
 

@@ -107,6 +107,9 @@ enum PathType {
 struct PUllOverStatus
 {
   PathWithLaneId path;
+  lanelet::ConstLanelets current_lanes;
+  lanelet::ConstLanelets pull_over_lanes;
+  lanelet::ConstLanelets lanes;  // current + pull_over
   bool has_decided_path = false;
   int path_type = PathType::NONE;
   bool is_safe = false;
@@ -140,10 +143,9 @@ public:
   bool isExecutionRequested() const override;
   bool isExecutionReady() const override;
   BT::NodeStatus updateState() override;
-  bool planWithEfficientPath(
-    const lanelet::ConstLanelets & current_lanes, const lanelet::ConstLanelets & lanes);
-  bool planWithCloseGoal(
-    const lanelet::ConstLanelets & current_lanes, const lanelet::ConstLanelets & lanes);
+  void onTimer();
+  bool planWithEfficientPath();
+  bool planWithCloseGoal();
   BehaviorModuleOutput plan() override;
   BehaviorModuleOutput planWaitingApproval() override;
   CandidateOutput planCandidate() const override;
@@ -182,19 +184,13 @@ private:
 
   PathWithLaneId getReferencePath() const;
   PathWithLaneId getStopPath();
-  // lanelet::ConstLanelets getCurrentLanes() const;
-  lanelet::ConstLanelets getPullOverLanes(const lanelet::ConstLanelets & current_lanes) const;
-  std::pair<bool, bool> getSafePath(
-    const lanelet::ConstLanelets & pull_over_lanes, const double check_distance,
-    const Pose goal_pose, ShiftParkingPath & safe_path) const;
-  TurnSignalInfo getTurnSignalAndDistance(const PathWithLaneId & path) const;
+  lanelet::ConstLanelets getPullOverLanes() const;
+  std::pair<bool, bool> getSafePath(ShiftParkingPath & safe_path) const;
   Pose getRefinedGoal() const;
 
   // turn signal
-  std::pair<HazardLightsCommand, double> getHazard(
-    const lanelet::ConstLanelets & target_lanes, const Pose & current_pose, const Pose & goal_pose,
-    const double & velocity, const double & hazard_on_threshold_dis,
-    const double & hazard_on_threshold_vel, const double & base_link2front) const;
+  std::pair<HazardLightsCommand, double> getHazardInfo() const;
+  std::pair<TurnIndicatorsCommand, double> getTurnInfo() const;
 
   bool planShiftPath();
   double calcMinimumShiftPathDistance() const;
