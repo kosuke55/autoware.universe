@@ -16,6 +16,7 @@
 
 #include "motion_common/motion_common.hpp"
 #include "motion_common/trajectory_common.hpp"
+#include "pure_pursuit/pure_pursuit_lateral_controller.hpp"
 #include "time_utils/time_utils.hpp"
 #include "trajectory_follower/mpc_lateral_controller.hpp"
 #include "trajectory_follower/pid_longitudinal_controller.hpp"
@@ -39,11 +40,35 @@ Controller::Controller(const rclcpp::NodeOptions & node_options) : Node("control
 {
   using std::placeholders::_1;
 
-  const double ctrl_period = declare_parameter<float64_t>("ctrl_period", 0.015);
+  const double ctrl_period = declare_parameter<double>("ctrl_period", 0.015);
+  timeout_thr_sec_ = declare_parameter<double>("timeout_thr_sec", 0.5);
 
-  lateral_controller_ = std::make_shared<trajectory_follower::MpcLateralController>(*this);
-  longitudinal_controller_ =
-    std::make_shared<trajectory_follower::PidLongitudinalController>(*this);
+  const auto lateral_controller_type =
+    getLateralControllerType(declare_parameter("lateral_controller_type", "MPC"));
+  switch (lateral_controller_type) {
+    case LateralControllerType::MPC: {
+      lateral_controller_ = std::make_shared<trajectory_follower::MpcLateralController>(*this);
+      break;
+    }
+    case LateralControllerType::PURE_PURSUIT: {
+      lateral_controller_ = std::make_shared<pure_pursuit::PurePursuitLateralController>(*this);
+      break;
+    }
+    default:
+      throw std::domain_error("[LateralController] invalid algorithm");
+  }
+
+  const auto longitudinal_controller_type =
+    getLongitudinalControllerType(declare_parameter("longitudinal_controller_type", "PID"));
+  switch (longitudinal_controller_type) {
+    case LongitudinalControllerType::PID: {
+      longitudinal_controller_ =
+        std::make_shared<trajectory_follower::PidLongitudinalController>(*this);
+      break;
+    }
+    default:
+      throw std::domain_error("[LongitudinalController] invalid algorithm");
+  }
 
   sub_ref_path_ = create_subscription<autoware_auto_planning_msgs::msg::Trajectory>(
     "~/input/reference_trajectory", rclcpp::QoS{1}, std::bind(&Controller::onTrajectory, this, _1));
@@ -63,6 +88,25 @@ Controller::Controller(const rclcpp::NodeOptions & node_options) : Node("control
   }
 }
 
+Controller::LateralControllerType Controller::getLateralControllerType(
+  const std::string & controller_type) const
+{
+  if (controller_type == "MPC") return LateralControllerType::MPC;
+  if (controller_type == "PurePursuit") return LateralControllerType::PURE_PURSUIT;
+
+  throw std::domain_error("[LateralController] undesired algorithm is selected.");
+  return LateralControllerType::INVALID;
+}
+
+Controller::LongitudinalControllerType Controller::getLongitudinalControllerType(
+  const std::string & controller_type) const
+{
+  if (controller_type == "PID") return LongitudinalControllerType::PID;
+
+  throw std::domain_error("[LongitudinalController] undesired algorithm is selected.");
+  return LongitudinalControllerType::INVALID;
+}
+
 void Controller::onTrajectory(const autoware_auto_planning_msgs::msg::Trajectory::SharedPtr msg)
 {
   input_data_.current_trajectory_ptr = msg;
@@ -78,21 +122,40 @@ void Controller::onSteering(const autoware_auto_vehicle_msgs::msg::SteeringRepor
   input_data_.current_steering_ptr = msg;
 }
 
+bool Controller::isTimeOut()
+{
+  const auto now = this->now();
+  if ((now - lateral_output_->control_cmd.stamp).seconds() > timeout_thr_sec_) {
+    RCLCPP_ERROR_THROTTLE(
+      get_logger(), *get_clock(), 1000 /*ms*/,
+      "Lateral control command too old, control_cmd will not be published.");
+    return true;
+  }
+  if ((now - longitudinal_output_->control_cmd.stamp).seconds() > timeout_thr_sec_) {
+    RCLCPP_ERROR_THROTTLE(
+      get_logger(), *get_clock(), 1000 /*ms*/,
+      "Longitudinal control command too old, control_cmd will not be published.");
+    return true;
+  }
+  return false;
+}
+
 void Controller::callbackTimerControl()
 {
   longitudinal_controller_->setInputData(input_data_);  // trajectory, odometry
   lateral_controller_->setInputData(input_data_);       // trajectory, odometry, steering
 
-  const auto longitudinal_output = longitudinal_controller_->run();
-  const auto lateral_output = lateral_controller_->run();
+  longitudinal_output_ = longitudinal_controller_->run();
+  lateral_output_ = lateral_controller_->run();
 
-  longitudinal_controller_->sync(lateral_output.sync_data);
-  lateral_controller_->sync(longitudinal_output.sync_data);
+  if (!lateral_output_) longitudinal_controller_->sync(lateral_output_->sync_data);
+  if (!longitudinal_output_) lateral_controller_->sync(longitudinal_output_->sync_data);
+  if (isTimeOut()) return;
 
   autoware_auto_control_msgs::msg::AckermannControlCommand out;
   out.stamp = this->now();
-  out.lateral = lateral_output.control_cmd;
-  out.longitudinal = longitudinal_output.control_cmd;
+  out.lateral = lateral_output_->control_cmd;
+  out.longitudinal = longitudinal_output_->control_cmd;
   control_cmd_pub_->publish(out);
 }
 
