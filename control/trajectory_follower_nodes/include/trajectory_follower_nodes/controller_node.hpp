@@ -52,6 +52,8 @@ namespace motion
 {
 namespace control
 {
+using trajectory_follower::LateralOutput;
+using trajectory_follower::LongitudinalOutput;
 namespace trajectory_follower_nodes
 {
 using autoware::common::types::bool8_t;
@@ -67,10 +69,11 @@ public:
   explicit Controller(const rclcpp::NodeOptions & node_options);
 
 private:
-  // ros variables
   rclcpp::TimerBase::SharedPtr timer_control_;
-
   trajectory_follower::InputData input_data_;
+  double timeout_thr_sec_;
+  boost::optional<LongitudinalOutput> longitudinal_output_{boost::none};
+  boost::optional<LateralOutput> lateral_output_{boost::none};
 
   std::shared_ptr<trajectory_follower::LongitudinalControllerBase> longitudinal_controller_;
   std::shared_ptr<trajectory_follower::LateralControllerBase> lateral_controller_;
@@ -81,6 +84,16 @@ private:
   rclcpp::Publisher<autoware_auto_control_msgs::msg::AckermannControlCommand>::SharedPtr
     control_cmd_pub_;
 
+  enum class LateralControllerType {
+    INVALID = 0,
+    MPC = 1,
+    PURE_PURSUIT = 2,
+  };
+  enum class LongitudinalControllerType {
+    INVALID = 0,
+    PID = 1,
+  };
+
   /**
    * @brief compute control command, and publish periodically
    */
@@ -88,6 +101,10 @@ private:
   void onTrajectory(const autoware_auto_planning_msgs::msg::Trajectory::SharedPtr);
   void onOdometry(const nav_msgs::msg::Odometry::SharedPtr msg);
   void onSteering(const autoware_auto_vehicle_msgs::msg::SteeringReport::SharedPtr msg);
+  bool isTimeOut();
+  LateralControllerType getLateralControllerType(const std::string & algorithm_name) const;
+  LongitudinalControllerType getLongitudinalControllerType(
+    const std::string & algorithm_name) const;
 };
 }  // namespace trajectory_follower_nodes
 }  // namespace control

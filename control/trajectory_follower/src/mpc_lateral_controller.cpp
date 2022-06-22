@@ -171,11 +171,10 @@ MpcLateralController::~MpcLateralController()
   createCtrlCmdMsg(stop_cmd);  // todo
 }
 
-LateralOutput MpcLateralController::run()
+boost::optional<LateralOutput> MpcLateralController::run()
 {
   if (!checkData() || !updateCurrentPose()) {
-    LateralOutput output;
-    return output;  // todo
+    return boost::none;
   }
 
   autoware_auto_control_msgs::msg::AckermannLateralCommand ctrl_cmd;
@@ -207,7 +206,7 @@ LateralOutput MpcLateralController::run()
     output.sync_data.is_steer_converged =
       std::abs(cmd_msg.steering_tire_angle - m_current_steering_ptr->steering_tire_angle) <
       static_cast<float>(m_converged_steer_rad);
-    return output;
+    return boost::optional<LateralOutput>(output);
   }
 
   if (!is_mpc_solved) {
@@ -227,7 +226,7 @@ LateralOutput MpcLateralController::run()
     std::abs(cmd_msg.steering_tire_angle - m_current_steering_ptr->steering_tire_angle) <
     static_cast<float>(m_converged_steer_rad);
 
-  return output;
+  return boost::optional<LateralOutput>(output);
 }
 
 void MpcLateralController::setInputData(InputData const & input_data)

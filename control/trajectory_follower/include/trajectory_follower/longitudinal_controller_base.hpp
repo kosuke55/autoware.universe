@@ -21,6 +21,8 @@
 
 #include "autoware_auto_control_msgs/msg/longitudinal_command.hpp"
 
+#include <boost/optional.hpp>
+
 namespace autoware
 {
 namespace motion
@@ -37,7 +39,7 @@ struct LongitudinalOutput
 class LongitudinalControllerBase
 {
 public:
-  virtual LongitudinalOutput run() = 0;
+  virtual boost::optional<LongitudinalOutput> run() = 0;
   virtual void setInputData(InputData const & input_data) = 0;
   void sync(LateralSyncData const & lateral_sync_data) { lateral_sync_data_ = lateral_sync_data; };
 

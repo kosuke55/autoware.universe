@@ -138,9 +138,9 @@ private:
   //!< initialize timer to work in real, simulation, and replay
   void initTimer(float64_t period_s);
   /**
-   * @brief compute and publish control command for path follow with a constant control period
+   * @brief compute control command for path follow with a constant control period
    */
-  LateralOutput run() override;
+  boost::optional<LateralOutput> run() override;
 
   /**
    * @brief set input data like current odometry, trajectory and steering.
