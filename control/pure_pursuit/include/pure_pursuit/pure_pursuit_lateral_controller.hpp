@@ -112,7 +112,6 @@ private:
    */
   void setInputData(InputData const & input_data) override;
 
-
   // Parameter
   Param param_;
 
