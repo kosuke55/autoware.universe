@@ -227,7 +227,6 @@ LateralOutput MpcLateralController::run()
     std::abs(cmd_msg.steering_tire_angle - m_current_steering_ptr->steering_tire_angle) <
     static_cast<float>(m_converged_steer_rad);
 
-
   return output;
 }
 
