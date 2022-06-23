@@ -52,7 +52,7 @@ namespace behavior_path_planner
 {
 PullOverModule::PullOverModule(
   const std::string & name, rclcpp::Node & node, const PullOverParameters & parameters)
-: SceneModuleInterface{name, node}, parameters_{parameters}
+: SceneModuleInterface{name, node}, parameters_{parameters}, clock_{node.get_clock()}
 {
   approval_handler_.waitApproval();
   goal_pose_pub_ =
@@ -77,7 +77,8 @@ void PullOverModule::resetStatus()
   status_.has_decided_path = false;
   status_.path_type = PathType::NONE;
   status_.is_safe = false;
-  has_requested_approval_ = false;
+  status_.has_decided_velocity = false;
+  status_.has_requested_approval_ = false;
 }
 
 // This function is needed for waiting for planner_data_
@@ -408,16 +409,33 @@ BehaviorModuleOutput PullOverModule::plan()
 
   // Use decided path
   if (status_.has_decided_path) {
-    if (!has_requested_approval_) {
+    if (!status_.has_requested_approval_) {
       approval_handler_.waitApproval();
       current_state_ = BT::NodeStatus::SUCCESS;
-      has_requested_approval_ = true;
+      status_.has_requested_approval_ = true;
     } else if (approval_handler_.isApproved()) {
       approval_handler_.clearWaitApproval();
+      last_approved_time_ = clock_->now();
+
+      // decide velocity
+      if (!status_.has_decided_velocity) {
+        const float vel = static_cast<float>(std::max(
+          util::l2Norm(planner_data_->self_odometry->twist.twist.linear),
+          parameters_.pull_over_minimum_velocity));
+        for (auto & p : status_.path.points) {
+          p.point.longitudinal_velocity_mps = std::min(p.point.longitudinal_velocity_mps, vel);
+        }
+      }
+
+      status_.has_decided_velocity = true;
     }
 
     if (status_.path_type == PathType::ARC_FORWARD || status_.path_type == PathType::ARC_BACKWARD) {
-      if (hasFinishedCurrentPath()) parallel_parking_planner_.incrementPathIndex();
+      if (
+        hasFinishedCurrentPath() && (clock_->now() - last_approved_time_).seconds() >
+                                      planner_data_->parameters.turn_light_on_threshold_time) {
+        parallel_parking_planner_.incrementPathIndex();
+      };
       status_.path = parallel_parking_planner_.getCurrentPath();
     }
   }
@@ -482,8 +500,8 @@ BehaviorModuleOutput PullOverModule::planWaitingApproval()
   updateOccupancyGrid();
   BehaviorModuleOutput out;
   out.path_candidate = std::make_shared<PathWithLaneId>(*(plan().path));
-  out.path = has_requested_approval_ ? std::make_shared<PathWithLaneId>(getStopPath())
-                                     : std::make_shared<PathWithLaneId>(getReferencePath());
+  out.path = status_.has_requested_approval_ ? std::make_shared<PathWithLaneId>(getStopPath())
+                                             : std::make_shared<PathWithLaneId>(getReferencePath());
   if (
     status_.is_safe &&
     (status_.path_type == PathType::ARC_FORWARD || status_.path_type == PathType::ARC_BACKWARD)) {
@@ -550,16 +568,15 @@ PathWithLaneId PullOverModule::getReferencePath() const
   } else {
     target_pose = search_start_pose;
   }
-  // target_pose = search_start_pose;
 
   PathWithLaneId reference_path = util::getCenterLinePath(
     *route_handler, status_.current_lanes, current_pose, common_parameters.backward_path_length,
     common_parameters.forward_path_length, common_parameters);
   reference_path.header = route_handler->getRouteHeader();
 
-  reference_path = util::setDecelerationVelocity(
-    *route_handler, reference_path, status_.current_lanes, 0.0, target_pose, 0.0,
-    parameters_.deceleration_interval);
+  reference_path = util::setDecelerationVelocityForTurnSignal(
+    *route_handler, reference_path, status_.current_lanes, target_pose,
+    planner_data_->parameters.turn_light_on_threshold_time);
 
   if (target_pose != search_start_pose) {
     reference_path = util::setDecelerationVelocity(
@@ -668,7 +685,7 @@ std::pair<bool, bool> PullOverModule::getSafePath(ShiftParkingPath & safe_path) 
       const auto & longest_path = pull_over_paths.front();
       // we want to see check_distance [m] behind vehicle so add lane changing length
       const double check_distance_with_path =
-        check_distance_with_path + longest_path.preparation_length + longest_path.pull_over_length;
+        check_distance_ + longest_path.preparation_length + longest_path.pull_over_length;
       check_lanes = route_handler->getCheckTargetLanesFromPath(
         longest_path.path, status_.pull_over_lanes, check_distance_with_path);
     }

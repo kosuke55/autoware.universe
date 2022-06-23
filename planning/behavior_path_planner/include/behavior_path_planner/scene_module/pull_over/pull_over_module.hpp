@@ -73,6 +73,7 @@ struct PullOverParameters
   double minimum_lateral_jerk;
   double deceleration_interval;
   double pull_over_velocity;
+  double pull_over_minimum_velocity;
   double maximum_deceleration;
   double after_pull_over_straight_distance;
   double before_pull_over_straight_distance;
@@ -113,6 +114,8 @@ struct PUllOverStatus
   bool has_decided_path = false;
   int path_type = PathType::NONE;
   bool is_safe = false;
+  bool has_decided_velocity = false;
+  bool has_requested_approval_ = false;
 };
 
 struct PullOverArea
@@ -169,6 +172,7 @@ private:
   rclcpp::Publisher<PoseStamped>::SharedPtr goal_pose_pub_;
   rclcpp::Publisher<PoseArray>::SharedPtr path_pose_array_pub_;
   rclcpp::Publisher<MarkerArray>::SharedPtr parking_area_pub_;
+  rclcpp::Clock::SharedPtr clock_;
 
   PUllOverStatus status_;
   OccupancyGridMap occupancy_grid_map_;
@@ -179,8 +183,8 @@ private:
   ParallelParkingParameters parallel_parking_prameters_;
   std::deque<nav_msgs::msg::Odometry::ConstSharedPtr> odometry_buffer_;
   std::unique_ptr<LaneDepartureChecker> lane_departure_checker_;
-  bool has_requested_approval_;
   rclcpp::Time last_received_time_;
+  rclcpp::Time last_approved_time_;
 
   PathWithLaneId getReferencePath() const;
   PathWithLaneId getStopPath();

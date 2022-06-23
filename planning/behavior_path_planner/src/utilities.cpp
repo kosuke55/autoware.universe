@@ -1857,6 +1857,38 @@ PathWithLaneId setDecelerationVelocity(
   return reference_path;
 }
 
+PathWithLaneId setDecelerationVelocityForTurnSignal(
+  const RouteHandler & route_handler, const PathWithLaneId & input,
+  const lanelet::ConstLanelets & lanelet_sequence, const Pose target_pose,
+  const double turn_light_on_threshold_time)
+{
+  auto reference_path = input;
+
+  const auto arclength_target_pose =
+    lanelet::utils::getArcCoordinates(lanelet_sequence, target_pose).length;
+
+  if (route_handler.isDeadEndLanelet(lanelet_sequence.back())) {
+    for (auto & point : reference_path.points) {
+      const auto arclength =
+        lanelet::utils::getArcCoordinates(lanelet_sequence, point.point.pose).length;
+      const double distance_to_target_pose =
+        std::max(0.0, arclength_target_pose - arclength);
+      point.point.longitudinal_velocity_mps = std::min(
+        point.point.longitudinal_velocity_mps,
+        static_cast<float>(distance_to_target_pose / turn_light_on_threshold_time));
+    }
+
+    const auto arclength_first_path_point =
+      lanelet::utils::getArcCoordinates(lanelet_sequence, input.points.front().point.pose).length;
+    const double stop_point_length = arclength_target_pose - arclength_first_path_point;
+    if (stop_point_length > 0) {
+      const auto stop_point = util::insertStopPoint(stop_point_length, &reference_path);
+    }
+  }
+
+    return reference_path;
+}
+
 std::uint8_t getHighestProbLabel(const std::vector<ObjectClassification> & classification)
 {
   std::uint8_t label = ObjectClassification::UNKNOWN;
