@@ -165,11 +165,7 @@ MpcLateralController::MpcLateralController(rclcpp::Node & node) : node_{&node}
   m_mpc.setClock(node_->get_clock());
 }
 
-MpcLateralController::~MpcLateralController()
-{
-  autoware_auto_control_msgs::msg::AckermannLateralCommand stop_cmd = getStopControlCommand();
-  createCtrlCmdMsg(stop_cmd);  // todo
-}
+MpcLateralController::~MpcLateralController() {}
 
 boost::optional<LateralOutput> MpcLateralController::run()
 {
