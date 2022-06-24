@@ -102,8 +102,8 @@ private:
   void onOdometry(const nav_msgs::msg::Odometry::SharedPtr msg);
   void onSteering(const autoware_auto_vehicle_msgs::msg::SteeringReport::SharedPtr msg);
   bool isTimeOut();
-  LateralControllerType getLateralControllerType(const std::string & algorithm_name) const;
-  LongitudinalControllerType getLongitudinalControllerType(
+  LateralControllerType getLateralControllerMode(const std::string & algorithm_name) const;
+  LongitudinalControllerType getLongitudinalControllerMode(
     const std::string & algorithm_name) const;
 };
 }  // namespace trajectory_follower_nodes
