@@ -84,8 +84,7 @@ private:
     float64_t slope_angle{0.0};
     float64_t dt{0.0};
   };
-  rclcpp::Node::SharedPtr node_;
-
+  rclcpp::Node * node_;
   // ros variables
   rclcpp::Publisher<autoware_auto_control_msgs::msg::LongitudinalCommand>::SharedPtr
     m_pub_control_cmd;

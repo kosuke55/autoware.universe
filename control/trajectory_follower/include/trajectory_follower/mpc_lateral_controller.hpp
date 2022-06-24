@@ -76,7 +76,7 @@ public:
   virtual ~MpcLateralController();
 
 private:
-  rclcpp::Node::SharedPtr node_;
+  rclcpp::Node * node_;
 
   //!< @brief topic publisher for control command
   rclcpp::Publisher<autoware_auto_control_msgs::msg::AckermannLateralCommand>::SharedPtr

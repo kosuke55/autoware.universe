@@ -62,23 +62,30 @@ if(BUILD_TESTING)
   set(TRAJECTORY_FOLLOWER_NODES_TEST test_trajectory_follower_nodes)
   ament_add_ros_isolated_gtest(${TRAJECTORY_FOLLOWER_NODES_TEST}
     test/trajectory_follower_test_utils.hpp
-    test/test_latlon_muxer_node.cpp
-    test/test_lateral_controller_node.cpp
-    test/test_longitudinal_controller_node.cpp
+    # test/test_latlon_muxer_node.cpp
+    test/test_controller_node.cpp
+    # test/test_lateral_controller_node.cpp
+    # test/test_longitudinal_controller_node.cpp
   )
   ament_target_dependencies(${TRAJECTORY_FOLLOWER_NODES_TEST} fake_test_node)
-  target_link_libraries(${TRAJECTORY_FOLLOWER_NODES_TEST} ${LATLON_MUXER_NODE} ${LATERAL_CONTROLLER_NODE} ${LONGITUDINAL_CONTROLLER_NODE})
+  target_link_libraries(
+    ${TRAJECTORY_FOLLOWER_NODES_TEST} ${CONTROLLER_NODE})
 
   find_package(autoware_testing REQUIRED)
-  add_smoke_test(${PROJECT_NAME} ${LATLON_MUXER_NODE}_exe
-    PARAM_FILENAMES "latlon_muxer_defaults.param.yaml"
+  add_smoke_test(${PROJECT_NAME} ${CONTROLLER_NODE}_exe
+    PARAM_FILENAMES "lateral_controller_defaults.param.yaml longitudinal_controller_defaults.param.yaml test_vehicle_info.param.yaml"
   )
-  add_smoke_test(${PROJECT_NAME} ${LATERAL_CONTROLLER_NODE}_exe
-    PARAM_FILENAMES "lateral_controller_defaults.param.yaml test_vehicle_info.param.yaml"
-  )
-  add_smoke_test(${PROJECT_NAME} ${LONGITUDINAL_CONTROLLER_NODE}_exe
-    PARAM_FILENAMES "longitudinal_controller_defaults.param.yaml test_vehicle_info.param.yaml"
-  )
+
+
+  # add_smoke_test(${PROJECT_NAME} ${LATLON_MUXER_NODE}_exe
+  #   PARAM_FILENAMES "latlon_muxer_defaults.param.yaml"
+  # )
+  # add_smoke_test(${PROJECT_NAME} ${LATERAL_CONTROLLER_NODE}_exe
+  #   PARAM_FILENAMES "lateral_controller_defaults.param.yaml test_vehicle_info.param.yaml"
+  # )
+  # add_smoke_test(${PROJECT_NAME} ${LONGITUDINAL_CONTROLLER_NODE}_exe
+  #   PARAM_FILENAMES "longitudinal_controller_defaults.param.yaml test_vehicle_info.param.yaml"
+  # )
 endif()
 
 ament_auto_package(
