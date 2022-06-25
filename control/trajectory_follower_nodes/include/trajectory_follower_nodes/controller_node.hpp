@@ -67,7 +67,7 @@ class TRAJECTORY_FOLLOWER_PUBLIC Controller : public rclcpp::Node
 {
 public:
   explicit Controller(const rclcpp::NodeOptions & node_options);
-  virtual ~Controller(){};
+  virtual ~Controller() {}
 
 private:
   rclcpp::TimerBase::SharedPtr timer_control_;

@@ -78,16 +78,11 @@ public:
 private:
   rclcpp::Node * node_;
 
-  //!< @brief topic publisher for control command
-  rclcpp::Publisher<autoware_auto_control_msgs::msg::AckermannLateralCommand>::SharedPtr
-    m_pub_ctrl_cmd;
   //!< @brief topic publisher for predicted trajectory
   rclcpp::Publisher<autoware_auto_planning_msgs::msg::Trajectory>::SharedPtr m_pub_predicted_traj;
   //!< @brief topic publisher for control diagnostic
   rclcpp::Publisher<autoware_auto_system_msgs::msg::Float32MultiArrayDiagnostic>::SharedPtr
     m_pub_diagnostic;
-  //!< @brief timer to update after a given interval
-  rclcpp::TimerBase::SharedPtr m_timer;
   //!< @brief subscription for transform messages
   rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr m_tf_sub;
   rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr m_tf_static_sub;

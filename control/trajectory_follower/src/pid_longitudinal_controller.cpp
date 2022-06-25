@@ -16,9 +16,8 @@
 
 #include "motion_common/motion_common.hpp"
 #include "motion_common/trajectory_common.hpp"
+#include "tier4_autoware_utils/tier4_autoware_utils.hpp"
 #include "time_utils/time_utils.hpp"
-
-#include <tier4_autoware_utils/tier4_autoware_utils.hpp>
 
 #include <algorithm>
 #include <limits>
@@ -181,8 +180,6 @@ PidLongitudinalController::PidLongitudinalController(rclcpp::Node & node) : node
   m_min_pitch_rad = node_->declare_parameter<float64_t>("min_pitch_rad");  // [rad]
 
   // subscriber, publisher
-  m_pub_control_cmd = node_->create_publisher<autoware_auto_control_msgs::msg::LongitudinalCommand>(
-    "~/output/longitudinal_control_cmd", rclcpp::QoS{1});
   m_pub_slope =
     node_->create_publisher<autoware_auto_system_msgs::msg::Float32MultiArrayDiagnostic>(
       "~/output/slope_angle", rclcpp::QoS{1});
@@ -489,7 +486,7 @@ bool PidLongitudinalController::checkNewTrajectory()
     m_trajectory_buffer.pop_front();
   }
 
-  for (const auto trajectory : m_trajectory_buffer) {
+  for (const auto & trajectory : m_trajectory_buffer) {
     if (
       tier4_autoware_utils::calcDistance2d(
         trajectory.points.back().pose, m_trajectory_ptr->points.back().pose) >
@@ -665,7 +662,6 @@ autoware_auto_control_msgs::msg::LongitudinalCommand PidLongitudinalController::
   cmd.stamp = node_->now();
   cmd.speed = static_cast<decltype(cmd.speed)>(ctrl_cmd.vel);
   cmd.acceleration = static_cast<decltype(cmd.acceleration)>(ctrl_cmd.acc);
-  // m_pub_control_cmd->publish(cmd);
 
   // store current velocity history
   m_vel_hist.push_back({node_->now(), current_vel});

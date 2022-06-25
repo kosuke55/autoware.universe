@@ -139,12 +139,6 @@ MpcLateralController::MpcLateralController(rclcpp::Node & node) : node_{&node}
     m_mpc.initializeLowPassFilters(steering_lpf_cutoff_hz, error_deriv_lpf_cutoff_hz);
   }
 
-  /* set up ros system */
-  // initTimer(m_mpc.m_ctrl_period);
-
-  m_pub_ctrl_cmd =
-    node_->create_publisher<autoware_auto_control_msgs::msg::AckermannLateralCommand>(
-      "~/output/lateral_control_cmd", 1);
   m_pub_predicted_traj = node_->create_publisher<autoware_auto_planning_msgs::msg::Trajectory>(
     "~/output/predicted_trajectory", 1);
   m_pub_diagnostic =
@@ -368,7 +362,6 @@ autoware_auto_control_msgs::msg::AckermannLateralCommand MpcLateralController::c
   autoware_auto_control_msgs::msg::AckermannLateralCommand ctrl_cmd)
 {
   ctrl_cmd.stamp = node_->now();
-  // m_pub_ctrl_cmd->publish(ctrl_cmd);
   m_steer_cmd_prev = ctrl_cmd.steering_tire_angle;
   return ctrl_cmd;
 }
@@ -388,14 +381,6 @@ void MpcLateralController::publishDiagnostic(
   diagnostic.diag_header.name = std::string("linear-MPC lateral controller");
   m_pub_diagnostic->publish(diagnostic);
 }
-
-// void MpcLateralController::initTimer(float64_t period_s)
-// {
-//   const auto period_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
-//     std::chrono::duration<float64_t>(period_s));
-//   m_timer = rclcpp::create_timer(
-//     this, node_->get_clock(), period_ns, std::bind(&MpcLateralController::onTimer, this));
-// }
 
 void MpcLateralController::declareMPCparameters()
 {
