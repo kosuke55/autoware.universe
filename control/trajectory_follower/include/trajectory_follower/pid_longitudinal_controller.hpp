@@ -246,7 +246,7 @@ private:
    */
   Motion calcEmergencyCtrlCmd(const float64_t dt) const;
 
-  bool checkNewTrajectory();
+  bool isNewTrajectory();
 
   /**
    * @brief update control state according to the current situation

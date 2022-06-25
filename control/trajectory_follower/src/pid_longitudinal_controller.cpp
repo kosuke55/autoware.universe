@@ -471,7 +471,7 @@ PidLongitudinalController::Motion PidLongitudinalController::calcEmergencyCtrlCm
   return Motion{vel, acc};
 }
 
-bool PidLongitudinalController::checkNewTrajectory()
+bool PidLongitudinalController::isNewTrajectory()
 {
   // flags for state transition
   const auto & p = m_state_transition_params;
@@ -511,7 +511,7 @@ PidLongitudinalController::ControlState PidLongitudinalController::updateControl
     stop_dist > p.drive_state_stop_dist + p.drive_state_offset_stop_dist;
   const bool8_t departure_condition_from_stopped = stop_dist > p.drive_state_stop_dist;
   const bool8_t keep_stopped_condition =
-    !lateral_sync_data_.is_steer_converged || checkNewTrajectory();
+    !lateral_sync_data_.is_steer_converged || isNewTrajectory();
 
   const bool8_t stopping_condition = stop_dist < p.stopping_state_stop_dist;
   if (
