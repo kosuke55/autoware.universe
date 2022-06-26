@@ -56,6 +56,9 @@ struct PullOverParameters
   double margin_from_boundary;
   double decide_path_distance;
   double min_acc;
+  bool enable_shift_parking;
+  bool enable_arc_forward_parking;
+  bool enable_arc_backward_parking;
   // goal research
   std::string search_priority;  // "efficient_path" or "close_goal"
   bool enable_goal_research;

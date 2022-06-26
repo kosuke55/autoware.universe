@@ -9,6 +9,9 @@
       margin_from_boundary: 0.5
       decide_path_distance: 10.0
       min_acc: -0.5
+      enable_shift_parking: true
+      enable_arc_forward_parking: true
+      enable_arc_backward_parking: false
       # goal research
       search_priority: "efficient_path" # "efficient_path" or "close_goal"
       enable_goal_research: true

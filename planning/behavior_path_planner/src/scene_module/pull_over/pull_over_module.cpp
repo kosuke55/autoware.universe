@@ -297,48 +297,54 @@ BT::NodeStatus PullOverModule::updateState()
 bool PullOverModule::planWithEfficientPath()
 {
   // shift parking path
-  for (const auto goal_candidate : goal_candidates_) {
-    modified_goal_pose_ = goal_candidate.goal_pose;
-    if (
-      planShiftPath() && !lane_departure_checker_->checkPathWillLeaveLane(
-                           status_.lanes, shift_parking_path_.shifted_path.path)) {
-      // shift parking path already confirm safe in it's own function.
-      status_.path = shift_parking_path_.path;
-      status_.path_type = PathType::SHIFT;
-      status_.is_safe = true;
-      return true;
+  if (parameters_.enable_shift_parking) {
+    for (const auto goal_candidate : goal_candidates_) {
+      modified_goal_pose_ = goal_candidate.goal_pose;
+      if (
+        planShiftPath() && !lane_departure_checker_->checkPathWillLeaveLane(
+                             status_.lanes, shift_parking_path_.shifted_path.path)) {
+        // shift parking path already confirm safe in it's own function.
+        status_.path = shift_parking_path_.path;
+        status_.path_type = PathType::SHIFT;
+        status_.is_safe = true;
+        return true;
+      }
     }
   }
 
   // forward arc path
-  for (const auto goal_candidate : goal_candidates_) {
-    modified_goal_pose_ = goal_candidate.goal_pose;
-    parallel_parking_planner_.setParams(planner_data_, parallel_parking_prameters_);
-    if (
-      parallel_parking_planner_.plan(modified_goal_pose_, status_.lanes, true) &&
-      !occupancy_grid_map_.hasObstacleOnPath(parallel_parking_planner_.getArcPath(), false) &&
-      !lane_departure_checker_->checkPathWillLeaveLane(
-        status_.lanes, parallel_parking_planner_.getArcPath())) {
-      status_.path = parallel_parking_planner_.getCurrentPath();
-      status_.path_type = PathType::ARC_FORWARD;
-      status_.is_safe = true;
-      return true;
+  if (parameters_.enable_arc_forward_parking) {
+    for (const auto goal_candidate : goal_candidates_) {
+      modified_goal_pose_ = goal_candidate.goal_pose;
+      parallel_parking_planner_.setParams(planner_data_, parallel_parking_prameters_);
+      if (
+        parallel_parking_planner_.plan(modified_goal_pose_, status_.lanes, true) &&
+        !occupancy_grid_map_.hasObstacleOnPath(parallel_parking_planner_.getArcPath(), false) &&
+        !lane_departure_checker_->checkPathWillLeaveLane(
+          status_.lanes, parallel_parking_planner_.getArcPath())) {
+        status_.path = parallel_parking_planner_.getCurrentPath();
+        status_.path_type = PathType::ARC_FORWARD;
+        status_.is_safe = true;
+        return true;
+      }
     }
   }
 
   // backward arc path
-  for (const auto goal_candidate : goal_candidates_) {
-    modified_goal_pose_ = goal_candidate.goal_pose;
-    parallel_parking_planner_.setParams(planner_data_, parallel_parking_prameters_);
-    if (
-      parallel_parking_planner_.plan(modified_goal_pose_, status_.lanes, false) &&
-      !occupancy_grid_map_.hasObstacleOnPath(parallel_parking_planner_.getArcPath(), false) &&
-      !lane_departure_checker_->checkPathWillLeaveLane(
-        status_.lanes, parallel_parking_planner_.getArcPath())) {
-      status_.path = parallel_parking_planner_.getCurrentPath();
-      status_.path_type = PathType::ARC_BACKWARD;
-      status_.is_safe = true;
-      return true;
+  if (parameters_.enable_arc_backward_parking) {
+    for (const auto goal_candidate : goal_candidates_) {
+      modified_goal_pose_ = goal_candidate.goal_pose;
+      parallel_parking_planner_.setParams(planner_data_, parallel_parking_prameters_);
+      if (
+        parallel_parking_planner_.plan(modified_goal_pose_, status_.lanes, false) &&
+        !occupancy_grid_map_.hasObstacleOnPath(parallel_parking_planner_.getArcPath(), false) &&
+        !lane_departure_checker_->checkPathWillLeaveLane(
+          status_.lanes, parallel_parking_planner_.getArcPath())) {
+        status_.path = parallel_parking_planner_.getCurrentPath();
+        status_.path_type = PathType::ARC_BACKWARD;
+        status_.is_safe = true;
+        return true;
+      }
     }
   }
 
@@ -350,29 +356,44 @@ bool PullOverModule::planWithCloseGoal()
   for (const auto goal_candidate : goal_candidates_) {
     if (status_.is_safe) break;
     modified_goal_pose_ = goal_candidate.goal_pose;
+
+    // Generate arc shift path.
     if (
-      planShiftPath() && !lane_departure_checker_->checkPathWillLeaveLane(
-                           status_.lanes, shift_parking_path_.shifted_path.path)) {
+      parameters_.enable_shift_parking && planShiftPath() &&
+      !lane_departure_checker_->checkPathWillLeaveLane(
+        status_.lanes, shift_parking_path_.shifted_path.path)) {
       // shift parking path already confirm safe in it's own function.
       status_.path = shift_parking_path_.path;
       status_.path_type = PathType::SHIFT;
       status_.is_safe = true;
       return true;
-    } else {
-      // Generate arc forward path then arc backward path.
-      for (const auto is_forward : {true, false}) {
-        parallel_parking_planner_.setParams(planner_data_, parallel_parking_prameters_);
-        if (
-          parallel_parking_planner_.plan(modified_goal_pose_, status_.lanes, is_forward) &&
-          !occupancy_grid_map_.hasObstacleOnPath(parallel_parking_planner_.getArcPath(), false) &&
-          !lane_departure_checker_->checkPathWillLeaveLane(
-            status_.lanes, parallel_parking_planner_.getArcPath())) {
-          status_.path = parallel_parking_planner_.getCurrentPath();
-          status_.path_type = is_forward ? PathType::ARC_FORWARD : PathType::ARC_BACKWARD;
-          status_.is_safe = true;
-          return true;
-        }
-      }
+    }
+
+    parallel_parking_planner_.setParams(planner_data_, parallel_parking_prameters_);
+    // Generate arc forward path.
+    if (
+      parameters_.enable_arc_forward_parking &&
+      parallel_parking_planner_.plan(modified_goal_pose_, status_.lanes, true) &&
+      !occupancy_grid_map_.hasObstacleOnPath(parallel_parking_planner_.getArcPath(), false) &&
+      !lane_departure_checker_->checkPathWillLeaveLane(
+        status_.lanes, parallel_parking_planner_.getArcPath())) {
+      status_.path = parallel_parking_planner_.getCurrentPath();
+      status_.path_type = PathType::ARC_FORWARD;
+      status_.is_safe = true;
+      return true;
+    }
+
+    // Generate arc backward path.
+    if (
+      parameters_.enable_arc_backward_parking &&
+      parallel_parking_planner_.plan(modified_goal_pose_, status_.lanes, false) &&
+      !occupancy_grid_map_.hasObstacleOnPath(parallel_parking_planner_.getArcPath(), false) &&
+      !lane_departure_checker_->checkPathWillLeaveLane(
+        status_.lanes, parallel_parking_planner_.getArcPath())) {
+      status_.path = parallel_parking_planner_.getCurrentPath();
+      status_.path_type = PathType::ARC_BACKWARD;
+      status_.is_safe = true;
+      return true;
     }
   }
 
