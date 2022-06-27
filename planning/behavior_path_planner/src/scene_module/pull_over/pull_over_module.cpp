@@ -513,6 +513,11 @@ BehaviorModuleOutput PullOverModule::plan()
     }
   }
 
+  // For experimets
+  if (parameters_.print_debug_info) {
+    printParkingPositionError();
+  }
+
   return output;
 }
 
@@ -949,5 +954,20 @@ void PullOverModule::publishDebugData()
   Cr_pub_->publish(Cr);
   start_pose_pub_->publish(start_pose);
   path_pose_array_pub_->publish(path_pose_array);
+}
+
+void PullOverModule::printParkingPositionError() const
+{
+  const auto current_pose = planner_data_->self_pose->pose;
+  const double real_shoulder_to_map_shoulder = 0.0;
+  const double dy = modified_goal_pose_.position.y - current_pose.position.y;
+  const double distance_from_real_shoulder =
+    real_shoulder_to_map_shoulder + parameters_.margin_from_boundary - dy;
+  RCLCPP_INFO(
+    getLogger(), "current pose to goal, dx:%f dy:%f dyaw:%f from_real_shoulder:%f",
+    modified_goal_pose_.position.x - current_pose.position.x, dy,
+    tier4_autoware_utils::rad2deg(
+      tf2::getYaw(current_pose.orientation) - tf2::getYaw(modified_goal_pose_.orientation)),
+    distance_from_real_shoulder);
 }
 }  // namespace behavior_path_planner

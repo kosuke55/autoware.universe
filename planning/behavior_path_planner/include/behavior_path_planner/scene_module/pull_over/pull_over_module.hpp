@@ -99,6 +99,8 @@ struct PullOverParameters
   bool enable_collision_check_at_prepare_phase;
   bool use_predicted_path_outside_lanelet;
   bool use_all_predicted_path;
+  // debug
+  bool print_debug_info;
 };
 
 enum PathType {
@@ -212,6 +214,7 @@ private:
   // debug
   Marker createParkingAreaMarker(const Pose back_pose, const Pose front_pose, const int32_t id);
   void publishDebugData();
+  void printParkingPositionError() const;
 };
 }  // namespace behavior_path_planner
 

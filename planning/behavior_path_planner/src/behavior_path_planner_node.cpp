@@ -417,6 +417,8 @@ PullOverParameters BehaviorPathPlannerNode::getPullOverParam()
   p.enable_collision_check_at_prepare_phase = dp("enable_collision_check_at_prepare_phase", true);
   p.use_predicted_path_outside_lanelet = dp("use_predicted_path_outside_lanelet", true);
   p.use_all_predicted_path = dp("use_all_predicted_path", false);
+  // debug
+  p.print_debug_info = dp("print_debug_info", false);
 
   // validation of parameters
   if (p.pull_over_sampling_num < 1) {
