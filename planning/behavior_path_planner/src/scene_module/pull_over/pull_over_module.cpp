@@ -468,10 +468,11 @@ BehaviorModuleOutput PullOverModule::plan()
     status_.path_type = PathType::NONE;
     status_.is_safe = false;
 
+    bool has_found_safe_path = false;
     if (parameters_.search_priority == "efficient_path") {
-      planWithEfficientPath();
+      has_found_safe_path = planWithEfficientPath();
     } else if (parameters_.search_priority == "close_goal") {
-      planWithCloseGoal();
+      has_found_safe_path = planWithCloseGoal();
     } else {
       RCLCPP_ERROR(
         getLogger(), "search_priority shoudbe efficient_path or close_goal, but %s is given.",
@@ -479,15 +480,17 @@ BehaviorModuleOutput PullOverModule::plan()
     }
 
     // Decelerate before the minimum shift distance from the goal search area.
-    const Pose goal_pose = getRefinedGoal();
-    const auto arc_coordinates =
-      lanelet::utils::getArcCoordinates(status_.current_lanes, goal_pose);
-    const Pose search_start_pose = calcOffsetPose(
-      goal_pose, -parameters_.backward_goal_search_length, -arc_coordinates.distance, 0);
-    status_.path = util::setDecelerationVelocity(
-      *planner_data_->route_handler, status_.path, status_.current_lanes,
-      parameters_.pull_over_velocity, search_start_pose, -calcMinimumShiftPathDistance(),
-      parameters_.deceleration_interval);
+    if (has_found_safe_path) {
+      const Pose goal_pose = getRefinedGoal();
+      const auto arc_coordinates =
+        lanelet::utils::getArcCoordinates(status_.current_lanes, goal_pose);
+      const Pose search_start_pose = calcOffsetPose(
+        goal_pose, -parameters_.backward_goal_search_length, -arc_coordinates.distance, 0);
+      status_.path = util::setDecelerationVelocity(
+        *planner_data_->route_handler, status_.path, status_.current_lanes,
+        parameters_.pull_over_velocity, search_start_pose, -calcMinimumShiftPathDistance(),
+        parameters_.deceleration_interval);
+    }
   }
 
   BehaviorModuleOutput output;
@@ -520,7 +523,8 @@ BehaviorModuleOutput PullOverModule::planWaitingApproval()
 {
   updateOccupancyGrid();
   BehaviorModuleOutput out;
-  out.path_candidate = std::make_shared<PathWithLaneId>(*(plan().path));
+  const auto path = *(plan().path);
+  out.path_candidate = std::make_shared<PathWithLaneId>(path);
   out.path = status_.has_requested_approval_ ? std::make_shared<PathWithLaneId>(getStopPath())
                                              : std::make_shared<PathWithLaneId>(getReferencePath());
   if (
