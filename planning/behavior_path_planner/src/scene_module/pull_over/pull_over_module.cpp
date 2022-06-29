@@ -201,8 +201,7 @@ Pose PullOverModule::getRefinedGoal() const
   lanelet::Lanelet closest_shoulder_lanelet;
 
   lanelet::utils::query::getClosestLanelet(
-    planner_data_->route_handler->getShoulderLanelets(), planner_data_->self_pose->pose,
-    &closest_shoulder_lanelet);
+    planner_data_->route_handler->getShoulderLanelets(), goal_pose, &closest_shoulder_lanelet);
 
   Pose refined_goal_pose =
     lanelet::utils::getClosestCenterPose(closest_shoulder_lanelet, goal_pose.position);
