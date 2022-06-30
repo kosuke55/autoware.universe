@@ -1823,70 +1823,57 @@ PathWithLaneId setDecelerationVelocity(
 }
 
 PathWithLaneId setDecelerationVelocity(
-  const RouteHandler & route_handler, const PathWithLaneId & input,
-  const lanelet::ConstLanelets & lanelet_sequence, const double target_velocity,
+  const RouteHandler & route_handler, const PathWithLaneId & input, const double target_velocity,
   const Pose target_pose, const double buffer, const double deceleration_interval)
 {
   auto reference_path = input;
 
-  const auto arclength_target_pose =
-    lanelet::utils::getArcCoordinates(lanelet_sequence, target_pose).length;
+  for (auto & point : reference_path.points) {
+    const auto arclength_to_target = std::max(
+      0.0, tier4_autoware_utils::calcSignedArcLength(
+             reference_path.points, point.point.pose.position, target_pose.position) +
+             buffer);
+    if (arclength_to_target > deceleration_interval) continue;
+    point.point.longitudinal_velocity_mps = std::min(
+      point.point.longitudinal_velocity_mps,
+      static_cast<float>(
+        (arclength_to_target / deceleration_interval) *
+          (point.point.longitudinal_velocity_mps - target_velocity) +
+        target_velocity));
+  }
 
-  if (route_handler.isDeadEndLanelet(lanelet_sequence.back())) {
-    for (auto & point : reference_path.points) {
-      const auto arclength =
-        lanelet::utils::getArcCoordinates(lanelet_sequence, point.point.pose).length;
-      const double distance_to_target_pose =
-        std::max(0.0, arclength_target_pose + buffer - arclength);
-      point.point.longitudinal_velocity_mps = std::min(
-        point.point.longitudinal_velocity_mps,
-        static_cast<float>(
-          (distance_to_target_pose / deceleration_interval) *
-            (point.point.longitudinal_velocity_mps - target_velocity) +
-          target_velocity));
-    }
-
-    const auto arclength_first_path_point =
-      lanelet::utils::getArcCoordinates(lanelet_sequence, input.points.front().point.pose).length;
-    const double stop_point_length = arclength_target_pose - arclength_first_path_point + buffer;
-    if (target_velocity == 0.0 && stop_point_length > 0) {
-      const auto stop_point = util::insertStopPoint(stop_point_length, &reference_path);
-    }
+  const auto stop_point_length =
+    tier4_autoware_utils::calcSignedArcLength(reference_path.points, 0, target_pose.position) +
+    buffer;
+  if (target_velocity == 0.0 && stop_point_length > 0) {
+    const auto stop_point = util::insertStopPoint(stop_point_length, &reference_path);
   }
 
   return reference_path;
 }
 
 PathWithLaneId setDecelerationVelocityForTurnSignal(
-  const RouteHandler & route_handler, const PathWithLaneId & input,
-  const lanelet::ConstLanelets & lanelet_sequence, const Pose target_pose,
+  const RouteHandler & route_handler, const PathWithLaneId & input, const Pose target_pose,
   const double turn_light_on_threshold_time)
 {
   auto reference_path = input;
 
-  const auto arclength_target_pose =
-    lanelet::utils::getArcCoordinates(lanelet_sequence, target_pose).length;
-
-  if (route_handler.isDeadEndLanelet(lanelet_sequence.back())) {
-    for (auto & point : reference_path.points) {
-      const auto arclength =
-        lanelet::utils::getArcCoordinates(lanelet_sequence, point.point.pose).length;
-      const double distance_to_target_pose =
-        std::max(0.0, arclength_target_pose - arclength);
-      point.point.longitudinal_velocity_mps = std::min(
-        point.point.longitudinal_velocity_mps,
-        static_cast<float>(distance_to_target_pose / turn_light_on_threshold_time));
-    }
-
-    const auto arclength_first_path_point =
-      lanelet::utils::getArcCoordinates(lanelet_sequence, input.points.front().point.pose).length;
-    const double stop_point_length = arclength_target_pose - arclength_first_path_point;
-    if (stop_point_length > 0) {
-      const auto stop_point = util::insertStopPoint(stop_point_length, &reference_path);
-    }
+  for (auto & point : reference_path.points) {
+    const auto arclength_to_target = std::max(
+      0.0, tier4_autoware_utils::calcSignedArcLength(
+             reference_path.points, point.point.pose.position, target_pose.position));
+    point.point.longitudinal_velocity_mps = std::min(
+      point.point.longitudinal_velocity_mps,
+      static_cast<float>(arclength_to_target / turn_light_on_threshold_time));
   }
 
-    return reference_path;
+  const auto stop_point_length =
+    tier4_autoware_utils::calcSignedArcLength(reference_path.points, 0, target_pose.position);
+  if (stop_point_length > 0) {
+    const auto stop_point = util::insertStopPoint(stop_point_length, &reference_path);
+  }
+
+  return reference_path;
 }
 
 std::uint8_t getHighestProbLabel(const std::vector<ObjectClassification> & classification)
@@ -1951,7 +1938,7 @@ lanelet::ConstLanelets getExtendedCurrentLanes(
   lanelet::ConstLanelets prev_lanes;
   if (route_handler->getPreviousLaneletsWithinRoute(current_lanes.front(), &prev_lanes)) {
     // TODO(kosuke55) which lane should be added?
-    current_lanes.insert(current_lanes.begin(), 1, prev_lanes.front());
+    current_lanes.insert(current_lanes.begin(), 0, prev_lanes.front());
   }
 
   return current_lanes;

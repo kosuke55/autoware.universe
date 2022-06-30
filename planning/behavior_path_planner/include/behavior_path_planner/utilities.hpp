@@ -296,13 +296,11 @@ bool checkLaneIsInIntersection(
   const RouteHandler & route_handler, const PathWithLaneId & ref,
   const lanelet::ConstLanelets & lanelet_sequence, double & additional_length_to_add);
 PathWithLaneId setDecelerationVelocity(
-  const RouteHandler & route_handler, const PathWithLaneId & input,
-  const lanelet::ConstLanelets & lanelet_sequence, const double target_velocity,
+  const RouteHandler & route_handler, const PathWithLaneId & input, const double target_velocity,
   const Pose target_pose, const double buffer, const double deceleration_interval);
 
 PathWithLaneId setDecelerationVelocityForTurnSignal(
-  const RouteHandler & route_handler, const PathWithLaneId & input,
-  const lanelet::ConstLanelets & lanelet_sequence, const Pose target_pose,
+  const RouteHandler & route_handler, const PathWithLaneId & input, const Pose target_pose,
   const double turn_light_on_threshold_time);
 
 // object label

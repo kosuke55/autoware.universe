@@ -447,16 +447,15 @@ BehaviorModuleOutput PullOverModule::plan()
       approval_handler_.clearWaitApproval();
       last_approved_time_ = clock_->now();
 
-      // decide velocity
+      // decide velocity to guarantee turn singnal lighting time
       if (!status_.has_decided_velocity) {
         const float vel = static_cast<float>(std::max(
-          util::l2Norm(planner_data_->self_odometry->twist.twist.linear),
+          planner_data_->self_odometry->twist.twist.linear.x,
           parameters_.pull_over_minimum_velocity));
         for (auto & p : status_.path.points) {
           p.point.longitudinal_velocity_mps = std::min(p.point.longitudinal_velocity_mps, vel);
         }
       }
-
       status_.has_decided_velocity = true;
     }
 
@@ -496,9 +495,8 @@ BehaviorModuleOutput PullOverModule::plan()
       const Pose search_start_pose = calcOffsetPose(
         goal_pose, -parameters_.backward_goal_search_length, -arc_coordinates.distance, 0);
       status_.path = util::setDecelerationVelocity(
-        *planner_data_->route_handler, status_.path, status_.current_lanes,
-        parameters_.pull_over_velocity, search_start_pose, -calcMinimumShiftPathDistance(),
-        parameters_.deceleration_interval);
+        *planner_data_->route_handler, status_.path, parameters_.pull_over_velocity,
+        search_start_pose, -calcMinimumShiftPathDistance(), parameters_.deceleration_interval);
     }
   }
 
@@ -539,8 +537,7 @@ BehaviorModuleOutput PullOverModule::planWaitingApproval()
   BehaviorModuleOutput out;
   const auto path = *(plan().path);
   out.path_candidate = std::make_shared<PathWithLaneId>(path);
-  out.path = status_.has_requested_approval_ ? std::make_shared<PathWithLaneId>(getStopPath())
-                                             : std::make_shared<PathWithLaneId>(getReferencePath());
+  out.path = std::make_shared<PathWithLaneId>(getReferencePath());
   if (
     status_.is_safe &&
     (status_.path_type == PathType::ARC_FORWARD || status_.path_type == PathType::ARC_BACKWARD)) {
@@ -614,14 +611,13 @@ PathWithLaneId PullOverModule::getReferencePath() const
   reference_path.header = route_handler->getRouteHeader();
 
   reference_path = util::setDecelerationVelocityForTurnSignal(
-    *route_handler, reference_path, status_.current_lanes, target_pose,
+    *route_handler, reference_path, target_pose,
     planner_data_->parameters.turn_light_on_threshold_time);
 
   if (target_pose != search_start_pose) {
     reference_path = util::setDecelerationVelocity(
-      *planner_data_->route_handler, reference_path, status_.current_lanes,
-      parameters_.pull_over_velocity, search_start_pose, -calcMinimumShiftPathDistance(),
-      parameters_.deceleration_interval);
+      *planner_data_->route_handler, reference_path, parameters_.pull_over_velocity,
+      search_start_pose, -calcMinimumShiftPathDistance(), parameters_.deceleration_interval);
   }
 
   reference_path.drivable_area = util::generateDrivableArea(
