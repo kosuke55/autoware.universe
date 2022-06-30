@@ -368,6 +368,7 @@ PullOverParameters BehaviorPathPlannerNode::getPullOverParam()
   };
 
   PullOverParameters p;
+  p.request_length = dp("request_length", 100.0);
   p.th_arrived_distance_m = dp("th_stopped_velocity_mps", 0.01);
   p.th_arrived_distance_m = dp("th_arrived_distance_m", 0.3);
   p.th_stopped_time_sec = dp("th_stopped_time_sec", 2.0);

@@ -50,6 +50,7 @@ using visualization_msgs::msg::MarkerArray;
 
 struct PullOverParameters
 {
+  double request_length;
   double th_arrived_distance_m;
   double th_stopped_velocity_mps;
   double th_stopped_time_sec;

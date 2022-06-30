@@ -157,11 +157,19 @@ bool PullOverModule::isExecutionRequested() const
     return true;
   }
 
-  lanelet::Lanelet closest_shoulder_lanelet;
-  bool goal_is_in_shoulder_lane = false;
+  const auto current_lanes = util::getCurrentLanes(planner_data_);
   const auto goal_pose = planner_data_->route_handler->getGoalPose();
 
+  // check if goal_pose is far
+  const double goal_arc_length = lanelet::utils::getArcCoordinates(current_lanes, goal_pose).length;
+  const double self_arc_length =
+    lanelet::utils::getArcCoordinates(current_lanes, planner_data_->self_pose->pose).length;
+  const double self_to_goal_arc_length = goal_arc_length - self_arc_length;
+  if (self_to_goal_arc_length > parameters_.request_length) return false;
+
   // check if goal_pose is in shoulder lane
+  bool goal_is_in_shoulder_lane = false;
+  lanelet::Lanelet closest_shoulder_lanelet;
   if (lanelet::utils::query::getClosestLanelet(
         planner_data_->route_handler->getShoulderLanelets(), goal_pose,
         &closest_shoulder_lanelet)) {
@@ -177,6 +185,7 @@ bool PullOverModule::isExecutionRequested() const
       }
     }
   }
+  if (!goal_is_in_shoulder_lane) return false;
 
   // check if self pose is NOT in shoulder lane
   bool self_is_in_shoulder_lane = false;
@@ -187,8 +196,9 @@ bool PullOverModule::isExecutionRequested() const
     self_is_in_shoulder_lane =
       lanelet::utils::isInLanelet(self_pose, closest_shoulder_lanelet, 0.1);
   }
+  if (self_is_in_shoulder_lane) return false;
 
-  return goal_is_in_shoulder_lane && !self_is_in_shoulder_lane;
+  return true;
 }
 
 bool PullOverModule::isExecutionReady() const { return true; }
