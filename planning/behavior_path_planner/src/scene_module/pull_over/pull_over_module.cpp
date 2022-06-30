@@ -303,6 +303,21 @@ BT::NodeStatus PullOverModule::updateState()
   return current_state_;
 }
 
+bool PullOverModule::isLongEnoughToParkingStart(
+  const PathWithLaneId path, const Pose parking_start_pose) const
+{
+  const auto dist_to_parking_start_pose = calcSignedArcLength(
+    path.points, planner_data_->self_pose->pose, parking_start_pose.position,
+    std::numeric_limits<double>::max(), M_PI_2);
+  if (!dist_to_parking_start_pose) return false;
+
+  const double current_vel = planner_data_->self_odometry->twist.twist.linear.x;
+  const double current_to_stop_distance =
+    std::pow(current_vel, 2) / std::abs(parameters_.min_acc) / 2;
+
+  return *dist_to_parking_start_pose > current_to_stop_distance;
+}
+
 bool PullOverModule::planWithEfficientPath()
 {
   // shift parking path
@@ -310,8 +325,11 @@ bool PullOverModule::planWithEfficientPath()
     for (const auto goal_candidate : goal_candidates_) {
       modified_goal_pose_ = goal_candidate.goal_pose;
       if (
-        planShiftPath() && !lane_departure_checker_->checkPathWillLeaveLane(
-                             status_.lanes, shift_parking_path_.shifted_path.path)) {
+        planShiftPath() &&
+        isLongEnoughToParkingStart(
+          shift_parking_path_.path, shift_parking_path_.shift_point.start) &&
+        !lane_departure_checker_->checkPathWillLeaveLane(
+          status_.lanes, shift_parking_path_.shifted_path.path)) {
         // shift parking path already confirm safe in it's own function.
         status_.path = shift_parking_path_.path;
         status_.path_type = PathType::SHIFT;
@@ -328,6 +346,9 @@ bool PullOverModule::planWithEfficientPath()
       parallel_parking_planner_.setParams(planner_data_, parallel_parking_prameters_);
       if (
         parallel_parking_planner_.plan(modified_goal_pose_, status_.lanes, true) &&
+        isLongEnoughToParkingStart(
+          parallel_parking_planner_.getCurrentPath(),
+          parallel_parking_planner_.getStartPose().pose) &&
         !occupancy_grid_map_.hasObstacleOnPath(parallel_parking_planner_.getArcPath(), false) &&
         !lane_departure_checker_->checkPathWillLeaveLane(
           status_.lanes, parallel_parking_planner_.getArcPath())) {
@@ -346,6 +367,9 @@ bool PullOverModule::planWithEfficientPath()
       parallel_parking_planner_.setParams(planner_data_, parallel_parking_prameters_);
       if (
         parallel_parking_planner_.plan(modified_goal_pose_, status_.lanes, false) &&
+        isLongEnoughToParkingStart(
+          parallel_parking_planner_.getCurrentPath(),
+          parallel_parking_planner_.getStartPose().pose) &&
         !occupancy_grid_map_.hasObstacleOnPath(parallel_parking_planner_.getArcPath(), false) &&
         !lane_departure_checker_->checkPathWillLeaveLane(
           status_.lanes, parallel_parking_planner_.getArcPath())) {
@@ -369,6 +393,7 @@ bool PullOverModule::planWithCloseGoal()
     // Generate arc shift path.
     if (
       parameters_.enable_shift_parking && planShiftPath() &&
+      isLongEnoughToParkingStart(shift_parking_path_.path, shift_parking_path_.shift_point.start) &&
       !lane_departure_checker_->checkPathWillLeaveLane(
         status_.lanes, shift_parking_path_.shifted_path.path)) {
       // shift parking path already confirm safe in it's own function.
@@ -383,6 +408,9 @@ bool PullOverModule::planWithCloseGoal()
     if (
       parameters_.enable_arc_forward_parking &&
       parallel_parking_planner_.plan(modified_goal_pose_, status_.lanes, true) &&
+      isLongEnoughToParkingStart(
+        parallel_parking_planner_.getCurrentPath(),
+        parallel_parking_planner_.getStartPose().pose) &&
       !occupancy_grid_map_.hasObstacleOnPath(parallel_parking_planner_.getArcPath(), false) &&
       !lane_departure_checker_->checkPathWillLeaveLane(
         status_.lanes, parallel_parking_planner_.getArcPath())) {
@@ -396,6 +424,9 @@ bool PullOverModule::planWithCloseGoal()
     if (
       parameters_.enable_arc_backward_parking &&
       parallel_parking_planner_.plan(modified_goal_pose_, status_.lanes, false) &&
+      isLongEnoughToParkingStart(
+        parallel_parking_planner_.getCurrentPath(),
+        parallel_parking_planner_.getStartPose().pose) &&
       !occupancy_grid_map_.hasObstacleOnPath(parallel_parking_planner_.getArcPath(), false) &&
       !lane_departure_checker_->checkPathWillLeaveLane(
         status_.lanes, parallel_parking_planner_.getArcPath())) {
@@ -635,7 +666,7 @@ PathWithLaneId PullOverModule::getStopPath()
   const auto current_pose = planner_data_->self_pose->pose;
   const auto common_parameters = planner_data_->parameters;
 
-  const double current_vel = util::l2Norm(planner_data_->self_odometry->twist.twist.linear);
+  const double current_vel = planner_data_->self_odometry->twist.twist.linear.x;
   const double current_to_stop_distance =
     std::pow(current_vel, 2) / std::abs(parameters_.min_acc) / 2;
   const auto arclength_current_pose =
