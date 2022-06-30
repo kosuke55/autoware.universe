@@ -315,6 +315,13 @@ bool PullOverModule::isLongEnoughToParkingStart(
   const double current_to_stop_distance =
     std::pow(current_vel, 2) / std::abs(parameters_.min_acc) / 2;
 
+  // can't restart when stopped and parking start is close.
+  const double eps = 0.01;
+  if (
+    std::abs(current_vel) < eps && *dist_to_parking_start_pose < parameters_.decide_path_distance) {
+    return false;
+  }
+
   return *dist_to_parking_start_pose > current_to_stop_distance;
 }
 
