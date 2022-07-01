@@ -1002,13 +1002,15 @@ void PullOverModule::publishDebugData()
 void PullOverModule::printParkingPositionError() const
 {
   const auto current_pose = planner_data_->self_pose->pose;
-  const double real_shoulder_to_map_shoulder = 0.0;
-  const double dy = modified_goal_pose_.position.y - current_pose.position.y;
+  const double real_shoulder_to_map_shoulder = 1.3;
+
+  const Pose goal_to_ego = inverseTransformPose(current_pose, modified_goal_pose_);
+  const double dx = goal_to_ego.position.x;
+  const double dy = goal_to_ego.position.y;
   const double distance_from_real_shoulder =
     real_shoulder_to_map_shoulder + parameters_.margin_from_boundary - dy;
   RCLCPP_INFO(
-    getLogger(), "current pose to goal, dx:%f dy:%f dyaw:%f from_real_shoulder:%f",
-    modified_goal_pose_.position.x - current_pose.position.x, dy,
+    getLogger(), "current pose to goal, dx:%f dy:%f dyaw:%f from_real_shoulder:%f", dx, dy,
     tier4_autoware_utils::rad2deg(
       tf2::getYaw(current_pose.orientation) - tf2::getYaw(modified_goal_pose_.orientation)),
     distance_from_real_shoulder);
