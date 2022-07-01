@@ -533,8 +533,8 @@ BehaviorModuleOutput PullOverModule::plan()
       const Pose search_start_pose = calcOffsetPose(
         goal_pose, -parameters_.backward_goal_search_length, -arc_coordinates.distance, 0);
       status_.path = util::setDecelerationVelocity(
-        *planner_data_->route_handler, status_.path, parameters_.pull_over_velocity,
-        search_start_pose, -calcMinimumShiftPathDistance(), parameters_.deceleration_interval);
+        status_.path, parameters_.pull_over_velocity, search_start_pose,
+        -calcMinimumShiftPathDistance(), parameters_.deceleration_interval);
     }
   }
 
@@ -649,13 +649,12 @@ PathWithLaneId PullOverModule::getReferencePath() const
   reference_path.header = route_handler->getRouteHeader();
 
   reference_path = util::setDecelerationVelocityForTurnSignal(
-    *route_handler, reference_path, target_pose,
-    planner_data_->parameters.turn_light_on_threshold_time);
+    reference_path, target_pose, planner_data_->parameters.turn_light_on_threshold_time);
 
   if (target_pose != search_start_pose) {
     reference_path = util::setDecelerationVelocity(
-      *planner_data_->route_handler, reference_path, parameters_.pull_over_velocity,
-      search_start_pose, -calcMinimumShiftPathDistance(), parameters_.deceleration_interval);
+      reference_path, parameters_.pull_over_velocity, search_start_pose,
+      -calcMinimumShiftPathDistance(), parameters_.deceleration_interval);
   }
 
   reference_path.drivable_area = util::generateDrivableArea(

@@ -1823,8 +1823,8 @@ PathWithLaneId setDecelerationVelocity(
 }
 
 PathWithLaneId setDecelerationVelocity(
-  const RouteHandler & route_handler, const PathWithLaneId & input, const double target_velocity,
-  const Pose target_pose, const double buffer, const double deceleration_interval)
+  const PathWithLaneId & input, const double target_velocity, const Pose target_pose,
+  const double buffer, const double deceleration_interval)
 {
   auto reference_path = input;
 
@@ -1853,8 +1853,7 @@ PathWithLaneId setDecelerationVelocity(
 }
 
 PathWithLaneId setDecelerationVelocityForTurnSignal(
-  const RouteHandler & route_handler, const PathWithLaneId & input, const Pose target_pose,
-  const double turn_light_on_threshold_time)
+  const PathWithLaneId & input, const Pose target_pose, const double turn_light_on_threshold_time)
 {
   auto reference_path = input;
 
