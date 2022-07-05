@@ -68,7 +68,6 @@ PullOverModule::PullOverModule(
   lane_departure_checker_->setVehicleInfo(
     vehicle_info_util::VehicleInfoUtil(node).getVehicleInfo());
   resetStatus();
-
 }
 
 void PullOverModule::resetStatus()
