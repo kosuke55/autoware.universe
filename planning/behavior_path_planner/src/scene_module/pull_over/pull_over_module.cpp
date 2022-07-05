@@ -889,33 +889,35 @@ std::pair<HazardLightsCommand, double> PullOverModule::getHazardInfo() const
 std::pair<TurnIndicatorsCommand, double> PullOverModule::getTurnInfo() const
 {
   std::pair<TurnIndicatorsCommand, double> turn_info;
-  if (status_.path_type == PathType::SHIFT) {
-    turn_info = util::getPathTurnSignal(
-      status_.current_lanes, shift_parking_path_.shifted_path, shift_parking_path_.shift_point,
-      planner_data_->self_pose->pose, planner_data_->self_odometry->twist.twist.linear.x,
-      planner_data_->parameters, 30);
-    return turn_info;
-  } else if (status_.path_type == PathType::ARC_FORWARD) {
-    // calc distance from ego vehicle front to arc end pose.
-    double distance_from_vehicle_front;
+
+  double distance_from_vehicle_front;
+  {
+    const auto arc_position_current_pose =
+      lanelet::utils::getArcCoordinates(status_.current_lanes, planner_data_->self_pose->pose);
+
+    Pose parking_end_pose;
     {
-      const auto arc_position_current_pose =
-        lanelet::utils::getArcCoordinates(status_.current_lanes, planner_data_->self_pose->pose);
-      const auto arc_position_arc_end_pose = lanelet::utils::getArcCoordinates(
-        status_.current_lanes, parallel_parking_planner_.getArcEndPose().pose);
-      distance_from_vehicle_front = arc_position_arc_end_pose.length -
-                                    arc_position_current_pose.length -
-                                    planner_data_->parameters.base_link2front;
+      if (status_.path_type == PathType::SHIFT) {
+        parking_end_pose = shift_parking_path_.shift_point.end;
+      } else if (
+        status_.path_type == PathType::ARC_FORWARD || status_.path_type == PathType::ARC_BACKWARD) {
+        parking_end_pose = parallel_parking_planner_.getArcEndPose().pose;
+      }
     }
-    TurnIndicatorsCommand turn_signal;
-    turn_signal.command = distance_from_vehicle_front >= 0.0 ? TurnIndicatorsCommand::ENABLE_LEFT
-                                                             : TurnIndicatorsCommand::NO_COMMAND;
-    turn_info.first = turn_signal;
-    turn_info.second = distance_from_vehicle_front;
-    return turn_info;
+
+    const auto arc_position_end_pose =
+      lanelet::utils::getArcCoordinates(status_.current_lanes, parking_end_pose);
+
+    distance_from_vehicle_front = arc_position_end_pose.length - arc_position_current_pose.length -
+                                  planner_data_->parameters.base_link2front;
   }
 
-  turn_info.second = std::numeric_limits<double>::max();
+  TurnIndicatorsCommand turn_signal;
+  const bool is_before_parking_end = distance_from_vehicle_front >= 0.0;
+  turn_signal.command =
+    is_before_parking_end ? TurnIndicatorsCommand::ENABLE_LEFT : TurnIndicatorsCommand::NO_COMMAND;
+  turn_info.first = turn_signal;
+  turn_info.second = distance_from_vehicle_front;
   return turn_info;
 }
 
