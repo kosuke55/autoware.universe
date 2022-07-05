@@ -1854,7 +1854,7 @@ PathWithLaneId setDecelerationVelocity(
     }
   }
 
-    return reference_path;
+  return reference_path;
 }
 
 std::uint8_t getHighestProbLabel(const std::vector<ObjectClassification> & classification)

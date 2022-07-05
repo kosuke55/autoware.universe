@@ -284,7 +284,7 @@ void PullOverModule::researchGoal()
 
 BT::NodeStatus PullOverModule::updateState()
 {
-   // pull_out moudule will be run when setting new goal, so not need finishing pull_over module.
+  // pull_out moudule will be run when setting new goal, so not need finishing pull_over module.
   // Finishing it causes wrong lane_following path generation.
   // if (hasFinishedPullOver()) {
   //   current_state_ = BT::NodeStatus::SUCCESS;
