@@ -16,9 +16,8 @@
 
 #include "motion_common/motion_common.hpp"
 #include "motion_common/trajectory_common.hpp"
+#include "tier4_autoware_utils/tier4_autoware_utils.hpp"
 #include "time_utils/time_utils.hpp"
-
-#include <tier4_autoware_utils/tier4_autoware_utils.hpp>
 
 #include <algorithm>
 #include <limits>
@@ -51,6 +50,8 @@ PidLongitudinalController::PidLongitudinalController(rclcpp::Node & node) : node
   // parameters to enable functions
   m_enable_smooth_stop = node_->declare_parameter<bool8_t>("enable_smooth_stop");
   m_enable_overshoot_emergency = node_->declare_parameter<bool8_t>("enable_overshoot_emergency");
+  m_enable_large_tracking_error_emergency =
+    node_->declare_parameter<bool8_t>("enable_large_tracking_error_emergency");
   m_enable_slope_compensation = node_->declare_parameter<bool8_t>("enable_slope_compensation");
   m_enable_keep_stopped_until_steer_convergence =
     node_->declare_parameter<bool8_t>("enable_keep_stopped_until_steer_convergence");
@@ -72,10 +73,7 @@ PidLongitudinalController::PidLongitudinalController(rclcpp::Node & node) : node
       node_->declare_parameter<float64_t>("stopped_state_entry_vel");  // [m/s]
     p.stopped_state_entry_acc =
       node_->declare_parameter<float64_t>("stopped_state_entry_acc");  // [m/s²]
-    p.stopped_state_new_traj_duration_time =
-      node_->declare_parameter<float64_t>("stopped_state_new_traj_duration_time");  // [s]
-    p.stopped_state_new_traj_end_dist =
-      node_->declare_parameter<float64_t>("stopped_state_new_traj_end_dist");  // [m]
+
     // emergency
     p.emergency_state_overshoot_stop_dist =
       node_->declare_parameter<float64_t>("emergency_state_overshoot_stop_dist");  // [m]
@@ -181,8 +179,6 @@ PidLongitudinalController::PidLongitudinalController(rclcpp::Node & node) : node
   m_min_pitch_rad = node_->declare_parameter<float64_t>("min_pitch_rad");  // [rad]
 
   // subscriber, publisher
-  m_pub_control_cmd = node_->create_publisher<autoware_auto_control_msgs::msg::LongitudinalCommand>(
-    "~/output/longitudinal_control_cmd", rclcpp::QoS{1});
   m_pub_slope =
     node_->create_publisher<autoware_auto_system_msgs::msg::Float32MultiArrayDiagnostic>(
       "~/output/slope_angle", rclcpp::QoS{1});
@@ -259,8 +255,6 @@ rcl_interfaces::msg::SetParametersResult PidLongitudinalController::paramCallbac
     update_param("stopped_state_entry_duration_time", p.stopped_state_entry_duration_time);
     update_param("stopped_state_entry_vel", p.stopped_state_entry_vel);
     update_param("stopped_state_entry_acc", p.stopped_state_entry_acc);
-    update_param("stopped_state_new_traj_duration_time", p.stopped_state_new_traj_duration_time);
-    update_param("stopped_state_new_traj_end_dist", p.stopped_state_new_traj_end_dist);
     update_param("emergency_state_overshoot_stop_dist", p.emergency_state_overshoot_stop_dist);
     update_param("emergency_state_traj_trans_dev", p.emergency_state_traj_trans_dev);
     update_param("emergency_state_traj_rot_dev", p.emergency_state_traj_rot_dev);
@@ -359,14 +353,13 @@ rcl_interfaces::msg::SetParametersResult PidLongitudinalController::paramCallbac
   return result;
 }
 
-LongitudinalOutput PidLongitudinalController::run()
+boost::optional<LongitudinalOutput> PidLongitudinalController::run()
 {
   // wait for initial pointers
   if (
     !m_current_velocity_ptr || !m_prev_velocity_ptr || !m_trajectory_ptr ||
     !m_tf_buffer.canTransform(m_trajectory_ptr->header.frame_id, "base_link", tf2::TimePointZero)) {
-    LongitudinalOutput output;
-    return output;  // todo
+    return boost::none;
   }
 
   // get current ego pose
@@ -384,7 +377,9 @@ LongitudinalOutput PidLongitudinalController::run()
 
   // self pose is far from trajectory
   if (control_data.is_far_from_trajectory) {
-    m_control_state = ControlState::EMERGENCY;                          // update control state
+    if (m_enable_large_tracking_error_emergency) {
+      m_control_state = ControlState::EMERGENCY;  // update control state
+    }
     const Motion raw_ctrl_cmd = calcEmergencyCtrlCmd(control_data.dt);  // calculate control command
     m_prev_raw_ctrl_cmd = raw_ctrl_cmd;
     const auto cmd_msg =
@@ -445,7 +440,7 @@ PidLongitudinalController::ControlData PidLongitudinalController::getControlData
 
   // distance to stopline
   control_data.stop_dist = trajectory_follower::longitudinal_utils::calcStopDistance(
-    current_pose.position, *m_trajectory_ptr);
+    current_pose, *m_trajectory_ptr, max_dist, max_yaw);
 
   // pitch
   const float64_t raw_pitch =
@@ -475,32 +470,6 @@ PidLongitudinalController::Motion PidLongitudinalController::calcEmergencyCtrlCm
   return Motion{vel, acc};
 }
 
-bool PidLongitudinalController::checkNewTrajectory()
-{
-  // flags for state transition
-  const auto & p = m_state_transition_params;
-
-  m_trajectory_buffer.push_back(*m_trajectory_ptr);
-  while (true) {
-    const auto time_diff = rclcpp::Time(m_trajectory_buffer.back().header.stamp) -
-                           rclcpp::Time(m_trajectory_buffer.front().header.stamp);
-    if (time_diff.seconds() < p.stopped_state_new_traj_duration_time) {
-      break;
-    }
-    m_trajectory_buffer.pop_front();
-  }
-
-  for (const auto trajectory : m_trajectory_buffer) {
-    if (
-      tier4_autoware_utils::calcDistance2d(
-        trajectory.points.back().pose, m_trajectory_ptr->points.back().pose) >
-      p.stopped_state_new_traj_end_dist) {
-      return true;
-    }
-  }
-  return false;
-}
-
 PidLongitudinalController::ControlState PidLongitudinalController::updateControlState(
   const ControlState current_control_state, const ControlData & control_data)
 {
@@ -514,8 +483,9 @@ PidLongitudinalController::ControlState PidLongitudinalController::updateControl
   const bool8_t departure_condition_from_stopping =
     stop_dist > p.drive_state_stop_dist + p.drive_state_offset_stop_dist;
   const bool8_t departure_condition_from_stopped = stop_dist > p.drive_state_stop_dist;
+
   const bool8_t keep_stopped_condition =
-    !lateral_sync_data_.is_steer_converged || checkNewTrajectory();
+    m_enable_keep_stopped_until_steer_convergence && !lateral_sync_data_.is_steer_converged;
 
   const bool8_t stopping_condition = stop_dist < p.stopping_state_stop_dist;
   if (
@@ -570,9 +540,8 @@ PidLongitudinalController::ControlState PidLongitudinalController::updateControl
       return ControlState::DRIVE;
     }
   } else if (current_control_state == ControlState::STOPPED) {
-    if (
-      departure_condition_from_stopped &&
-      (!m_enable_keep_stopped_until_steer_convergence || !keep_stopped_condition)) {
+    if (keep_stopped_condition) return ControlState::STOPPED;
+    if (departure_condition_from_stopped) {
       m_pid_vel.reset();
       m_lpf_vel_error->reset(0.0);
       // prevent the car from taking a long time to start to move
@@ -603,7 +572,7 @@ PidLongitudinalController::Motion PidLongitudinalController::calcCtrlCmd(
     const auto target_pose = trajectory_follower::longitudinal_utils::calcPoseAfterTimeDelay(
       current_pose, m_delay_compensation_time, current_vel);
     const auto target_interpolated_point =
-      calcInterpolatedTargetValue(*m_trajectory_ptr, target_pose.position, nearest_idx);
+      calcInterpolatedTargetValue(*m_trajectory_ptr, target_pose, nearest_idx);
     target_motion = Motion{
       target_interpolated_point.longitudinal_velocity_mps,
       target_interpolated_point.acceleration_mps2};
@@ -666,7 +635,6 @@ autoware_auto_control_msgs::msg::LongitudinalCommand PidLongitudinalController::
   cmd.stamp = node_->now();
   cmd.speed = static_cast<decltype(cmd.speed)>(ctrl_cmd.vel);
   cmd.acceleration = static_cast<decltype(cmd.acceleration)>(ctrl_cmd.acc);
-  // m_pub_control_cmd->publish(cmd);
 
   // store current velocity history
   m_vel_hist.push_back({node_->now(), current_vel});
@@ -853,8 +821,8 @@ PidLongitudinalController::Motion PidLongitudinalController::keepBrakeBeforeStop
 
 autoware_auto_planning_msgs::msg::TrajectoryPoint
 PidLongitudinalController::calcInterpolatedTargetValue(
-  const autoware_auto_planning_msgs::msg::Trajectory & traj,
-  const geometry_msgs::msg::Point & point, const size_t nearest_idx) const
+  const autoware_auto_planning_msgs::msg::Trajectory & traj, const geometry_msgs::msg::Pose & pose,
+  const size_t nearest_idx) const
 {
   if (traj.points.size() == 1) {
     return traj.points.at(0);
@@ -863,18 +831,21 @@ PidLongitudinalController::calcInterpolatedTargetValue(
   // If the current position is not within the reference trajectory, enable the edge value.
   // Else, apply linear interpolation
   if (nearest_idx == 0) {
-    if (motion_common::calcSignedArcLength(traj.points, point, 0) > 0) {
+    if (motion_common::calcSignedArcLength(traj.points, pose.position, 0) > 0) {
       return traj.points.at(0);
     }
   }
   if (nearest_idx == traj.points.size() - 1) {
-    if (motion_common::calcSignedArcLength(traj.points, point, traj.points.size() - 1) < 0) {
+    if (
+      motion_common::calcSignedArcLength(traj.points, pose.position, traj.points.size() - 1) < 0) {
       return traj.points.at(traj.points.size() - 1);
     }
   }
 
   // apply linear interpolation
-  return trajectory_follower::longitudinal_utils::lerpTrajectoryPoint(traj.points, point);
+  return trajectory_follower::longitudinal_utils::lerpTrajectoryPoint(
+    traj.points, pose, m_state_transition_params.emergency_state_traj_trans_dev,
+    m_state_transition_params.emergency_state_traj_rot_dev);
 }
 
 float64_t PidLongitudinalController::predictedVelocityInTargetPoint(
@@ -973,7 +944,7 @@ void PidLongitudinalController::updateDebugVelAcc(
   const size_t nearest_idx = control_data.nearest_idx;
 
   const auto interpolated_point =
-    calcInterpolatedTargetValue(*m_trajectory_ptr, current_pose.position, nearest_idx);
+    calcInterpolatedTargetValue(*m_trajectory_ptr, current_pose, nearest_idx);
 
   m_debug_values.setValues(DebugValues::TYPE::CURRENT_VEL, current_vel);
   m_debug_values.setValues(DebugValues::TYPE::TARGET_VEL, target_motion.vel);

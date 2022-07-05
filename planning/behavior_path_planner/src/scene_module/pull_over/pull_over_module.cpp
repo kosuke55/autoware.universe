@@ -499,7 +499,7 @@ bool PullOverModule::planShiftPath()
     route_handler->setPullOverGoalPose(
       target_shoulder_lane, common_parameters.vehicle_width, parameters_.margin_from_boundary);
   } else {
-    RCLCPP_ERROR(getLogger(), "failed to get shoulder lane!!!");
+    RCLCPP_ERROR_THROTTLE(getLogger(), *clock_, 5000, "failed to get shoulder lane!!!");
   }
 
   // Find pull_over path

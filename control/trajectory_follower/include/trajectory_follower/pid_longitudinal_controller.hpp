@@ -84,16 +84,12 @@ private:
     float64_t slope_angle{0.0};
     float64_t dt{0.0};
   };
-  rclcpp::Node::SharedPtr node_;
-
+  rclcpp::Node * node_;
   // ros variables
-  rclcpp::Publisher<autoware_auto_control_msgs::msg::LongitudinalCommand>::SharedPtr
-    m_pub_control_cmd;
   rclcpp::Publisher<autoware_auto_system_msgs::msg::Float32MultiArrayDiagnostic>::SharedPtr
     m_pub_slope;
   rclcpp::Publisher<autoware_auto_system_msgs::msg::Float32MultiArrayDiagnostic>::SharedPtr
     m_pub_debug;
-  rclcpp::TimerBase::SharedPtr m_timer_control;
 
   rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr m_tf_sub;
   rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr m_tf_static_sub;
@@ -126,10 +122,8 @@ private:
   bool8_t m_enable_smooth_stop;
   bool8_t m_enable_overshoot_emergency;
   bool8_t m_enable_slope_compensation;
+  bool8_t m_enable_large_tracking_error_emergency;
   bool8_t m_enable_keep_stopped_until_steer_convergence;
-
-  // trajectory beffer for detecting new trajectory
-  std::deque<autoware_auto_planning_msgs::msg::Trajectory> m_trajectory_buffer;
 
   // smooth stop transition
   struct StateTransitionParams
@@ -143,8 +137,6 @@ private:
     float64_t stopped_state_entry_duration_time;
     float64_t stopped_state_entry_vel;
     float64_t stopped_state_entry_acc;
-    float64_t stopped_state_new_traj_duration_time;
-    float64_t stopped_state_new_traj_end_dist;
     // emergency
     float64_t emergency_state_overshoot_stop_dist;
     float64_t emergency_state_traj_trans_dev;
@@ -231,7 +223,7 @@ private:
   /**
    * @brief compute control command, and publish periodically
    */
-  LongitudinalOutput run() override;
+  boost::optional<LongitudinalOutput> run() override;
 
   /**
    * @brief set input data like current odometry and trajectory.
@@ -249,8 +241,6 @@ private:
    * @param [in] dt time between previous and current one
    */
   Motion calcEmergencyCtrlCmd(const float64_t dt) const;
-
-  bool checkNewTrajectory();
 
   /**
    * @brief update control state according to the current situation
@@ -341,7 +331,7 @@ private:
    */
   autoware_auto_planning_msgs::msg::TrajectoryPoint calcInterpolatedTargetValue(
     const autoware_auto_planning_msgs::msg::Trajectory & traj,
-    const geometry_msgs::msg::Point & point, const size_t nearest_idx) const;
+    const geometry_msgs::msg::Pose & pose, const size_t nearest_idx) const;
 
   /**
    * @brief calculate predicted velocity after time delay based on past control commands

@@ -146,7 +146,7 @@ public:
     const lanelet::ConstLanelets & current_lanes, const lanelet::ConstLanelets & lanes);
   BehaviorModuleOutput plan() override;
   BehaviorModuleOutput planWaitingApproval() override;
-  PathWithLaneId planCandidate() const override;
+  CandidateOutput planCandidate() const override;
   void onEntry() override;
   void onExit() override;
 

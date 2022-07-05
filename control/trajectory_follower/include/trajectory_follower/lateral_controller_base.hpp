@@ -21,6 +21,8 @@
 
 #include "autoware_auto_control_msgs/msg/ackermann_lateral_command.hpp"
 
+#include <boost/optional.hpp>
+
 namespace autoware
 {
 namespace motion
@@ -38,7 +40,7 @@ struct LateralOutput
 class LateralControllerBase
 {
 public:
-  virtual LateralOutput run() = 0;
+  virtual boost::optional<LateralOutput> run() = 0;
   virtual void setInputData(InputData const & input_data) = 0;
   void sync(LongitudinalSyncData const & longitudinal_sync_data)
   {

@@ -47,16 +47,6 @@
 #include <utility>
 #include <vector>
 
-namespace tier4_autoware_utils
-{
-template <>
-inline geometry_msgs::msg::Pose getPose(
-  const autoware_auto_planning_msgs::msg::PathPointWithLaneId & p)
-{
-  return p.point.pose;
-}
-}  // namespace tier4_autoware_utils
-
 namespace behavior_velocity_planner
 {
 using autoware_auto_perception_msgs::msg::ObjectClassification;
@@ -121,7 +111,6 @@ struct PlannerParam
   bool is_show_occlusion;           // [-]
   bool is_show_cv_window;           // [-]
   bool is_show_processing_time;     // [-]
-  bool filter_occupancy_grid;       // [-]
   bool use_object_info;             // [-]
   bool use_moving_object_ray_cast;  // [-]
   bool use_partition_lanelet;       // [-]

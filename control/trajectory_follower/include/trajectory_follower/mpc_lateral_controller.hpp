@@ -76,18 +76,13 @@ public:
   virtual ~MpcLateralController();
 
 private:
-  rclcpp::Node::SharedPtr node_;
+  rclcpp::Node * node_;
 
-  //!< @brief topic publisher for control command
-  rclcpp::Publisher<autoware_auto_control_msgs::msg::AckermannLateralCommand>::SharedPtr
-    m_pub_ctrl_cmd;
   //!< @brief topic publisher for predicted trajectory
   rclcpp::Publisher<autoware_auto_planning_msgs::msg::Trajectory>::SharedPtr m_pub_predicted_traj;
   //!< @brief topic publisher for control diagnostic
   rclcpp::Publisher<autoware_auto_system_msgs::msg::Float32MultiArrayDiagnostic>::SharedPtr
     m_pub_diagnostic;
-  //!< @brief timer to update after a given interval
-  rclcpp::TimerBase::SharedPtr m_timer;
   //!< @brief subscription for transform messages
   rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr m_tf_sub;
   rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr m_tf_static_sub;
@@ -109,7 +104,12 @@ private:
   float64_t m_stop_state_entry_ego_speed;
   float64_t m_stop_state_entry_target_speed;
   float64_t m_converged_steer_rad;
-  bool m_check_steer_converged_for_stopped_state;
+  float64_t m_new_traj_duration_time;  // check trajectory shape change
+  float64_t m_new_traj_end_dist;       // check trajectory shape change
+  bool m_keep_steer_control_until_converged;
+
+  // trajectory buffer for detecting new trajectory
+  std::deque<autoware_auto_planning_msgs::msg::Trajectory> m_trajectory_buffer;
 
   // MPC object
   trajectory_follower::MPC m_mpc;
@@ -138,9 +138,9 @@ private:
   //!< initialize timer to work in real, simulation, and replay
   void initTimer(float64_t period_s);
   /**
-   * @brief compute and publish control command for path follow with a constant control period
+   * @brief compute control command for path follow with a constant control period
    */
-  LateralOutput run() override;
+  boost::optional<LateralOutput> run() override;
 
   /**
    * @brief set input data like current odometry, trajectory and steering.
@@ -202,6 +202,10 @@ private:
    * @brief check if the trajectory has valid value
    */
   bool8_t isValidTrajectory(const autoware_auto_planning_msgs::msg::Trajectory & traj) const;
+
+  bool8_t isTrajectoryShapeChanged() const;
+
+  bool isSteerConverged(const autoware_auto_control_msgs::msg::AckermannLateralCommand & cmd) const;
 
   rclcpp::Node::OnSetParametersCallbackHandle::SharedPtr m_set_param_res;
 
