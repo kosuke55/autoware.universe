@@ -197,6 +197,7 @@ private:
   lanelet::ConstLanelets getPullOverLanes() const;
   std::pair<bool, bool> getSafePath(ShiftParkingPath & safe_path) const;
   Pose getRefinedGoal() const;
+  Pose getParkingStartPose() const;
   bool isLongEnoughToParkingStart(const PathWithLaneId path, const Pose parking_start_pose) const;
 
   // turn signal
