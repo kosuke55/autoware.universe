@@ -69,7 +69,6 @@ PullOverModule::PullOverModule(
     vehicle_info_util::VehicleInfoUtil(node).getVehicleInfo());
   resetStatus();
 
-  last_received_time_ = node.now();
 }
 
 void PullOverModule::resetStatus()
@@ -113,7 +112,9 @@ void PullOverModule::onEntry()
   occupancy_grid_map_.setParam(occupancy_grid_map_param);
 
   // inititialize when receiving new route
-  if (last_received_time_ != planner_data_->route_handler->getRouteHeader().stamp) {
+  if (
+    last_received_time_.get() == nullptr ||
+    *last_received_time_ != planner_data_->route_handler->getRouteHeader().stamp) {
     // Initialize parallel parking planner sratus
     parallel_parking_planner_.clear();
     parallel_parking_prameters_ = ParallelParkingParameters{
@@ -128,7 +129,8 @@ void PullOverModule::onEntry()
 
     resetStatus();
   }
-  last_received_time_ = planner_data_->route_handler->getRouteHeader().stamp;
+  last_received_time_ =
+    std::make_unique<rclcpp::Time>(planner_data_->route_handler->getRouteHeader().stamp);
 
   // Use refined goal as modified goal when disabling goal research
   if (!parameters_.enable_goal_research) {
@@ -488,9 +490,9 @@ BehaviorModuleOutput PullOverModule::plan()
       waitApproval();
       current_state_ = BT::NodeStatus::SUCCESS;
       status_.has_requested_approval_ = true;
-    } else if (isActivated()) {
+    } else if (isActivated() && isWaitingApproval()) {
       clearWaitingApproval();
-      last_approved_time_ = clock_->now();
+      last_approved_time_ = std::make_unique<rclcpp::Time>(clock_->now());
 
       // decide velocity to guarantee turn singnal lighting time
       if (!status_.has_decided_velocity) {
@@ -506,8 +508,9 @@ BehaviorModuleOutput PullOverModule::plan()
 
     if (status_.path_type == PathType::ARC_FORWARD || status_.path_type == PathType::ARC_BACKWARD) {
       if (
-        hasFinishedCurrentPath() && (clock_->now() - last_approved_time_).seconds() >
-                                      planner_data_->parameters.turn_light_on_threshold_time) {
+        isActivated() && hasFinishedCurrentPath() &&
+        (clock_->now() - *last_approved_time_).seconds() >
+          planner_data_->parameters.turn_light_on_threshold_time) {
         parallel_parking_planner_.incrementPathIndex();
       };
       status_.path = parallel_parking_planner_.getCurrentPath();

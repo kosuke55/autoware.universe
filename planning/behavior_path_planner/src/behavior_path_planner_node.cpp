@@ -369,7 +369,7 @@ PullOverParameters BehaviorPathPlannerNode::getPullOverParam()
 
   PullOverParameters p;
   p.request_length = dp("request_length", 100.0);
-  p.th_arrived_distance_m = dp("th_stopped_velocity_mps", 0.01);
+  p.th_stopped_velocity_mps = dp("th_stopped_velocity_mps", 0.01);
   p.th_arrived_distance_m = dp("th_arrived_distance_m", 0.3);
   p.th_stopped_time_sec = dp("th_stopped_time_sec", 2.0);
   p.margin_from_boundary = dp("margin_from_boundary", 0.3);
@@ -567,11 +567,12 @@ void BehaviorPathPlannerNode::run()
   planner_data_->prev_output_path = path;
   mutex_pd_.unlock();
 
-  bool skip_smooth_goal_connection =
-    ready_module_.module.type == PathChangeModuleId::PULL_OVER ||
-    std::any_of(running_modules_.modules.begin(), running_modules_.modules.end(), [](const auto m) {
-      return m.type == PathChangeModuleId::PULL_OVER;
-    });
+  // skip smooth goal connection if pull_over is running
+  const auto running_modules = getRunningModules(bt_manager_->getModulesStatus());
+  const bool skip_smooth_goal_connection = std::any_of(
+    running_modules.modules.begin(), running_modules.modules.end(),
+    [](const auto m) { return m.type == PathChangeModuleId::PULL_OVER; });
+
   PathWithLaneId clipped_path;
   if (skip_smooth_goal_connection) {
     clipped_path = *path;
@@ -648,6 +649,36 @@ PathWithLaneId::SharedPtr BehaviorPathPlannerNode::getPathCandidate(
     get_logger(), "BehaviorTreeManager: path candidate is %s.",
     bt_output.path_candidate ? "FOUND" : "NOT FOUND");
   return path_candidate;
+}
+
+PathChangeModuleArray BehaviorPathPlannerNode::getRunningModules(
+  const std::vector<std::shared_ptr<SceneModuleStatus>> & statuses) const
+{
+  auto getModuleType = [](std::string name) {
+    if (name == "LaneChange") {
+      return PathChangeModuleId::LANE_CHANGE;
+    } else if (name == "Avoidance") {
+      return PathChangeModuleId::AVOIDANCE;
+    } else if (name == "ForceLaneChange") {
+      return PathChangeModuleId::FORCE_LANE_CHANGE;
+    } else if (name == "PullOver") {
+      return PathChangeModuleId::PULL_OVER;
+    } else if (name == "PullOut") {
+      return PathChangeModuleId::PULL_OUT;
+    } else {
+      return PathChangeModuleId::NONE;
+    }
+  };
+
+  PathChangeModuleArray running_modules{};
+  for (auto & status : statuses) {
+    if (status->status == BT::NodeStatus::RUNNING) {
+      PathChangeModuleId module{};
+      module.type = getModuleType(status->module_name);
+      running_modules.modules.push_back(module);
+    }
+  }
+  return running_modules;
 }
 
 void BehaviorPathPlannerNode::publishDebugMarker(const std::vector<MarkerArray> & debug_markers)

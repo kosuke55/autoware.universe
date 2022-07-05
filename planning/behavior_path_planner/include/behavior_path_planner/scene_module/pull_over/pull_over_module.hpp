@@ -189,8 +189,8 @@ private:
   ParallelParkingParameters parallel_parking_prameters_;
   std::deque<nav_msgs::msg::Odometry::ConstSharedPtr> odometry_buffer_;
   std::unique_ptr<LaneDepartureChecker> lane_departure_checker_;
-  rclcpp::Time last_received_time_;
-  rclcpp::Time last_approved_time_;
+  std::unique_ptr<rclcpp::Time> last_received_time_;
+  std::unique_ptr<rclcpp::Time> last_approved_time_;
 
   PathWithLaneId getReferencePath() const;
   PathWithLaneId getStopPath();

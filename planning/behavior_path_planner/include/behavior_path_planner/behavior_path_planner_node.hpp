@@ -163,6 +163,12 @@ private:
   PathWithLaneId::SharedPtr getPathCandidate(
     const BehaviorModuleOutput & bt_out, const std::shared_ptr<PlannerData> planner_data);
 
+  /**
+   * @brief get running modules
+   */
+  PathChangeModuleArray getRunningModules(
+    const std::vector<std::shared_ptr<SceneModuleStatus>> & statuses) const;
+
   // debug
 
 private:
