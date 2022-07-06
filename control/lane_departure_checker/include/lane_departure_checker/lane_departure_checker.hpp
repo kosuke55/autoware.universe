@@ -92,7 +92,6 @@ public:
   void setParam(const Param & param, const vehicle_info_util::VehicleInfo vehicle_info)
   {
     param_ = param;
-    // vehicle_info_ = vehicle_info;
     vehicle_info_ptr_ = std::make_shared<vehicle_info_util::VehicleInfo>(vehicle_info);
   }
 
@@ -101,10 +100,6 @@ public:
   void setVehicleInfo(const vehicle_info_util::VehicleInfo vehicle_info)
   {
     vehicle_info_ptr_ = std::make_shared<vehicle_info_util::VehicleInfo>(vehicle_info);
-    // vehicle_info_util::VehicleInfo vehicle_info_local;
-    // vehicle_info_local = vehicle_info;
-    // vehicle_info_public_ = vehicle_info;
-    // vehicle_info_ = vehicle_info;
   }
 
   bool checkPathWillLeaveLane(const lanelet::ConstLanelets & lanelets, const PathWithLaneId & path);
@@ -114,7 +109,6 @@ public:
 private:
   Param param_;
   std::shared_ptr<vehicle_info_util::VehicleInfo> vehicle_info_ptr_;
-  // vehicle_info_util::VehicleInfo vehicle_info_;
 
   static PoseDeviation calcTrajectoryDeviation(
     const Trajectory & trajectory, const geometry_msgs::msg::Pose & pose,

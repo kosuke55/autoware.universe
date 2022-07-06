@@ -50,7 +50,7 @@ inline void fromMsg(const geometry_msgs::msg::PoseStamped & msg, tf2::Stamped<tf
   fromMsg(msg.pose, tmp);
   out.setData(tmp);
 }
-
+#ifdef ROS_DISTRO_GALACTIC
 // Remove after this commit is released
 // https://github.com/ros2/geometry2/commit/e9da371d81e388a589540357c050e262442f1b4a
 inline geometry_msgs::msg::Point & toMsg(const tf2::Vector3 & in, geometry_msgs::msg::Point & out)
@@ -96,6 +96,7 @@ inline void doTransform(
   tf2::Transform v_out = t * tf2::Transform(r, v);
   toMsg(v_out, t_out);
 }
+#endif
 }  // namespace tf2
 
 namespace tier4_autoware_utils
