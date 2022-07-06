@@ -22,6 +22,7 @@
 #include <opencv2/opencv.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <route_handler/route_handler.hpp>
+#include <tier4_autoware_utils/geometry/geometry.hpp>
 #include <tier4_autoware_utils/tier4_autoware_utils.hpp>
 
 #include <autoware_auto_perception_msgs/msg/object_classification.hpp>
@@ -287,6 +288,7 @@ PathPointWithLaneId insertStopPoint(double length, PathWithLaneId * path);
 
 double getDistanceToShoulderBoundary(
   const lanelet::ConstLanelets & shoulder_lanelets, const Pose & pose);
+double getDistanceToRightBoundary(const lanelet::ConstLanelets & lanelets, const Pose & pose);
 
 // misc
 
@@ -322,6 +324,9 @@ bool checkLaneIsInIntersection(
 
 // object label
 std::uint8_t getHighestProbLabel(const std::vector<ObjectClassification> & classification);
+
+lanelet::ConstLanelets getExtendedCurrentLanes(
+  const std::shared_ptr<const PlannerData> & planner_data);
 
 }  // namespace util
 }  // namespace behavior_path_planner
