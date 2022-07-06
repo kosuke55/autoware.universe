@@ -1027,7 +1027,7 @@ void PullOverModule::publishDebugData()
 void PullOverModule::printParkingPositionError() const
 {
   const auto current_pose = planner_data_->self_pose->pose;
-  const double real_shoulder_to_map_shoulder = 1.3;
+  const double real_shoulder_to_map_shoulder = 0.0;
 
   const Pose goal_to_ego = inverseTransformPose(current_pose, modified_goal_pose_);
   const double dx = goal_to_ego.position.x;
