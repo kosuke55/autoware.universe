@@ -37,6 +37,7 @@
 
 using nav_msgs::msg::OccupancyGrid;
 using tier4_autoware_utils::calcDistance2d;
+using tier4_autoware_utils::calcLongitudinalOffsetPose;
 using tier4_autoware_utils::calcOffsetPose;
 using tier4_autoware_utils::calcSignedArcLength;
 using tier4_autoware_utils::createDefaultMarker;
@@ -453,7 +454,13 @@ Pose PullOverModule::getParkingStartPose() const
 {
   Pose parking_start_pose;
   if (status_.path_type == PathType::SHIFT) {
-    parking_start_pose = shift_parking_path_.shift_point.start;
+    // offset shift start point backward to ensure enough distance
+    // for winker operation even when stopped
+    const double offset = parameters_.pull_over_minimum_velocity *
+                          planner_data_->parameters.turn_light_on_threshold_time;
+    const auto offset_pose = calcLongitudinalOffsetPose(
+      shift_parking_path_.path.points, shift_parking_path_.shift_point.start.position, -offset);
+    parking_start_pose = offset_pose ? *offset_pose : shift_parking_path_.shift_point.start;
   } else if (
     status_.path_type == PathType::ARC_FORWARD || status_.path_type == PathType::ARC_BACKWARD) {
     parking_start_pose = parallel_parking_planner_.getStartPose().pose;
@@ -511,8 +518,8 @@ BehaviorModuleOutput PullOverModule::plan()
         (clock_->now() - *last_approved_time_).seconds() >
           planner_data_->parameters.turn_light_on_threshold_time) {
         parallel_parking_planner_.incrementPathIndex();
+        status_.path = parallel_parking_planner_.getCurrentPath();
       };
-      status_.path = parallel_parking_planner_.getCurrentPath();
     }
   }
   // Replan shift -> arc forward -> arc backward path with each goal candidate.
@@ -639,7 +646,6 @@ bool PullOverModule::planShiftPath()
 PathWithLaneId PullOverModule::getReferencePath() const
 {
   const auto & route_handler = planner_data_->route_handler;
-
   const auto current_pose = planner_data_->self_pose->pose;
   const auto common_parameters = planner_data_->parameters;
 
@@ -650,28 +656,26 @@ PathWithLaneId PullOverModule::getReferencePath() const
   const auto arc_coordinates = lanelet::utils::getArcCoordinates(status_.current_lanes, goal_pose);
   const Pose search_start_pose = calcOffsetPose(
     goal_pose, -parameters_.backward_goal_search_length, -arc_coordinates.distance, 0);
+  // if not approved, stop parking start position or goal search start position.
+  const Pose stop_pose = status_.is_safe ? getParkingStartPose() : search_start_pose;
 
-  Pose target_pose;
-  if (!status_.is_safe) {
-    target_pose = search_start_pose;
-  } else if (status_.path_type == PathType::SHIFT) {
-    target_pose = shift_parking_path_.shift_point.start;
-  } else if (
-    status_.path_type == PathType::ARC_FORWARD || status_.path_type == PathType::ARC_BACKWARD) {
-    target_pose = parallel_parking_planner_.getStartPose().pose;
-  } else {
-    target_pose = search_start_pose;
-  }
-
-  PathWithLaneId reference_path = util::getCenterLinePath(
-    *route_handler, status_.current_lanes, current_pose, common_parameters.backward_path_length,
-    common_parameters.forward_path_length, common_parameters);
+  // generate center line path to stop_pose
+  const auto arc_position_stop_pose =
+    lanelet::utils::getArcCoordinates(status_.current_lanes, stop_pose);
+  const auto arc_position_current_pose =
+    lanelet::utils::getArcCoordinates(status_.current_lanes, current_pose);
+  const auto s_backward =
+    std::max(0.0, arc_position_current_pose.length - common_parameters.backward_path_length);
+  PathWithLaneId reference_path = route_handler->getCenterLinePath(
+    status_.current_lanes, s_backward, arc_position_stop_pose.length, true);
   reference_path.header = route_handler->getRouteHeader();
 
+  // slow donw for turn singnal, insert stop point to stop_pose
   reference_path = util::setDecelerationVelocityForTurnSignal(
-    reference_path, target_pose, planner_data_->parameters.turn_light_on_threshold_time);
+    reference_path, stop_pose, planner_data_->parameters.turn_light_on_threshold_time);
 
-  if (target_pose != search_start_pose) {
+  // slow down before the search area.
+  if (stop_pose != search_start_pose) {
     reference_path = util::setDecelerationVelocity(
       reference_path, parameters_.pull_over_velocity, search_start_pose,
       -calcMinimumShiftPathDistance(), parameters_.deceleration_interval);
