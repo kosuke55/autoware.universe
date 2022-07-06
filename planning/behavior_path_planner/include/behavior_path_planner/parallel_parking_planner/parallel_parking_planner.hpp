@@ -32,6 +32,7 @@
 #include <lanelet2_routing/RoutingGraph.h>
 
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -70,12 +71,12 @@ public:
   PathWithLaneId getCurrentPath() const;
   PathWithLaneId getFullPath() const;
   PathWithLaneId getArcPath() const;
-  PoseStamped getCr() const { return Cr_; };
-  PoseStamped getCl() const { return Cl_; };
-  PoseStamped getStartPose() const { return start_pose_; };
-  PoseStamped getArcEndPose() const { return arc_end_pose_; };
+  PoseStamped getCr() const { return Cr_; }
+  PoseStamped getCl() const { return Cl_; }
+  PoseStamped getStartPose() const { return start_pose_; }
+  PoseStamped getArcEndPose() const { return arc_end_pose_; }
 
-  PoseArray getPathPoseArray() const { return path_pose_array_; };
+  PoseArray getPathPoseArray() const { return path_pose_array_; }
 
 private:
   std::shared_ptr<const PlannerData> planner_data_;

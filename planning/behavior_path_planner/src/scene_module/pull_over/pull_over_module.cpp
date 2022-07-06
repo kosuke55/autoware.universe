@@ -519,11 +519,9 @@ BehaviorModuleOutput PullOverModule::plan()
           planner_data_->parameters.turn_light_on_threshold_time) {
         parallel_parking_planner_.incrementPathIndex();
         status_.path = parallel_parking_planner_.getCurrentPath();
-      };
+      }
     }
-  }
-  // Replan shift -> arc forward -> arc backward path with each goal candidate.
-  else {
+  } else {  // Replan shift -> arc forward -> arc backward path with each goal candidate.
     // Research goal when enabling research and final path has not been decieded
     if (parameters_.enable_goal_research) researchGoal();
 

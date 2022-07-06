@@ -216,9 +216,7 @@ bool ParallelParkingPlanner::planOneTraial(
     if (std::abs(distance_to_left_bound) < left_deviation) {
       return false;
     }
-  }
-  // Check right bound
-  else {
+  } else {  // Check right bound
     const float R_front_right =
       std::hypot(R_E_l + common_params.vehicle_width / 2, common_params.base_link2front);
     const float right_deviation = R_front_right - R_E_l;

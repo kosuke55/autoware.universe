@@ -32,6 +32,7 @@
 
 #include <tf2/utils.h>
 
+#include <deque>
 #include <memory>
 #include <string>
 #include <utility>
