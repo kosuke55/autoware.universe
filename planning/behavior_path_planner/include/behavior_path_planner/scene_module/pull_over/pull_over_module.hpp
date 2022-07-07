@@ -15,10 +15,10 @@
 #ifndef BEHAVIOR_PATH_PLANNER__SCENE_MODULE__PULL_OVER__PULL_OVER_MODULE_HPP_
 #define BEHAVIOR_PATH_PLANNER__SCENE_MODULE__PULL_OVER__PULL_OVER_MODULE_HPP_
 
-#include "behavior_path_planner/occupancy_grid_map/occupancy_grid_map.hpp"
-#include "behavior_path_planner/parallel_parking_planner/parallel_parking_planner.hpp"
 #include "behavior_path_planner/scene_module/pull_over/pull_over_path.hpp"
 #include "behavior_path_planner/scene_module/scene_module_interface.hpp"
+#include "behavior_path_planner/scene_module/utils/geometric_parallel_parking.hpp"
+#include "behavior_path_planner/scene_module/utils/occupancy_grid_based_collision_detector.hpp"
 #include "behavior_path_planner/scene_module/utils/path_shifter.hpp"
 #include "behavior_path_planner/utilities.hpp"
 
@@ -182,11 +182,11 @@ private:
   rclcpp::Clock::SharedPtr clock_;
 
   PUllOverStatus status_;
-  OccupancyGridMap occupancy_grid_map_;
+  OccupancyGridBasedCollisionDetector occupancy_grid_map_;
   std::vector<PullOverArea> pull_over_areas_;
   Pose modified_goal_pose_;
   std::vector<GoalCandidate> goal_candidates_;
-  ParallelParkingPlanner parallel_parking_planner_;
+  GeometricParallelParking parallel_parking_planner_;
   ParallelParkingParameters parallel_parking_prameters_;
   std::deque<nav_msgs::msg::Odometry::ConstSharedPtr> odometry_buffer_;
   std::unique_ptr<LaneDepartureChecker> lane_departure_checker_;

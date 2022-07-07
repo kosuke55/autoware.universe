@@ -316,8 +316,8 @@ std::vector<ShiftParkingPath> selectValidPaths(
 }
 
 bool selectSafePath(
-  const std::vector<ShiftParkingPath> & paths, const OccupancyGridMap & occupancy_grid_map,
-  ShiftParkingPath & selected_path)
+  const std::vector<ShiftParkingPath> & paths,
+  const OccupancyGridBasedCollisionDetector & occupancy_grid_map, ShiftParkingPath & selected_path)
 {
   for (const auto & path : paths) {
     if (!occupancy_grid_map.hasObstacleOnPath(path.shifted_path.path, false)) {

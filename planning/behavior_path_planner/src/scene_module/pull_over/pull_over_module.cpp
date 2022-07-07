@@ -15,9 +15,6 @@
 #include "behavior_path_planner/scene_module/pull_over/pull_over_module.hpp"
 
 #include "behavior_path_planner/behavior_path_planner_node.hpp"
-#include "behavior_path_planner/occupancy_grid_map/occupancy_grid_map.hpp"
-#include "behavior_path_planner/parallel_parking_planner/parallel_parking_planner.hpp"
-#include "behavior_path_planner/path_shifter/path_shifter.hpp"
 #include "behavior_path_planner/path_utilities.hpp"
 #include "behavior_path_planner/scene_module/avoidance/debug.hpp"
 #include "behavior_path_planner/scene_module/pull_over/util.hpp"
@@ -56,7 +53,7 @@ PullOverModule::PullOverModule(
   const std::string & name, rclcpp::Node & node, const PullOverParameters & parameters)
 : SceneModuleInterface{name, node}, parameters_{parameters}, clock_{node.get_clock()}
 {
-  rtc_interface_ptr_ = std::make_shared<RTCInterface>(node, "pull_over");
+  rtc_interface_ptr_ = std::make_shared<RTCInterface>(&node, "pull_over");
   goal_pose_pub_ =
     node.create_publisher<PoseStamped>("/planning/scenario_planning/modified_goal", 1);
   parking_area_pub_ = node.create_publisher<MarkerArray>("~/pull_over/debug/parking_area", 1);
