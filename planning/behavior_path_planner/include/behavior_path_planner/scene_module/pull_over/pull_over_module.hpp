@@ -17,9 +17,9 @@
 
 #include "behavior_path_planner/occupancy_grid_map/occupancy_grid_map.hpp"
 #include "behavior_path_planner/parallel_parking_planner/parallel_parking_planner.hpp"
-#include "behavior_path_planner/path_shifter/path_shifter.hpp"
 #include "behavior_path_planner/scene_module/pull_over/pull_over_path.hpp"
 #include "behavior_path_planner/scene_module/scene_module_interface.hpp"
+#include "behavior_path_planner/scene_module/utils/path_shifter.hpp"
 #include "behavior_path_planner/utilities.hpp"
 
 #include <lane_departure_checker/lane_departure_checker.hpp>
