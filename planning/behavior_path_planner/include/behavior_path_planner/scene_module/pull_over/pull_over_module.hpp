@@ -45,7 +45,6 @@ namespace behavior_path_planner
 using autoware_auto_vehicle_msgs::msg::HazardLightsCommand;
 using geometry_msgs::msg::PoseArray;
 using lane_departure_checker::LaneDepartureChecker;
-using tier4_autoware_utils::calcAveragePose;
 using visualization_msgs::msg::Marker;
 using visualization_msgs::msg::MarkerArray;
 
@@ -200,21 +199,24 @@ private:
   Pose getRefinedGoal() const;
   Pose getParkingStartPose() const;
   bool isLongEnoughToParkingStart(const PathWithLaneId path, const Pose parking_start_pose) const;
-
-  // turn signal
-  std::pair<HazardLightsCommand, double> getHazardInfo() const;
-  std::pair<TurnIndicatorsCommand, double> getTurnInfo() const;
-
-  bool planShiftPath();
-  double calcMinimumShiftPathDistance() const;
   bool isLongEnough(
     const lanelet::ConstLanelets & lanelets, const Pose goal_pose, const double buffer = 0) const;
+  bool isArcPath() const;
+  double calcMinimumShiftPathDistance() const;
+  double calcDistanceToPathChange() const;
+
+  bool planShiftPath();
   bool isStopped();
   bool hasFinishedCurrentPath();
   bool hasFinishedPullOver();
   void updateOccupancyGrid();
   void researchGoal();
   void resetStatus();
+
+  // turn signal
+  std::pair<HazardLightsCommand, double> getHazardInfo() const;
+  std::pair<TurnIndicatorsCommand, double> getTurnInfo() const;
+
   // debug
   Marker createParkingAreaMarker(const Pose back_pose, const Pose front_pose, const int32_t id);
   void publishDebugData();

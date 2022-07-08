@@ -459,8 +459,7 @@ Pose PullOverModule::getParkingStartPose() const
     const auto offset_pose = calcLongitudinalOffsetPose(
       shift_parking_path_.path.points, shift_parking_path_.shift_point.start.position, -offset);
     parking_start_pose = offset_pose ? *offset_pose : shift_parking_path_.shift_point.start;
-  } else if (
-    status_.path_type == PathType::ARC_FORWARD || status_.path_type == PathType::ARC_BACKWARD) {
+  } else if (isArcPath()) {
     parking_start_pose = parallel_parking_planner_.getStartPose().pose;
   }
   return parking_start_pose;
@@ -491,8 +490,11 @@ BehaviorModuleOutput PullOverModule::plan()
   // Use decided path
   if (status_.has_decided_path) {
     if (!status_.has_requested_approval_) {
+      // request approval again one the final parth is decided
       waitApproval();
-      current_state_ = BT::NodeStatus::SUCCESS;
+      removeRTCStatus();
+      uuid_ = generateUUID();
+      current_state_ = BT::NodeStatus::SUCCESS;  // for breaking loop
       status_.has_requested_approval_ = true;
     } else if (isActivated() && isWaitingApproval()) {
       clearWaitingApproval();
@@ -508,17 +510,18 @@ BehaviorModuleOutput PullOverModule::plan()
         }
       }
       status_.has_decided_velocity = true;
-    }
+    } else if (isActivated() && isArcPath() && last_approved_time_ != nullptr) {
+      // if using arc_path and finishing current_path, get next path
+      // enough time for turn singal
+      const bool has_passed_enough_time = (clock_->now() - *last_approved_time_).seconds() >
+                                          planner_data_->parameters.turn_light_on_threshold_time;
 
-    if (status_.path_type == PathType::ARC_FORWARD || status_.path_type == PathType::ARC_BACKWARD) {
-      if (
-        isActivated() && hasFinishedCurrentPath() &&
-        (clock_->now() - *last_approved_time_).seconds() >
-          planner_data_->parameters.turn_light_on_threshold_time) {
+      if (isActivated() && hasFinishedCurrentPath() && has_passed_enough_time) {
         parallel_parking_planner_.incrementPathIndex();
         status_.path = parallel_parking_planner_.getCurrentPath();
       }
     }
+
   } else {  // Replan shift -> arc forward -> arc backward path with each goal candidate.
     // Research goal when enabling research and final path has not been decieded
     if (parameters_.enable_goal_research) researchGoal();
@@ -570,7 +573,10 @@ BehaviorModuleOutput PullOverModule::plan()
     }
   }
 
-  // For experimets
+  const double distance_to_path_change = calcDistanceToPathChange();
+  updateRTCStatus(distance_to_path_change);
+
+  // For evaluations
   if (parameters_.print_debug_info) {
     printParkingPositionError();
   }
@@ -590,21 +596,25 @@ BehaviorModuleOutput PullOverModule::planWaitingApproval()
   const auto path = *(plan().path);
   out.path_candidate = std::make_shared<PathWithLaneId>(path);
   out.path = std::make_shared<PathWithLaneId>(getReferencePath());
-  if (
-    status_.is_safe &&
-    (status_.path_type == PathType::ARC_FORWARD || status_.path_type == PathType::ARC_BACKWARD)) {
+  if (status_.is_safe && isArcPath()) {
     out.path_candidate = std::make_shared<PathWithLaneId>(parallel_parking_planner_.getFullPath());
   }
 
+  const double distance_to_path_change = calcDistanceToPathChange();
+  updateRTCStatus(distance_to_path_change);
+
+  return out;
+}
+
+double PullOverModule::calcDistanceToPathChange() const
+{
   const Pose parking_start_pose = getParkingStartPose();
   const auto dist_to_parking_start_pose = calcSignedArcLength(
     status_.path.points, planner_data_->self_pose->pose, parking_start_pose.position,
     std::numeric_limits<double>::max(), M_PI_2);
   const double distance_to_path_change =
     dist_to_parking_start_pose ? *dist_to_parking_start_pose : std::numeric_limits<double>::max();
-  updateRTCStatus(distance_to_path_change);
-
-  return out;
+  return distance_to_path_change;
 }
 
 void PullOverModule::setParameters(const PullOverParameters & parameters)
@@ -919,8 +929,7 @@ std::pair<TurnIndicatorsCommand, double> PullOverModule::getTurnInfo() const
     {
       if (status_.path_type == PathType::SHIFT) {
         parking_end_pose = shift_parking_path_.shift_point.end;
-      } else if (
-        status_.path_type == PathType::ARC_FORWARD || status_.path_type == PathType::ARC_BACKWARD) {
+      } else if (isArcPath()) {
         parking_end_pose = parallel_parking_planner_.getArcEndPose().pose;
       }
     }
@@ -939,6 +948,11 @@ std::pair<TurnIndicatorsCommand, double> PullOverModule::getTurnInfo() const
   turn_info.first = turn_signal;
   turn_info.second = distance_from_vehicle_front;
   return turn_info;
+}
+
+bool PullOverModule::isArcPath() const
+{
+  return status_.path_type == PathType::ARC_FORWARD || status_.path_type == PathType::ARC_BACKWARD;
 }
 
 Marker PullOverModule::createParkingAreaMarker(
@@ -1004,9 +1018,7 @@ void PullOverModule::publishDebugData()
   Cr.header = header;
   start_pose.header = header;
   path_pose_array.header = header;
-  if (
-    (status_.path_type == PathType::ARC_FORWARD || status_.path_type == PathType::ARC_BACKWARD) &&
-    status_.is_safe) {
+  if (isArcPath() && status_.is_safe) {
     Cl = parallel_parking_planner_.getCl();
     Cr = parallel_parking_planner_.getCr();
     start_pose = parallel_parking_planner_.getStartPose();
