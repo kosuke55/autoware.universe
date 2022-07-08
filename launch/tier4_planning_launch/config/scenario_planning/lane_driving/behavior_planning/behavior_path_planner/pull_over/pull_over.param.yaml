@@ -39,8 +39,8 @@
       backward_parking_velocity: -0.3
       arc_path_interval: 1.0
       # hazard_on when parked
-      double hazard_on_threshold_dis: 1.0
-      double hazard_on_threshold_vel: 0.5
+      hazard_on_threshold_dis: 1.0
+      hazard_on_threshold_vel: 0.5
       # check safety with dynamic objects. Not used now.
       pull_over_duration: 2.0
       pull_over_prepare_duration: 4.0
