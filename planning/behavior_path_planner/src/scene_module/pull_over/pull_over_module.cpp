@@ -139,6 +139,8 @@ void PullOverModule::onEntry()
   }
 
   waitApproval();
+  removeRTCStatus();
+  uuid_ = generateUUID();
 }
 
 void PullOverModule::onExit()
@@ -489,6 +491,9 @@ BehaviorModuleOutput PullOverModule::plan()
 
   // Use decided path
   if (status_.has_decided_path) {
+    // std::cerr << "isActivated(): " << static_cast<int>(isActivated()) << std::endl;
+    // std::cerr << "isArcPath(): " << static_cast<int>(isArcPath()) << std::endl;
+
     if (!status_.has_requested_approval_) {
       // request approval again one the final parth is decided
       waitApproval();
@@ -510,11 +515,15 @@ BehaviorModuleOutput PullOverModule::plan()
         }
       }
       status_.has_decided_velocity = true;
-    } else if (isActivated() && isArcPath() && last_approved_time_ != nullptr) {
+    }
+
+    if (isActivated() && isArcPath() && last_approved_time_ != nullptr) {
       // if using arc_path and finishing current_path, get next path
       // enough time for turn singal
       const bool has_passed_enough_time = (clock_->now() - *last_approved_time_).seconds() >
                                           planner_data_->parameters.turn_light_on_threshold_time;
+      // std::cerr << "has_passed_enough_time: " << has_passed_enough_time << std::endl;
+      // std::cerr << "time diff:" << (clock_->now() - *last_approved_time_).seconds() << std::endl;
 
       if (isActivated() && hasFinishedCurrentPath() && has_passed_enough_time) {
         parallel_parking_planner_.incrementPathIndex();
