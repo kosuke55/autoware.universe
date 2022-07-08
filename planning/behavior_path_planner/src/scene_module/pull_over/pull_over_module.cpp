@@ -139,8 +139,6 @@ void PullOverModule::onEntry()
   }
 
   waitApproval();
-  removeRTCStatus();
-  uuid_ = generateUUID();
 }
 
 void PullOverModule::onExit()
@@ -491,9 +489,6 @@ BehaviorModuleOutput PullOverModule::plan()
 
   // Use decided path
   if (status_.has_decided_path) {
-    // std::cerr << "isActivated(): " << static_cast<int>(isActivated()) << std::endl;
-    // std::cerr << "isArcPath(): " << static_cast<int>(isArcPath()) << std::endl;
-
     if (!status_.has_requested_approval_) {
       // request approval again one the final parth is decided
       waitApproval();
@@ -522,8 +517,6 @@ BehaviorModuleOutput PullOverModule::plan()
       // enough time for turn singal
       const bool has_passed_enough_time = (clock_->now() - *last_approved_time_).seconds() >
                                           planner_data_->parameters.turn_light_on_threshold_time;
-      // std::cerr << "has_passed_enough_time: " << has_passed_enough_time << std::endl;
-      // std::cerr << "time diff:" << (clock_->now() - *last_approved_time_).seconds() << std::endl;
 
       if (isActivated() && hasFinishedCurrentPath() && has_passed_enough_time) {
         parallel_parking_planner_.incrementPathIndex();
@@ -566,8 +559,6 @@ BehaviorModuleOutput PullOverModule::plan()
   output.path = status_.is_safe ? std::make_shared<PathWithLaneId>(status_.path)
                                 : std::make_shared<PathWithLaneId>(getStopPath());
 
-  publishDebugData();
-
   // set hazard and turn singnal
   if (status_.has_decided_path) {
     const auto hazard_info = getHazardInfo();
@@ -584,6 +575,8 @@ BehaviorModuleOutput PullOverModule::plan()
 
   const double distance_to_path_change = calcDistanceToPathChange();
   updateRTCStatus(distance_to_path_change);
+
+  publishDebugData();
 
   // For evaluations
   if (parameters_.print_debug_info) {

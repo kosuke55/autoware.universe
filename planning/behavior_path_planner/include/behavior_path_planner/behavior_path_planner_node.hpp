@@ -163,9 +163,9 @@ private:
     const BehaviorModuleOutput & bt_out, const std::shared_ptr<PlannerData> planner_data);
 
   /**
-   * @brief get running modules
+   * @brief skip smooth goal connection
    */
-  PathChangeModuleArray getRunningModules(
+  bool skipSmoothGoalConnection(
     const std::vector<std::shared_ptr<SceneModuleStatus>> & statuses) const;
 
   // debug

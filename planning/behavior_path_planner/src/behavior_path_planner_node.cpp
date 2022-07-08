@@ -568,14 +568,8 @@ void BehaviorPathPlannerNode::run()
   planner_data_->prev_output_path = path;
   mutex_pd_.unlock();
 
-  // skip smooth goal connection if pull_over is running
-  const auto running_modules = getRunningModules(bt_manager_->getModulesStatus());
-  const bool skip_smooth_goal_connection = std::any_of(
-    running_modules.modules.begin(), running_modules.modules.end(),
-    [](const auto m) { return m.type == PathChangeModuleId::PULL_OVER; });
-
   PathWithLaneId clipped_path;
-  if (skip_smooth_goal_connection) {
+  if (skipSmoothGoalConnection(bt_manager_->getModulesStatus())) {
     clipped_path = *path;
   } else {
     clipped_path = modifyPathForSmoothGoalConnection(*path);
@@ -652,34 +646,19 @@ PathWithLaneId::SharedPtr BehaviorPathPlannerNode::getPathCandidate(
   return path_candidate;
 }
 
-PathChangeModuleArray BehaviorPathPlannerNode::getRunningModules(
+bool BehaviorPathPlannerNode::skipSmoothGoalConnection(
   const std::vector<std::shared_ptr<SceneModuleStatus>> & statuses) const
 {
-  auto getModuleType = [](std::string name) {
-    if (name == "LaneChange") {
-      return PathChangeModuleId::LANE_CHANGE;
-    } else if (name == "Avoidance") {
-      return PathChangeModuleId::AVOIDANCE;
-    } else if (name == "ForceLaneChange") {
-      return PathChangeModuleId::FORCE_LANE_CHANGE;
-    } else if (name == "PullOver") {
-      return PathChangeModuleId::PULL_OVER;
-    } else if (name == "PullOut") {
-      return PathChangeModuleId::PULL_OUT;
-    } else {
-      return PathChangeModuleId::NONE;
-    }
-  };
+  const auto target_module = "PullOver";
 
-  PathChangeModuleArray running_modules{};
   for (auto & status : statuses) {
-    if (status->status == BT::NodeStatus::RUNNING) {
-      PathChangeModuleId module{};
-      module.type = getModuleType(status->module_name);
-      running_modules.modules.push_back(module);
+    if (status->is_waiting_approval || status->status == BT::NodeStatus::RUNNING) {
+      if (target_module == status->module_name) {
+        return true;
+      }
     }
   }
-  return running_modules;
+  return false;
 }
 
 void BehaviorPathPlannerNode::publishDebugMarker(const std::vector<MarkerArray> & debug_markers)
