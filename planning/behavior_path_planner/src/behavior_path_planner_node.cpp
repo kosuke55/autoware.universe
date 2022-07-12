@@ -574,7 +574,7 @@ void BehaviorPathPlannerNode::run()
   } else {
     clipped_path = modifyPathForSmoothGoalConnection(*path);
   }
-  clipPathLength(clipped_path);
+  // clipPathLength(clipped_path);
   if (!clipped_path.points.empty()) {
     path_publisher_->publish(clipped_path);
   } else {

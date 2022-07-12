@@ -570,6 +570,27 @@ double getDistanceBetweenPredictedPathAndObjectPolygon(
   }
   return min_distance;
 }
+
+bool checkCollisionWithObjects(
+  const tier4_autoware_utils::LinearRing2d & local_vehicle_footprint, const Pose ego_pose,
+  const PredictedObjects::ConstSharedPtr dynamic_objects, const double margin)
+{
+  const auto vehicle_footprint =
+    transformVector(local_vehicle_footprint, tier4_autoware_utils::pose2transform(ego_pose));
+
+  for (const auto object : dynamic_objects->objects) {
+    Polygon2d obj_polygon;
+    if (!calcObjectPolygon(object, &obj_polygon)) {
+      continue;
+    }
+
+    const double distance = boost::geometry::distance(obj_polygon, vehicle_footprint);
+
+    return distance < margin;
+  }
+  return false;
+}
+
 // only works with consecutive lanes
 std::vector<size_t> filterObjectsByLanelets(
   const PredictedObjects & objects, const lanelet::ConstLanelets & target_lanelets,

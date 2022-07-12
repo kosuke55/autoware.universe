@@ -681,7 +681,7 @@ double getLaneletAngle(
 
 bool isInLanelet(
   const geometry_msgs::msg::Pose & current_pose, const lanelet::ConstLanelet & lanelet,
-  const double radius)
+  const double radiusradius)
 {
   constexpr double eps = 1.0e-9;
   const lanelet::BasicPoint2d p(current_pose.position.x, current_pose.position.y);
