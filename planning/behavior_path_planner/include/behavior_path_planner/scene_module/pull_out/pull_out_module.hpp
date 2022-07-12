@@ -15,7 +15,9 @@
 #ifndef BEHAVIOR_PATH_PLANNER__SCENE_MODULE__PULL_OUT__PULL_OUT_MODULE_HPP_
 #define BEHAVIOR_PATH_PLANNER__SCENE_MODULE__PULL_OUT__PULL_OUT_MODULE_HPP_
 
+#include "behavior_path_planner/scene_module/pull_out/pull_out_parameters.hpp"
 #include "behavior_path_planner/scene_module/pull_out/pull_out_path.hpp"
+#include "behavior_path_planner/scene_module/pull_out/shift_pull_out.hpp"
 #include "behavior_path_planner/scene_module/scene_module_interface.hpp"
 #include "behavior_path_planner/scene_module/utils/path_shifter.hpp"
 #include "behavior_path_planner/utilities.hpp"
@@ -35,33 +37,6 @@
 
 namespace behavior_path_planner
 {
-struct PullOutParameters
-{
-  double min_stop_distance;
-  double stop_time;
-  double hysteresis_buffer_distance;
-  double pull_out_prepare_duration;
-  double pull_out_duration;
-  double pull_out_finish_judge_buffer;
-  double minimum_pull_out_velocity;
-  double prediction_duration;
-  double prediction_time_resolution;
-  double static_obstacle_velocity_thresh;
-  double maximum_deceleration;
-  int pull_out_sampling_num;
-  bool enable_collision_check_at_prepare_phase;
-  bool use_predicted_path_outside_lanelet;
-  bool use_all_predicted_path;
-  bool use_dynamic_object;
-  bool enable_blocked_by_obstacle;
-  double pull_out_search_distance;
-  double before_pull_out_straight_distance;
-  double after_pull_out_straight_distance;
-  double maximum_lateral_jerk;
-  double minimum_lateral_jerk;
-  double deceleration_interval;
-};
-
 struct PullOutStatus
 {
   PathWithLaneId lane_follow_path;
@@ -99,21 +74,28 @@ public:
   void setParameters(const PullOutParameters & parameters);
 
 private:
+  std::shared_ptr<PullOutBase> pull_out_planner_;
   PullOutParameters parameters_;
   PullOutStatus status_;
 
   double pull_out_lane_length_ = 200.0;
   double check_distance_ = 100.0;
+  std::vector<Pose> backed_pose_candidates_;
+  PoseStamped backed_pose_;
+
+  rclcpp::Publisher<PoseStamped>::SharedPtr backed_pose_pub_;
 
   PathWithLaneId getReferencePath() const;
   lanelet::ConstLanelets getCurrentLanes() const;
-  lanelet::ConstLanelets getPullOutLanes(const lanelet::ConstLanelets & current_lanes) const;
+  // lanelet::ConstLanelets getPullOutLanes(const lanelet::ConstLanelets & current_lanes) const;
   std::pair<bool, bool> getSafePath(
     const lanelet::ConstLanelets & pull_out_lanes, const double check_distance,
     PullOutPath & safe_path) const;
   std::pair<bool, bool> getSafeRetreatPath(
     const lanelet::ConstLanelets & pull_out_lanes, const double check_distance,
     RetreatPath & safe_backed_path, double & back_distance) const;
+
+  std::vector<Pose> searchBackedPoses();
 
   bool getBackDistance(
     const lanelet::ConstLanelets & pullover_lanes, const double check_distance,

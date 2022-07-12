@@ -130,11 +130,11 @@ std::vector<PullOutPath> getPullOutPaths(
     // Apply shifting before shift
     for (size_t i = 0; i < reference_path1.points.size(); ++i) {
       {
-        if (fabs(distance_to_shoulder_center) < 1.0e-8) {
-          RCLCPP_WARN_STREAM(
-            rclcpp::get_logger("behavior_path_planner").get_child("pull_out").get_child("util"),
-            "no offset from current lane center.");
-        }
+        // if (fabs(distance_to_shoulder_center) < 1.0e-8) {
+        //   RCLCPP_WARN_STREAM(
+        //     rclcpp::get_logger("behavior_path_planner").get_child("pull_out").get_child("util"),
+        //     "no offset from current lane center.");
+        // }
 
         auto & p = reference_path1.points.at(i).point.pose;
         double yaw = tf2::getYaw(p.orientation);
@@ -481,6 +481,39 @@ bool isObjectFront(const Pose & ego_pose, const Pose & obj_pose)
   tf2::toMsg(tf_map2ego.inverse() * tf_map2obj, obj_from_ego);
 
   return obj_from_ego.position.x > 0;
+}
+
+// getShoulderLanesOnCurrentPose?
+lanelet::ConstLanelets getPullOutLanes(
+  const lanelet::ConstLanelets & current_lanes,
+  const std::shared_ptr<const PlannerData> & planner_data)
+{
+  const double pull_out_lane_length = 200.0;
+  lanelet::ConstLanelets shoulder_lanes;
+  const auto & route_handler = planner_data->route_handler;
+  const auto current_pose = planner_data->self_pose->pose;
+  lanelet::ConstLanelet shoulder_lane;
+
+  if (current_lanes.empty()) {
+    return shoulder_lanes;
+  }
+
+  // Get pull out lanes
+  lanelet::ConstLanelet current_lane;
+  lanelet::utils::query::getClosestLanelet(
+    current_lanes, planner_data->self_pose->pose, &current_lane);
+
+  if (route_handler->getPullOutStart(
+        route_handler->getShoulderLanelets(), &shoulder_lane, current_pose,
+        planner_data->parameters.vehicle_width)) {
+    shoulder_lanes = route_handler->getShoulderLaneletSequence(
+      shoulder_lane, current_pose, pull_out_lane_length, pull_out_lane_length);
+
+  } else {
+    shoulder_lanes.clear();
+  }
+
+  return shoulder_lanes;
 }
 
 }  // namespace pull_out_utils

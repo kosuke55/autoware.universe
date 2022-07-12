@@ -1,4 +1,4 @@
-// Copyright 2021 Tier IV, Inc.
+// Copyright 2022 TIER IV, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -34,6 +34,7 @@
 #include <utility>
 #include <vector>
 
+using tier4_autoware_utils::calcLongitudinalOffsetPose;
 namespace behavior_path_planner
 {
 PullOutModule::PullOutModule(
@@ -41,6 +42,9 @@ PullOutModule::PullOutModule(
 : SceneModuleInterface{name, node}, parameters_{parameters}
 {
   rtc_interface_ptr_ = std::make_shared<RTCInterface>(&node, "pull_out");
+  pull_out_planner_ = std::make_shared<ShiftPullOut>(node, parameters);
+
+  backed_pose_pub_ = node.create_publisher<PoseStamped>("~/pull_out/debug/backed_pose", 1);
 }
 
 BehaviorModuleOutput PullOutModule::run()
@@ -113,7 +117,7 @@ bool PullOutModule::isExecutionReady() const
 
   // TODO(sugahara) move to utility function
   const auto road_lanes = getCurrentLanes();
-  const auto shoulder_lanes = getPullOutLanes(road_lanes);
+  const auto shoulder_lanes = pull_out_utils::getPullOutLanes(road_lanes, planner_data_);
 
   // Find pull_out path
   bool found_valid_path, found_safe_path;
@@ -151,6 +155,7 @@ BT::NodeStatus PullOutModule::updateState()
 BehaviorModuleOutput PullOutModule::plan()
 {
   constexpr double RESAMPLE_INTERVAL = 1.0;
+  updatePullOutStatus();
 
   PathWithLaneId path;
   if (status_.is_retreat_path_valid && !status_.is_safe) {
@@ -177,15 +182,16 @@ CandidateOutput PullOutModule::planCandidate() const
 {
   // Get lane change lanes
   const auto current_lanes = getCurrentLanes();
-  const auto shoulder_lanes = getPullOutLanes(current_lanes);
+  const auto shoulder_lanes = pull_out_utils::getPullOutLanes(current_lanes, planner_data_);
 
   const auto current_pose = planner_data_->self_pose->pose;
 
   // Find pull out path
   bool found_valid_path, found_safe_path;
   PullOutPath selected_path;
-  std::tie(found_valid_path, found_safe_path) =
-    getSafePath(shoulder_lanes, check_distance_, selected_path);
+  // std::tie(found_valid_path, found_safe_path) =
+  //   getSafePath(shoulder_lanes, check_distance_, selected_path);
+  
 
   if (found_valid_path && !found_safe_path) {
     double back_distance;
@@ -220,7 +226,7 @@ BehaviorModuleOutput PullOutModule::planWaitingApproval()
   BehaviorModuleOutput out;
   const auto common_parameters = planner_data_->parameters;
   const auto current_lanes = getCurrentLanes();
-  const auto shoulder_lanes = getPullOutLanes(current_lanes);
+  const auto shoulder_lanes = pull_out_utils::getPullOutLanes(current_lanes, planner_data_);
 
   PathWithLaneId candidate_path;
   // Generate drivable area
@@ -262,20 +268,41 @@ void PullOutModule::updatePullOutStatus()
   status_.current_lanes = current_lanes;
 
   // Get pull_out lanes
-  const auto pull_out_lanes = getPullOutLanes(current_lanes);
+  const auto pull_out_lanes = pull_out_utils::getPullOutLanes(current_lanes, planner_data_);
   status_.pull_out_lanes = pull_out_lanes;
 
   const auto current_pose = planner_data_->self_pose->pose;
+  const auto goal_pose = planner_data_->route_handler->getGoalPose();
   // const auto current_twist = planner_data_->self_odometry->twist.twist;
   // const auto common_parameters = planner_data_->parameters;
 
   // Find pull_out path
   bool found_valid_path, found_safe_path;
+  found_safe_path = false;
   PullOutPath selected_path;
-  std::tie(found_valid_path, found_safe_path) =
-    getSafePath(pull_out_lanes, check_distance_, selected_path);
+  // std::tie(found_valid_path, found_safe_path) =
+  //   getSafePath(pull_out_lanes, check_distance_, selected_path);
+  backed_pose_candidates_ = searchBackedPoses();
+  for (auto const & backed_pose : backed_pose_candidates_) {
+    pull_out_planner_->setPlannerData(planner_data_);
+    const auto pull_out_path = pull_out_planner_->plan(backed_pose, goal_pose);
+    if (pull_out_path) {  // found safe path
+      found_safe_path = true;
+      selected_path.path = *pull_out_path;
 
-  if (found_valid_path && !found_safe_path) {
+      // for debug
+      backed_pose_.pose = backed_pose;
+      backed_pose_.header = planner_data_->route_handler->getRouteHeader();
+      backed_pose_pub_->publish(backed_pose_);
+      break;
+    }
+  }
+  if (!found_safe_path) return;
+
+  // selected_path.path = *pull_out_path;
+
+  // if (found_valid_path && !found_safe_path) {
+  if (false) {
     double back_distance;
     if (getBackDistance(pull_out_lanes, check_distance_, selected_path, back_distance)) {
       bool found_valid_retreat_path, found_safe_retreat_path;
@@ -332,7 +359,7 @@ PathWithLaneId PullOutModule::getReferencePath() const
   reference_path.header = route_handler->getRouteHeader();
 
   const auto current_lanes = getCurrentLanes();
-  const auto pull_out_lanes = getPullOutLanes(current_lanes);
+  const auto pull_out_lanes = pull_out_utils::getPullOutLanes(current_lanes, planner_data_);
 
   if (current_lanes.empty()) {
     return reference_path;
@@ -370,38 +397,6 @@ lanelet::ConstLanelets PullOutModule::getCurrentLanes() const
   return route_handler->getLaneletSequence(
     current_lane, current_pose, common_parameters.backward_path_length,
     common_parameters.forward_path_length);
-}
-
-// getShoulderLanesOnCurrentPose?
-lanelet::ConstLanelets PullOutModule::getPullOutLanes(
-  const lanelet::ConstLanelets & current_lanes) const
-{
-  lanelet::ConstLanelets shoulder_lanes;
-  const auto & route_handler = planner_data_->route_handler;
-  const auto current_pose = planner_data_->self_pose->pose;
-  lanelet::ConstLanelet shoulder_lane;
-
-  if (current_lanes.empty()) {
-    return shoulder_lanes;
-  }
-
-  // Get pull out lanes
-  lanelet::ConstLanelet current_lane;
-  lanelet::utils::query::getClosestLanelet(
-    current_lanes, planner_data_->self_pose->pose, &current_lane);
-
-  if (route_handler->getPullOutStart(
-        route_handler->getShoulderLanelets(), &shoulder_lane, current_pose,
-        planner_data_->parameters.vehicle_width)) {
-    shoulder_lanes = route_handler->getShoulderLaneletSequence(
-      shoulder_lane, current_pose, pull_out_lane_length_, pull_out_lane_length_);
-
-  } else {
-    RCLCPP_ERROR_THROTTLE(getLogger(), *clock_, 5000, "getPullOverTarget didn't work");
-    shoulder_lanes.clear();
-  }
-
-  return shoulder_lanes;
 }
 
 std::pair<bool, bool> PullOutModule::getSafePath(
@@ -525,6 +520,41 @@ std::pair<bool, bool> PullOutModule::getSafeRetreatPath(
     return std::make_pair(true, found_safe_path);
   }
   return std::make_pair(false, false);
+}
+
+std::vector<Pose> PullOutModule::searchBackedPoses()
+{
+  const auto current_pose = planner_data_->self_pose->pose;
+  const double search_resolution = 1.0;
+  const double maximum_back_distance = 15;
+  const double collision_check_margin = 1.0;
+
+  const auto current_lanes = getCurrentLanes();
+  const auto pull_out_lanes = pull_out_utils::getPullOutLanes(current_lanes, planner_data_);
+
+  // get backward shoulder path
+  const auto arc_position_pose = lanelet::utils::getArcCoordinates(pull_out_lanes, current_pose);
+  const auto backward_shoulder_path = planner_data_->route_handler->getCenterLinePath(
+    pull_out_lanes, arc_position_pose.length - pull_out_lane_length_,
+    arc_position_pose.length + pull_out_lane_length_);
+
+  // check collision between footprint and onject at the backed pose
+  const auto vehicle_info = getVehicleInfo(planner_data_->parameters);
+  const auto local_vehicle_footprint = createVehicleFootprint(vehicle_info);
+  std::vector<Pose> backed_poses;
+  for (double back_distance = 0.0; back_distance <= maximum_back_distance;
+       back_distance += search_resolution) {
+    const auto backed_pose = calcLongitudinalOffsetPose(
+      backward_shoulder_path.points, current_pose.position, -back_distance);
+    if(!backed_pose) continue;
+    if (util::checkCollisionWithObjects(
+          local_vehicle_footprint, *backed_pose, planner_data_->dynamic_object,
+          collision_check_margin)) {
+      break;  // poses behind this has a collision, so break.
+    };
+    backed_poses.push_back(*backed_pose);
+  }
+  return backed_poses;
 }
 
 bool PullOutModule::getBackDistance(
@@ -702,7 +732,7 @@ TurnSignalInfo PullOutModule::calcTurnSignalInfo(const ShiftPoint & shift_point)
   }
 
   const auto current_lanes = getCurrentLanes();
-  const auto pull_out_lanes = getPullOutLanes(current_lanes);
+  const auto pull_out_lanes = pull_out_utils::getPullOutLanes(current_lanes, planner_data_);
   const double turn_signal_on_threshold = 30;
   const double turn_signal_off_threshold = -3;
   const double turn_hazard_on_threshold = 3;

@@ -83,6 +83,9 @@ bool hasEnoughDistance(
   const bool isInGoalRouteSection, const Pose & goal_pose,
   const lanelet::routing::RoutingGraphContainer & overall_graphs);
 bool isObjectFront(const Pose & ego_pose, const Pose & obj_pose);
+lanelet::ConstLanelets getPullOutLanes(
+  const lanelet::ConstLanelets & current_lanes,
+  const std::shared_ptr<const PlannerData> & planner_data);
 }  // namespace pull_out_utils
 }  // namespace behavior_path_planner
 

@@ -159,6 +159,10 @@ double getDistanceBetweenPredictedPathAndObjectPolygon(
   const tier4_autoware_utils::LinearRing2d & vehicle_footprint, double distance_resolution,
   const lanelet::ConstLanelets & road_lanes);
 
+bool checkCollisionWithObjects(
+  const tier4_autoware_utils::LinearRing2d & vehicle_footprint, const Pose ego_pose,
+  const PredictedObjects::ConstSharedPtr dynamic_objects, const double margin);
+
 /**
  * @brief Get index of the obstacles inside the lanelets with start and end length
  * @return Indices corresponding to the obstacle inside the lanelets
