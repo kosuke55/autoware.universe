@@ -15,14 +15,20 @@
 #ifndef BEHAVIOR_PATH_PLANNER__SCENE_MODULE__PULL_OUT__PULL_OUT_MODULE_HPP_
 #define BEHAVIOR_PATH_PLANNER__SCENE_MODULE__PULL_OUT__PULL_OUT_MODULE_HPP_
 
+#include "behavior_path_planner/scene_module/pull_out/geometric_pull_out.hpp"
+#include "behavior_path_planner/scene_module/pull_out/pull_out_parameters.hpp"
 #include "behavior_path_planner/scene_module/pull_out/pull_out_path.hpp"
+#include "behavior_path_planner/scene_module/pull_out/shift_pull_out.hpp"
 #include "behavior_path_planner/scene_module/scene_module_interface.hpp"
+#include "behavior_path_planner/scene_module/utils/geometric_parallel_parking.hpp"
 #include "behavior_path_planner/scene_module/utils/path_shifter.hpp"
 #include "behavior_path_planner/utilities.hpp"
 
+#include <lane_departure_checker/lane_departure_checker.hpp>
 #include <lanelet2_extension/utility/message_conversion.hpp>
 #include <lanelet2_extension/utility/utilities.hpp>
 #include <vehicle_info_util/vehicle_info.hpp>
+#include <vehicle_info_util/vehicle_info_util.hpp>
 
 #include <autoware_auto_planning_msgs/msg/path_with_lane_id.hpp>
 
@@ -35,47 +41,19 @@
 
 namespace behavior_path_planner
 {
-struct PullOutParameters
-{
-  double min_stop_distance;
-  double stop_time;
-  double hysteresis_buffer_distance;
-  double pull_out_prepare_duration;
-  double pull_out_duration;
-  double pull_out_finish_judge_buffer;
-  double minimum_pull_out_velocity;
-  double prediction_duration;
-  double prediction_time_resolution;
-  double static_obstacle_velocity_thresh;
-  double maximum_deceleration;
-  int pull_out_sampling_num;
-  bool enable_collision_check_at_prepare_phase;
-  bool use_predicted_path_outside_lanelet;
-  bool use_all_predicted_path;
-  bool use_dynamic_object;
-  bool enable_blocked_by_obstacle;
-  double pull_out_search_distance;
-  double before_pull_out_straight_distance;
-  double after_pull_out_straight_distance;
-  double maximum_lateral_jerk;
-  double minimum_lateral_jerk;
-  double deceleration_interval;
-};
+using geometry_msgs::msg::PoseArray;
+using lane_departure_checker::LaneDepartureChecker;
 
 struct PullOutStatus
 {
-  PathWithLaneId lane_follow_path;
   PullOutPath pull_out_path;
-  PullOutPath retreat_path;
-  PullOutPath straight_back_path;
+  PathWithLaneId backward_path;
   lanelet::ConstLanelets current_lanes;
   lanelet::ConstLanelets pull_out_lanes;
   std::vector<uint64_t> lane_follow_lane_ids;
   std::vector<uint64_t> pull_out_lane_ids;
-  bool is_safe;
-  double start_distance;
-  bool back_finished;
-  bool is_retreat_path_valid;
+  bool is_safe = false;
+  bool back_finished = false;
   Pose backed_pose;
 };
 
@@ -97,43 +75,48 @@ public:
   void onExit() override;
 
   void setParameters(const PullOutParameters & parameters);
+  void resetStatus() { status_ = PullOutStatus{}; };
 
 private:
+  std::shared_ptr<PullOutBase> pull_out_planner_;
   PullOutParameters parameters_;
   PullOutStatus status_;
 
   double pull_out_lane_length_ = 200.0;
   double check_distance_ = 100.0;
+  std::vector<Pose> backed_pose_candidates_;
+  PoseStamped backed_pose_;
+  vehicle_info_util::VehicleInfo vehicle_info_;
+  std::unique_ptr<rclcpp::Time> last_back_finished_time_;
+  std::deque<nav_msgs::msg::Odometry::ConstSharedPtr> odometry_buffer_;
+
+  rclcpp::Publisher<PoseStamped>::SharedPtr backed_pose_pub_;
+  rclcpp::Publisher<PoseArray>::SharedPtr full_path_pose_array_pub_;
+  rclcpp::Clock::SharedPtr clock_;
+  std::unique_ptr<rclcpp::Time> last_route_received_time_;
 
   PathWithLaneId getReferencePath() const;
   lanelet::ConstLanelets getCurrentLanes() const;
-  lanelet::ConstLanelets getPullOutLanes(const lanelet::ConstLanelets & current_lanes) const;
-  std::pair<bool, bool> getSafePath(
-    const lanelet::ConstLanelets & pull_out_lanes, const double check_distance,
-    PullOutPath & safe_path) const;
-  std::pair<bool, bool> getSafeRetreatPath(
-    const lanelet::ConstLanelets & pull_out_lanes, const double check_distance,
-    RetreatPath & safe_backed_path, double & back_distance) const;
+  PathWithLaneId getFullPath() const;
+  ParallelParkingParameters getGeometricParallelParkingParameters() const;
+  std::vector<Pose> searchBackedPoses();
 
-  bool getBackDistance(
-    const lanelet::ConstLanelets & pullover_lanes, const double check_distance,
-    PullOutPath & safe_path, double & back_distance) const;
+  std::shared_ptr<LaneDepartureChecker> lane_departure_checker_;
 
   // turn signal
-  TurnSignalInfo calcTurnSignalInfo(const ShiftPoint & shift_point) const;
+  TurnSignalInfo calcTurnSignalInfo(const Pose start_pose, const Pose end_pose) const;
 
   void updatePullOutStatus();
   bool isInLane(
     const lanelet::ConstLanelet & candidate_lanelet,
     const tier4_autoware_utils::LinearRing2d & vehicle_footprint) const;
   bool isLongEnough(const lanelet::ConstLanelets & lanelets) const;
-  bool isSafe() const;
-  bool isNearEndOfLane() const;
-  bool isCurrentSpeedLow() const;
   bool hasFinishedPullOut() const;
-  bool hasFinishedBack() const;
-  vehicle_info_util::VehicleInfo getVehicleInfo(
-    const BehaviorPathPlannerParameters & parameters) const;
+  void checkBackFinished();
+  bool isStopped();
+  bool hasFinishedCurrentPath();
+
+  void publishDebugData() const;
 };
 }  // namespace behavior_path_planner
 
