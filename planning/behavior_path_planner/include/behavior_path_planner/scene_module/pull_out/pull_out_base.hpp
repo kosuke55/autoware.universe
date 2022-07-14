@@ -47,12 +47,14 @@ public:
   }
 
   virtual boost::optional<PathWithLaneId> plan(Pose start_pose, Pose goal_pose) = 0;
+  virtual PathWithLaneId getFullPath() const {return full_path_;}
 
 protected:
   std::shared_ptr<const PlannerData> planner_data_;
   vehicle_info_util::VehicleInfo vehicle_info_;
   LinearRing2d vehicle_footprint_;
   PullOutParameters parameters_;
+  PathWithLaneId full_path_;
 };
 }  // namespace behavior_path_planner
 
