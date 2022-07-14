@@ -42,7 +42,7 @@ struct PullOutStatus
   PathWithLaneId lane_follow_path;
   PullOutPath pull_out_path;
   PullOutPath retreat_path;
-  PullOutPath straight_back_path;
+  PathWithLaneId straight_back_path;
   lanelet::ConstLanelets current_lanes;
   lanelet::ConstLanelets pull_out_lanes;
   std::vector<uint64_t> lane_follow_lane_ids;

@@ -143,11 +143,12 @@ BT::NodeStatus PullOutModule::updateState()
     current_state_ = BT::NodeStatus::SUCCESS;
     return current_state_;
   }
-  if (status_.is_retreat_path_valid) {
-    if (hasFinishedBack()) {
-      status_.back_finished = true;
-    }
+
+  if (hasFinishedBack()) {
+    status_.back_finished = true;
+    std::cerr << "status_.back_finished: " << status_.back_finished << std::endl;
   }
+
   current_state_ = BT::NodeStatus::RUNNING;
   return current_state_;
 }
@@ -155,14 +156,16 @@ BT::NodeStatus PullOutModule::updateState()
 BehaviorModuleOutput PullOutModule::plan()
 {
   constexpr double RESAMPLE_INTERVAL = 1.0;
-  updatePullOutStatus();
 
   PathWithLaneId path;
-  if (status_.is_retreat_path_valid && !status_.is_safe) {
-    path = util::resamplePathWithSpline(status_.straight_back_path.path, RESAMPLE_INTERVAL);
+  if (!status_.back_finished) {
+    // path = util::resamplePathWithSpline(status_.straight_back_path, RESAMPLE_INTERVAL);
+    path = status_.straight_back_path;
+    std::cerr << "get back path! size: " << path.points.size() << std::endl;
+
   } else {
     path = util::resamplePathWithSpline(status_.pull_out_path.path, RESAMPLE_INTERVAL);
-    status_.back_finished = true;
+    // status_.back_finished = true;
   }
 
   if (status_.is_retreat_path_valid && status_.back_finished) {
@@ -191,7 +194,6 @@ CandidateOutput PullOutModule::planCandidate() const
   PullOutPath selected_path;
   // std::tie(found_valid_path, found_safe_path) =
   //   getSafePath(shoulder_lanes, check_distance_, selected_path);
-  
 
   if (found_valid_path && !found_safe_path) {
     double back_distance;
@@ -249,6 +251,7 @@ BehaviorModuleOutput PullOutModule::planWaitingApproval()
 
   out.path_candidate = std::make_shared<PathWithLaneId>(candidate_path);
 
+  updatePullOutStatus();
   waitApproval();
 
   return out;
@@ -282,13 +285,16 @@ void PullOutModule::updatePullOutStatus()
   PullOutPath selected_path;
   // std::tie(found_valid_path, found_safe_path) =
   //   getSafePath(pull_out_lanes, check_distance_, selected_path);
-  backed_pose_candidates_ = searchBackedPoses();
+
+  backed_pose_candidates_ = searchBackedPoses();  // the first backed_pose is current_pose
+  bool need_back = false;
   for (auto const & backed_pose : backed_pose_candidates_) {
     pull_out_planner_->setPlannerData(planner_data_);
     const auto pull_out_path = pull_out_planner_->plan(backed_pose, goal_pose);
     if (pull_out_path) {  // found safe path
       found_safe_path = true;
       selected_path.path = *pull_out_path;
+      status_.backed_pose = backed_pose;
 
       // for debug
       backed_pose_.pose = backed_pose;
@@ -296,8 +302,16 @@ void PullOutModule::updatePullOutStatus()
       backed_pose_pub_->publish(backed_pose_);
       break;
     }
+    need_back = true;
   }
   if (!found_safe_path) return;
+
+  // status_.back_finished = !need_back;
+
+  if (!status_.back_finished) {
+    status_.straight_back_path = pull_out_utils::getBackwardPath(
+      *route_handler, pull_out_lanes, current_pose, status_.backed_pose);
+  }
 
   // selected_path.path = *pull_out_path;
 
@@ -314,9 +328,9 @@ void PullOutModule::updatePullOutStatus()
         status_.backed_pose = selected_retreat_path.backed_pose;
         status_.retreat_path = selected_retreat_path.pull_out_path;
         status_.retreat_path.path.header = planner_data_->route_handler->getRouteHeader();
-        status_.straight_back_path = pull_out_utils::getBackPaths(
-          *route_handler, pull_out_lanes, current_pose, common_parameters, parameters_,
-          back_distance);
+        // status_.straight_back_path = pull_out_utils::getBackedPose(
+        //   *route_handler, pull_out_lanes, current_pose, common_parameters, parameters_,
+        //   back_distance);
       }
     }
   }
@@ -546,9 +560,9 @@ std::vector<Pose> PullOutModule::searchBackedPoses()
        back_distance += search_resolution) {
     const auto backed_pose = calcLongitudinalOffsetPose(
       backward_shoulder_path.points, current_pose.position, -back_distance);
-    if(!backed_pose) continue;
-    if (util::checkCollisionWithObjects(
-          local_vehicle_footprint, *backed_pose, planner_data_->dynamic_object,
+    if (!backed_pose) continue;
+    if (util::checkCollisionBetweenFootprintAndObjects(
+          local_vehicle_footprint, *backed_pose, *(planner_data_->dynamic_object),
           collision_check_margin)) {
       break;  // poses behind this has a collision, so break.
     };
@@ -717,14 +731,14 @@ bool PullOutModule::hasFinishedBack() const
   const auto backed_pose = status_.backed_pose;
   const auto distance = tier4_autoware_utils::calcDistance2d(current_pose, backed_pose);
 
-  return distance < 1;
+  return distance < 1.0;
 }
 
 TurnSignalInfo PullOutModule::calcTurnSignalInfo(const ShiftPoint & shift_point) const
 {
   TurnSignalInfo turn_signal;
 
-  if (status_.is_retreat_path_valid && !status_.back_finished) {
+  if (!status_.back_finished) {
     turn_signal.hazard_signal.command = HazardLightsCommand::ENABLE;
     turn_signal.signal_distance =
       tier4_autoware_utils::calcDistance2d(status_.backed_pose, planner_data_->self_pose->pose);

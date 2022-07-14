@@ -46,10 +46,9 @@ std::vector<PullOutPath> getPullOutPaths(
   const BehaviorPathPlannerParameters & common_parameter,
   const behavior_path_planner::PullOutParameters & parameter, const bool is_retreat_path = false);
 
-PullOutPath getBackPaths(
+PathWithLaneId getBackwardPath(
   const RouteHandler & route_handler, const lanelet::ConstLanelets & target_lanelets,
-  const Pose & pose, const BehaviorPathPlannerParameters & common_parameter,
-  const behavior_path_planner::PullOutParameters & parameter, const double back_distance);
+  const Pose & current_pose, const Pose & backed_pose);
 
 bool isPathInLanelets4pullover(
   const PathWithLaneId & path, const lanelet::ConstLanelets & original_lanelets,

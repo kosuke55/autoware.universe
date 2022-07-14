@@ -31,14 +31,16 @@ boost::optional<PathWithLaneId> ShiftPullOut::plan(Pose start_pose, Pose goal_po
   const auto current_pose = planner_data_->self_pose->pose;
   const auto current_twist = planner_data_->self_odometry->twist.twist;
   const auto common_parameters = planner_data_->parameters;
+  const auto dynamic_objects = planner_data_->dynamic_object;
   const auto current_lanes = util::getCurrentLanes(planner_data_);
-  const auto pull_out_lanes = pull_out_utils::getPullOutLanes(current_lanes, planner_data_);
+  const auto shoulder_lanes = pull_out_utils::getPullOutLanes(current_lanes, planner_data_);
   const double check_distance = 100.0;
+  const double collision_margin = 1.0;
 
-  if (!pull_out_lanes.empty()) {
+  if (!shoulder_lanes.empty()) {
     // find candidate paths
     const auto pull_out_paths = pull_out_utils::getPullOutPaths(
-      *route_handler, current_lanes, pull_out_lanes, start_pose, common_parameters, parameters_);
+      *route_handler, current_lanes, shoulder_lanes, start_pose, common_parameters, parameters_);
 
     // get lanes used for detection
     lanelet::ConstLanelets check_lanes;
@@ -48,22 +50,28 @@ boost::optional<PathWithLaneId> ShiftPullOut::plan(Pose start_pose, Pose goal_po
       const double check_distance_with_path =
         check_distance + longest_path.preparation_length + longest_path.pull_out_length;
       check_lanes = route_handler->getCheckTargetLanesFromPath(
-        longest_path.path, pull_out_lanes, check_distance_with_path);
+        longest_path.path, shoulder_lanes, check_distance_with_path);
     }
+
     // select valid path
     valid_paths = pull_out_utils::selectValidPaths(
-      pull_out_paths, current_lanes, check_lanes, *route_handler->getOverallGraphPtr(),
-      start_pose, route_handler->isInGoalRouteSection(current_lanes.back()),
-      route_handler->getGoalPose());
+      pull_out_paths, current_lanes, check_lanes, *route_handler->getOverallGraphPtr(), start_pose,
+      route_handler->isInGoalRouteSection(current_lanes.back()), route_handler->getGoalPose());
     if (valid_paths.empty()) {
       return boost::none;
     }
-    // select safe path
-    bool found_safe_path = pull_out_utils::selectSafePath(
-      valid_paths, current_lanes, check_lanes, planner_data_->dynamic_object, start_pose,
-      current_twist, common_parameters.vehicle_width, parameters_, vehicle_footprint_, &safe_path);
 
-    if (found_safe_path) return safe_path.path;
+    const auto shoulder_lane_objects =
+      util::filterObjectsByLanelets(*dynamic_objects, shoulder_lanes);
+
+    // get safe path
+    for (const auto & path : valid_paths) {
+      if (util::checkCollisionBetweenPathFootprintsAndObjects(
+            vehicle_footprint_, path.path, shoulder_lane_objects, collision_margin)) {
+        continue;
+      }
+      return path.path;
+    }
   }
   return boost::none;
 }

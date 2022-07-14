@@ -246,62 +246,41 @@ std::vector<PullOutPath> getPullOutPaths(
   return candidate_paths;
 }
 
-PullOutPath getBackPaths(
+PathWithLaneId getBackwardPath(
   const RouteHandler & route_handler, const lanelet::ConstLanelets & shoulder_lanelets,
-  const Pose & pose, const BehaviorPathPlannerParameters & common_parameter,
-  [[maybe_unused]] const PullOutParameters & parameter, [[maybe_unused]] const double back_distance)
+  const Pose & current_pose, const Pose & backed_pose)
 {
-  PathShifter path_shifter;
-  ShiftedPath shifted_path;
+  const double backward_velocity = -1.0;
 
-  // rename parameter
-  const double backward_path_length = common_parameter.backward_path_length;
+  const auto current_pose_arc_coords =
+    lanelet::utils::getArcCoordinates(shoulder_lanelets, current_pose);
+  const auto backed_pose_arc_coords =
+    lanelet::utils::getArcCoordinates(shoulder_lanelets, backed_pose);
+  const double lateral_distance_to_shoulder_center = current_pose_arc_coords.distance;
 
-  const double distance_to_shoulder_center =
-    lanelet::utils::getArcCoordinates(shoulder_lanelets, pose).distance;
+  const double s_start = backed_pose_arc_coords.length;
+  const double s_end = current_pose_arc_coords.length;
 
-  PathWithLaneId reference_path1;
+  PathWithLaneId backward_path;
   {
-    const auto arc_position = lanelet::utils::getArcCoordinates(shoulder_lanelets, pose);
-    const double s_start = arc_position.length + backward_path_length;
-    double s_end = s_start - 50;
-    reference_path1 = route_handler.getCenterLinePath(shoulder_lanelets, s_end, s_start);
-    // ROS_ERROR("ref1 s_start:%f s_end%f", s_start, s_end);
-    for (auto & point : reference_path1.points) {
-      // auto arc_length =
-      //   lanelet::utils::getArcCoordinates(shoulder_lanelets, point.point.pose).length;
-      point.point.longitudinal_velocity_mps = -5;
-      // ROS_ERROR("back_distance:%f", back_distance);
-      // if (arc_position.length - arc_length > back_distance) {
-      //   point.point.longitudinal_velocity_mps = 0;
-      // }
+    // foward center line path
+    backward_path = route_handler.getCenterLinePath(shoulder_lanelets, s_start, s_end, true);
+
+    // backward center line path
+    std::reverse(backward_path.points.begin(), backward_path.points.end());
+    for (auto & p : backward_path.points) {
+      p.point.longitudinal_velocity_mps = backward_velocity;
     }
-    // std::reverse(reference_path1.points.begin(), reference_path1.points.end());
-    // reference_path1.points.front().point.longitudinal_velocity_mps = 0;
-  }
+    backward_path.points.back().point.longitudinal_velocity_mps = 0.0;
 
-  // Apply shifting before shift
-  for (size_t i = 0; i < reference_path1.points.size(); ++i) {
-    {
-      if (fabs(distance_to_shoulder_center) < 1.0e-8) {
-        RCLCPP_WARN_STREAM(
-          rclcpp::get_logger("behavior_path_planner").get_child("pull_out").get_child("util"),
-          "no offset from current lane center.");
-        continue;
-      }
-
-      auto & p = reference_path1.points.at(i).point.pose;
-      double yaw = tf2::getYaw(p.orientation);
-      p.position.x -= std::sin(yaw) * distance_to_shoulder_center;
-      p.position.y += std::cos(yaw) * distance_to_shoulder_center;
+    // lateral shift to current_pose
+    for (size_t i = 0; i < backward_path.points.size(); ++i) {
+      auto & p = backward_path.points.at(i).point.pose;
+      p = tier4_autoware_utils::calcOffsetPose(p, 0, lateral_distance_to_shoulder_center, 0);
     }
   }
 
-  PullOutPath candidate_path;
-
-  candidate_path.path = reference_path1;
-
-  return candidate_path;
+  return backward_path;
 }
 
 Pose getBackedPose(
@@ -427,7 +406,7 @@ bool isPullOutPathSafe(
 
   // find obstacle in shoulder lanes
   const auto shoulder_lane_object_indices =
-    util::filterObjectsByLanelets(*dynamic_objects, shoulder_lanes);
+    util::filterObjectIndicesByLanelets(*dynamic_objects, shoulder_lanes);
 
   // Collision check for objects in shoulder lane
   if (use_dynamic_object) {

@@ -571,28 +571,40 @@ double getDistanceBetweenPredictedPathAndObjectPolygon(
   return min_distance;
 }
 
-bool checkCollisionWithObjects(
-  const tier4_autoware_utils::LinearRing2d & local_vehicle_footprint, const Pose ego_pose,
-  const PredictedObjects::ConstSharedPtr dynamic_objects, const double margin)
+bool checkCollisionBetweenPathFootprintsAndObjects(
+  const tier4_autoware_utils::LinearRing2d & local_vehicle_footprint,
+  const PathWithLaneId & ego_path, const PredictedObjects & dynamic_objects, const double margin)
+{
+  for (const auto & p : ego_path.points) {
+    if (checkCollisionBetweenFootprintAndObjects(
+          local_vehicle_footprint, p.point.pose, dynamic_objects, margin)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool checkCollisionBetweenFootprintAndObjects(
+  const tier4_autoware_utils::LinearRing2d & local_vehicle_footprint, const Pose & ego_pose,
+  const PredictedObjects & dynamic_objects, const double margin)
 {
   const auto vehicle_footprint =
     transformVector(local_vehicle_footprint, tier4_autoware_utils::pose2transform(ego_pose));
 
-  for (const auto object : dynamic_objects->objects) {
+  for (const auto object : dynamic_objects.objects) {
     Polygon2d obj_polygon;
     if (!calcObjectPolygon(object, &obj_polygon)) {
       continue;
     }
 
     const double distance = boost::geometry::distance(obj_polygon, vehicle_footprint);
-
-    return distance < margin;
+    if (distance < margin) return true;
   }
   return false;
 }
 
 // only works with consecutive lanes
-std::vector<size_t> filterObjectsByLanelets(
+std::vector<size_t> filterObjectIndicesByLanelets(
   const PredictedObjects & objects, const lanelet::ConstLanelets & target_lanelets,
   const double start_arc_length, const double end_arc_length)
 {
@@ -633,7 +645,7 @@ std::vector<size_t> filterObjectsByLanelets(
 }
 
 // works with random lanelets
-std::vector<size_t> filterObjectsByLanelets(
+std::vector<size_t> filterObjectIndicesByLanelets(
   const PredictedObjects & objects, const lanelet::ConstLanelets & target_lanelets)
 {
   std::vector<size_t> indices;
@@ -675,6 +687,17 @@ std::vector<size_t> filterObjectsByLanelets(
     }
   }
   return indices;
+}
+
+PredictedObjects filterObjectsByLanelets(
+  const PredictedObjects & objects, const lanelet::ConstLanelets & target_lanelets)
+{
+  PredictedObjects filtered_objects;
+  const auto indices = filterObjectIndicesByLanelets(objects, target_lanelets);
+  for(const size_t i: indices){
+    filtered_objects.objects.push_back(objects.objects.at(i));
+  }
+  return filtered_objects;
 }
 
 bool calcObjectPolygon(const PredictedObject & object, Polygon2d * object_polygon)
