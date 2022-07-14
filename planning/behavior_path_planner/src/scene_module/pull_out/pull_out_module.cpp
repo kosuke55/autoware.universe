@@ -64,7 +64,6 @@ void PullOutModule::onEntry()
   const auto current_pose = planner_data_->self_pose->pose;
   const auto arclength_start =
     lanelet::utils::getArcCoordinates(status_.pull_out_lanes, current_pose);
-  status_.back_finished = false;
   status_.start_distance = arclength_start.length;
 }
 
@@ -134,22 +133,19 @@ bool PullOutModule::isExecutionReady() const
   return found_safe_path;
 }  // namespace behavior_path_planner
 
+// this runs only when RUNNING
 BT::NodeStatus PullOutModule::updateState()
 {
   RCLCPP_DEBUG(getLogger(), "PULL_OUT updateState");
 
-  // finish after lane change
-  if (status_.back_finished && hasFinishedPullOut()) {
+  if (hasFinishedPullOut()) {
     current_state_ = BT::NodeStatus::SUCCESS;
     return current_state_;
   }
 
-  if (hasFinishedBack()) {
-    status_.back_finished = true;
-    std::cerr << "status_.back_finished: " << status_.back_finished << std::endl;
-  }
+  checkBackFinished();
 
-  current_state_ = BT::NodeStatus::RUNNING;
+  // current_state_ = BT::NodeStatus::RUNNING;
   return current_state_;
 }
 
@@ -159,8 +155,8 @@ BehaviorModuleOutput PullOutModule::plan()
 
   PathWithLaneId path;
   if (!status_.back_finished) {
-    // path = util::resamplePathWithSpline(status_.straight_back_path, RESAMPLE_INTERVAL);
-    path = status_.straight_back_path;
+    path = util::resamplePathWithSpline(status_.backward_path, RESAMPLE_INTERVAL);
+    path = status_.backward_path;
     std::cerr << "get back path! size: " << path.points.size() << std::endl;
 
   } else {
@@ -223,18 +219,40 @@ CandidateOutput PullOutModule::planCandidate() const
   return output;
 }
 
+PathWithLaneId PullOutModule::getFullPath() const
+{
+  const auto pull_out_path = pull_out_planner_->getFullPath();
+
+  if (status_.back_finished) {
+    // not need backward path or finish it
+    return pull_out_path;
+  } else {
+    // concat back_path and pull_out_path and
+    std::cerr << "get full apth with back" << std::endl;
+    auto full_path = status_.backward_path;
+    full_path.points.insert(
+      full_path.points.end(), pull_out_path.points.begin(), pull_out_path.points.end());
+    return full_path;
+  }
+}
+
 BehaviorModuleOutput PullOutModule::planWaitingApproval()
 {
+  std::cerr << "planWaitingApproval" << std::endl;
   BehaviorModuleOutput out;
   const auto common_parameters = planner_data_->parameters;
   const auto current_lanes = getCurrentLanes();
   const auto shoulder_lanes = pull_out_utils::getPullOutLanes(current_lanes, planner_data_);
 
+  updatePullOutStatus();
+
   PathWithLaneId candidate_path;
   // Generate drivable area
   {
-    const auto candidate = planCandidate();
-    candidate_path = candidate.path_candidate;
+    // candidate_path = candidate.path_candidate;
+    // candidate_path = getFullPath();
+    candidate_path = status_.back_finished ? status_.pull_out_path.path : status_.backward_path;
+
     lanelet::ConstLanelets lanes;
     lanes.insert(lanes.end(), current_lanes.begin(), current_lanes.end());
     lanes.insert(lanes.end(), shoulder_lanes.begin(), shoulder_lanes.end());
@@ -242,16 +260,27 @@ BehaviorModuleOutput PullOutModule::planWaitingApproval()
     candidate_path.drivable_area = util::generateDrivableArea(
       lanes, resolution, common_parameters.vehicle_length, planner_data_);
 
-    updateRTCStatus(candidate.distance_to_path_change);
+    // updateRTCStatus(candidate.distance_to_path_change);
+    updateRTCStatus(0);
   }
   for (size_t i = 1; i < candidate_path.points.size(); i++) {
     candidate_path.points.at(i).point.longitudinal_velocity_mps = 0.0;
   }
-  out.path = std::make_shared<PathWithLaneId>(candidate_path);
+
+  // PathWithLaneId stop_path;
+  // stop_path.header = candidate_path.header;
+  // PathPointWithLaneId p;
+  // p.point
+  // stop_path.points.push_back();
+
+  PathWithLaneId stop_path = candidate_path;
+  for (auto & p : stop_path.points) {
+    p.point.longitudinal_velocity_mps = 0.0;
+  }
+  out.path = std::make_shared<PathWithLaneId>(stop_path);
 
   out.path_candidate = std::make_shared<PathWithLaneId>(candidate_path);
 
-  updatePullOutStatus();
   waitApproval();
 
   return out;
@@ -264,6 +293,8 @@ void PullOutModule::setParameters(const PullOutParameters & parameters)
 
 void PullOutModule::updatePullOutStatus()
 {
+  checkBackFinished();
+
   const auto & route_handler = planner_data_->route_handler;
   const auto common_parameters = planner_data_->parameters;
 
@@ -303,13 +334,17 @@ void PullOutModule::updatePullOutStatus()
       break;
     }
     need_back = true;
+
+    status_.back_finished = false;
+
+    
   }
   if (!found_safe_path) return;
 
   // status_.back_finished = !need_back;
 
   if (!status_.back_finished) {
-    status_.straight_back_path = pull_out_utils::getBackwardPath(
+    status_.backward_path = pull_out_utils::getBackwardPath(
       *route_handler, pull_out_lanes, current_pose, status_.backed_pose);
   }
 
@@ -328,7 +363,7 @@ void PullOutModule::updatePullOutStatus()
         status_.backed_pose = selected_retreat_path.backed_pose;
         status_.retreat_path = selected_retreat_path.pull_out_path;
         status_.retreat_path.path.header = planner_data_->route_handler->getRouteHeader();
-        // status_.straight_back_path = pull_out_utils::getBackedPose(
+        // status_.backward_path = pull_out_utils::getBackedPose(
         //   *route_handler, pull_out_lanes, current_pose, common_parameters, parameters_,
         //   back_distance);
       }
@@ -724,14 +759,26 @@ bool PullOutModule::hasFinishedPullOut() const
   return car_is_on_goal;
 }
 
-bool PullOutModule::hasFinishedBack() const
+void PullOutModule::checkBackFinished()
 {
   // check ego car is close enough to goal pose
   const auto current_pose = planner_data_->self_pose->pose;
   const auto backed_pose = status_.backed_pose;
   const auto distance = tier4_autoware_utils::calcDistance2d(current_pose, backed_pose);
 
-  return distance < 1.0;
+  const bool is_near_backed_pose = distance < 1.0;
+
+  if (!status_.back_finished && is_near_backed_pose) {
+    std::cerr << "back finished" << std::endl;
+    status_.back_finished = true;
+
+    // requst pull_out approval
+    waitApproval();
+    removeRTCStatus();
+    uuid_ = generateUUID();
+    updateRTCStatus(0.0);
+    current_state_ = BT::NodeStatus::SUCCESS;  // for breaking loop
+  }
 }
 
 TurnSignalInfo PullOutModule::calcTurnSignalInfo(const ShiftPoint & shift_point) const

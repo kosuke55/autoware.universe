@@ -70,6 +70,7 @@ boost::optional<PathWithLaneId> ShiftPullOut::plan(Pose start_pose, Pose goal_po
             vehicle_footprint_, path.path, shoulder_lane_objects, collision_margin)) {
         continue;
       }
+      full_path_ = path.path;
       return path.path;
     }
   }
