@@ -178,14 +178,6 @@ void AutowareTrajectoryDisplay::processMessage(
   material->setDepthWriteEnabled(false);
 
   if (!msg_ptr->points.empty()) {
-    bool is_driving_forward = true;
-    for (const auto & path_point : msg_ptr->points) {
-      if (path_point.longitudinal_velocity_mps < 0.0) {
-        is_driving_forward = false;
-        break;
-      }
-    }
-
     path_manual_object_->estimateVertexCount(msg_ptr->points.size() * 2);
     velocity_manual_object_->estimateVertexCount(msg_ptr->points.size());
     path_manual_object_->begin("BaseWhiteNoLighting", Ogre::RenderOperation::OT_TRIANGLE_STRIP);
@@ -237,7 +229,7 @@ void AutowareTrajectoryDisplay::processMessage(
           Eigen::Quaternionf quat(
             path_point.pose.orientation.w, path_point.pose.orientation.x,
             path_point.pose.orientation.y, path_point.pose.orientation.z);
-          if (!is_driving_forward) {
+          if (path_point.longitudinal_velocity_mps < 0) {
             quat *= quat_yaw_reverse;
           }
           vec_out = quat * vec_in;
@@ -251,7 +243,7 @@ void AutowareTrajectoryDisplay::processMessage(
           Eigen::Quaternionf quat(
             path_point.pose.orientation.w, path_point.pose.orientation.x,
             path_point.pose.orientation.y, path_point.pose.orientation.z);
-          if (!is_driving_forward) {
+          if (path_point.longitudinal_velocity_mps < 0) {
             quat *= quat_yaw_reverse;
           }
           vec_out = quat * vec_in;
