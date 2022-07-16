@@ -34,7 +34,8 @@
 #include <utility>
 #include <vector>
 
-using tier4_autoware_utils::calcLongitudinalOffsetPose;
+using motion_utils::calcLongitudinalOffsetPose;
+using tier4_autoware_utils::calcOffsetPose;
 namespace behavior_path_planner
 {
 PullOutModule::PullOutModule(
@@ -42,9 +43,14 @@ PullOutModule::PullOutModule(
 : SceneModuleInterface{name, node}, parameters_{parameters}
 {
   rtc_interface_ptr_ = std::make_shared<RTCInterface>(&node, "pull_out");
-  pull_out_planner_ = std::make_shared<ShiftPullOut>(node, parameters);
 
   backed_pose_pub_ = node.create_publisher<PoseStamped>("~/pull_out/debug/backed_pose", 1);
+
+  lane_departure_checker_ = std::make_shared<LaneDepartureChecker>();
+  lane_departure_checker_->setVehicleInfo(
+    vehicle_info_util::VehicleInfoUtil(node).getVehicleInfo());
+
+  pull_out_planner_ = std::make_shared<ShiftPullOut>(node, parameters, lane_departure_checker_);
 }
 
 BehaviorModuleOutput PullOutModule::run()
@@ -108,30 +114,7 @@ bool PullOutModule::isExecutionRequested() const
   return false;
 }
 
-bool PullOutModule::isExecutionReady() const
-{
-  if (current_state_ == BT::NodeStatus::RUNNING) {
-    return true;
-  }
-
-  // TODO(sugahara) move to utility function
-  const auto road_lanes = getCurrentLanes();
-  const auto shoulder_lanes = pull_out_utils::getPullOutLanes(road_lanes, planner_data_);
-
-  // Find pull_out path
-  bool found_valid_path, found_safe_path;
-  PullOutPath selected_path;
-  std::tie(found_valid_path, found_safe_path) =
-    getSafePath(shoulder_lanes, check_distance_, selected_path);
-
-  if (found_valid_path && !found_safe_path) {
-    double back_distance;
-    if (getBackDistance(shoulder_lanes, check_distance_, selected_path, back_distance)) {
-      return true;
-    }
-  }
-  return found_safe_path;
-}  // namespace behavior_path_planner
+bool PullOutModule::isExecutionReady() const { return true; }
 
 // this runs only when RUNNING
 BT::NodeStatus PullOutModule::updateState()
@@ -145,7 +128,6 @@ BT::NodeStatus PullOutModule::updateState()
 
   checkBackFinished();
 
-  // current_state_ = BT::NodeStatus::RUNNING;
   return current_state_;
 }
 
@@ -155,13 +137,10 @@ BehaviorModuleOutput PullOutModule::plan()
 
   PathWithLaneId path;
   if (!status_.back_finished) {
-    path = util::resamplePathWithSpline(status_.backward_path, RESAMPLE_INTERVAL);
     path = status_.backward_path;
-    std::cerr << "get back path! size: " << path.points.size() << std::endl;
-
   } else {
     path = util::resamplePathWithSpline(status_.pull_out_path.path, RESAMPLE_INTERVAL);
-    // status_.back_finished = true;
+    status_.back_finished = true;
   }
 
   if (status_.is_retreat_path_valid && status_.back_finished) {
@@ -177,47 +156,7 @@ BehaviorModuleOutput PullOutModule::plan()
   return output;
 }
 
-CandidateOutput PullOutModule::planCandidate() const
-{
-  // Get lane change lanes
-  const auto current_lanes = getCurrentLanes();
-  const auto shoulder_lanes = pull_out_utils::getPullOutLanes(current_lanes, planner_data_);
-
-  const auto current_pose = planner_data_->self_pose->pose;
-
-  // Find pull out path
-  bool found_valid_path, found_safe_path;
-  PullOutPath selected_path;
-  // std::tie(found_valid_path, found_safe_path) =
-  //   getSafePath(shoulder_lanes, check_distance_, selected_path);
-
-  if (found_valid_path && !found_safe_path) {
-    double back_distance;
-    if (getBackDistance(shoulder_lanes, check_distance_, selected_path, back_distance)) {
-      bool found_valid_retreat_path, found_safe_retreat_path;
-      RetreatPath selected_retreat_path;
-      std::tie(found_valid_retreat_path, found_safe_retreat_path) =
-        getSafeRetreatPath(shoulder_lanes, check_distance_, selected_retreat_path, back_distance);
-      // ROS_ERROR("found safe retreat path in plan candidate :%d", found_safe_retreat_path);
-      if (found_safe_retreat_path == true) {
-        selected_retreat_path.pull_out_path.path.header =
-          planner_data_->route_handler->getRouteHeader();
-        CandidateOutput output_retreat(selected_retreat_path.pull_out_path.path);
-        output_retreat.distance_to_path_change = motion_utils::calcSignedArcLength(
-          selected_retreat_path.pull_out_path.path.points, current_pose.position,
-          selected_retreat_path.backed_pose.position);
-        return output_retreat;
-      }
-    }
-  }
-  // ROS_ERROR("found safe path in plan candidate :%d", found_safe_path);
-
-  selected_path.path.header = planner_data_->route_handler->getRouteHeader();
-  CandidateOutput output(selected_path.path);
-  output.distance_to_path_change = motion_utils::calcSignedArcLength(
-    selected_path.path.points, current_pose.position, selected_path.shift_point.start.position);
-  return output;
-}
+CandidateOutput PullOutModule::planCandidate() const { return CandidateOutput{}; }
 
 PathWithLaneId PullOutModule::getFullPath() const
 {
@@ -228,7 +167,6 @@ PathWithLaneId PullOutModule::getFullPath() const
     return pull_out_path;
   } else {
     // concat back_path and pull_out_path and
-    std::cerr << "get full apth with back" << std::endl;
     auto full_path = status_.backward_path;
     full_path.points.insert(
       full_path.points.end(), pull_out_path.points.begin(), pull_out_path.points.end());
@@ -238,7 +176,6 @@ PathWithLaneId PullOutModule::getFullPath() const
 
 BehaviorModuleOutput PullOutModule::planWaitingApproval()
 {
-  std::cerr << "planWaitingApproval" << std::endl;
   BehaviorModuleOutput out;
   const auto common_parameters = planner_data_->parameters;
   const auto current_lanes = getCurrentLanes();
@@ -249,8 +186,6 @@ BehaviorModuleOutput PullOutModule::planWaitingApproval()
   PathWithLaneId candidate_path;
   // Generate drivable area
   {
-    // candidate_path = candidate.path_candidate;
-    // candidate_path = getFullPath();
     candidate_path = status_.back_finished ? status_.pull_out_path.path : status_.backward_path;
 
     lanelet::ConstLanelets lanes;
@@ -259,19 +194,11 @@ BehaviorModuleOutput PullOutModule::planWaitingApproval()
     const double resolution = common_parameters.drivable_area_resolution;
     candidate_path.drivable_area = util::generateDrivableArea(
       lanes, resolution, common_parameters.vehicle_length, planner_data_);
-
-    // updateRTCStatus(candidate.distance_to_path_change);
     updateRTCStatus(0);
   }
   for (size_t i = 1; i < candidate_path.points.size(); i++) {
     candidate_path.points.at(i).point.longitudinal_velocity_mps = 0.0;
   }
-
-  // PathWithLaneId stop_path;
-  // stop_path.header = candidate_path.header;
-  // PathPointWithLaneId p;
-  // p.point
-  // stop_path.points.push_back();
 
   PathWithLaneId stop_path = candidate_path;
   for (auto & p : stop_path.points) {
@@ -293,7 +220,6 @@ void PullOutModule::setParameters(const PullOutParameters & parameters)
 
 void PullOutModule::updatePullOutStatus()
 {
-  checkBackFinished();
 
   const auto & route_handler = planner_data_->route_handler;
   const auto common_parameters = planner_data_->parameters;
@@ -307,18 +233,11 @@ void PullOutModule::updatePullOutStatus()
 
   const auto current_pose = planner_data_->self_pose->pose;
   const auto goal_pose = planner_data_->route_handler->getGoalPose();
-  // const auto current_twist = planner_data_->self_odometry->twist.twist;
-  // const auto common_parameters = planner_data_->parameters;
 
-  // Find pull_out path
-  bool found_valid_path, found_safe_path;
-  found_safe_path = false;
+  // plan pull_out path with each backed pose
   PullOutPath selected_path;
-  // std::tie(found_valid_path, found_safe_path) =
-  //   getSafePath(pull_out_lanes, check_distance_, selected_path);
-
+  bool found_safe_path = false;
   backed_pose_candidates_ = searchBackedPoses();  // the first backed_pose is current_pose
-  bool need_back = false;
   for (auto const & backed_pose : backed_pose_candidates_) {
     pull_out_planner_->setPlannerData(planner_data_);
     const auto pull_out_path = pull_out_planner_->plan(backed_pose, goal_pose);
@@ -333,41 +252,16 @@ void PullOutModule::updatePullOutStatus()
       backed_pose_pub_->publish(backed_pose_);
       break;
     }
-    need_back = true;
 
+    // backed_pose in not current_pose, so need back.
     status_.back_finished = false;
-
-    
   }
   if (!found_safe_path) return;
 
-  // status_.back_finished = !need_back;
-
+  checkBackFinished();
   if (!status_.back_finished) {
     status_.backward_path = pull_out_utils::getBackwardPath(
       *route_handler, pull_out_lanes, current_pose, status_.backed_pose);
-  }
-
-  // selected_path.path = *pull_out_path;
-
-  // if (found_valid_path && !found_safe_path) {
-  if (false) {
-    double back_distance;
-    if (getBackDistance(pull_out_lanes, check_distance_, selected_path, back_distance)) {
-      bool found_valid_retreat_path, found_safe_retreat_path;
-      RetreatPath selected_retreat_path;
-      std::tie(found_valid_retreat_path, found_safe_retreat_path) =
-        getSafeRetreatPath(pull_out_lanes, check_distance_, selected_retreat_path, back_distance);
-      if (found_valid_retreat_path && found_safe_retreat_path) {
-        status_.is_retreat_path_valid = true;
-        status_.backed_pose = selected_retreat_path.backed_pose;
-        status_.retreat_path = selected_retreat_path.pull_out_path;
-        status_.retreat_path.path.header = planner_data_->route_handler->getRouteHeader();
-        // status_.backward_path = pull_out_utils::getBackedPose(
-        //   *route_handler, pull_out_lanes, current_pose, common_parameters, parameters_,
-        //   back_distance);
-      }
-    }
   }
 
   // Update status
@@ -448,129 +342,6 @@ lanelet::ConstLanelets PullOutModule::getCurrentLanes() const
     common_parameters.forward_path_length);
 }
 
-std::pair<bool, bool> PullOutModule::getSafePath(
-  const lanelet::ConstLanelets & pull_out_lanes, const double check_distance,
-  PullOutPath & safe_path) const
-{
-  std::vector<PullOutPath> valid_paths;
-
-  const auto & route_handler = planner_data_->route_handler;
-  const auto current_pose = planner_data_->self_pose->pose;
-  const auto current_twist = planner_data_->self_odometry->twist.twist;
-  const auto common_parameters = planner_data_->parameters;
-  const auto road_lanes = getCurrentLanes();
-
-  const auto vehicle_info = getVehicleInfo(planner_data_->parameters);
-  const auto local_vehicle_footprint = createVehicleFootprint(vehicle_info);
-
-  if (!pull_out_lanes.empty()) {
-    // find candidate paths
-    const auto pull_out_paths = pull_out_utils::getPullOutPaths(
-      *route_handler, road_lanes, pull_out_lanes, current_pose, common_parameters, parameters_);
-
-    // get lanes used for detection
-    lanelet::ConstLanelets check_lanes;
-    if (!pull_out_paths.empty()) {
-      const auto & longest_path = pull_out_paths.front();
-      // we want to see check_distance [m] behind vehicle so add lane changing length
-      const double check_distance_with_path =
-        check_distance + longest_path.preparation_length + longest_path.pull_out_length;
-      check_lanes = route_handler->getCheckTargetLanesFromPath(
-        longest_path.path, pull_out_lanes, check_distance_with_path);
-    }
-
-    // select valid path
-    valid_paths = pull_out_utils::selectValidPaths(
-      pull_out_paths, road_lanes, check_lanes, *route_handler->getOverallGraphPtr(), current_pose,
-      route_handler->isInGoalRouteSection(road_lanes.back()), route_handler->getGoalPose());
-
-    if (valid_paths.empty()) {
-      RCLCPP_DEBUG(getLogger(), "valid path is empty");
-      return std::make_pair(false, false);
-    }
-    // select safe path
-    bool found_safe_path = pull_out_utils::selectSafePath(
-      valid_paths, road_lanes, check_lanes, planner_data_->dynamic_object, current_pose,
-      current_twist, common_parameters.vehicle_width, parameters_, local_vehicle_footprint,
-      &safe_path);
-
-    return std::make_pair(true, found_safe_path);
-  }
-  return std::make_pair(false, false);
-}
-
-std::pair<bool, bool> PullOutModule::getSafeRetreatPath(
-  const lanelet::ConstLanelets & pull_out_lanes, const double check_distance,
-  RetreatPath & safe_retreat_path, double & back_distance) const
-{
-  std::vector<PullOutPath> valid_paths;
-  PullOutPath safe_path;
-
-  const auto & route_handler = planner_data_->route_handler;
-  const auto current_pose = planner_data_->self_pose->pose;
-  const auto current_twist = planner_data_->self_odometry->twist.twist;
-  const auto common_parameters = planner_data_->parameters;
-
-  const auto road_lanes = getCurrentLanes();
-
-  const auto vehicle_info = getVehicleInfo(planner_data_->parameters);
-  const auto local_vehicle_footprint = createVehicleFootprint(vehicle_info);
-
-  lanelet::ConstLanelet closest_shoulder_lanelet;
-  if (!lanelet::utils::query::getClosestLanelet(
-        pull_out_lanes, current_pose, &closest_shoulder_lanelet)) {
-    // RCLCPP_ERROR_THROTTLE(getLogger(), clock, 1000, "Failed to find closest lane!");
-  }
-  const auto arc_position_pose = lanelet::utils::getArcCoordinates(pull_out_lanes, current_pose);
-
-  const auto shoulder_line_path = route_handler->getCenterLinePath(
-    pull_out_lanes, arc_position_pose.length - pull_out_lane_length_,
-    arc_position_pose.length + pull_out_lane_length_);
-  const auto idx = motion_utils::findNearestIndex(shoulder_line_path.points, current_pose);
-  const auto yaw_shoulder_lane =
-    tf2::getYaw(shoulder_line_path.points.at(*idx).point.pose.orientation);
-
-  const auto backed_pose =
-    pull_out_utils::getBackedPose(current_pose, yaw_shoulder_lane, back_distance);
-
-  if (!pull_out_lanes.empty()) {
-    // find candidate paths
-    const auto pull_out_paths = pull_out_utils::getPullOutPaths(
-      *route_handler, road_lanes, pull_out_lanes, backed_pose, common_parameters, parameters_,
-      true);
-
-    // get lanes used for detection
-    lanelet::ConstLanelets check_lanes;
-    if (!pull_out_paths.empty()) {
-      const auto & longest_path = pull_out_paths.front();
-      // we want to see check_distance [m] behind vehicle so add lane changing length
-      const double check_distance_with_path =
-        check_distance + longest_path.preparation_length + longest_path.pull_out_length;
-      check_lanes = route_handler->getCheckTargetLanesFromPath(
-        longest_path.path, pull_out_lanes, check_distance_with_path);
-    }
-
-    // select valid path
-    valid_paths = pull_out_utils::selectValidPaths(
-      pull_out_paths, road_lanes, check_lanes, *route_handler->getOverallGraphPtr(), current_pose,
-      route_handler->isInGoalRouteSection(road_lanes.back()), route_handler->getGoalPose());
-
-    if (valid_paths.empty()) {
-      return std::make_pair(false, false);
-    }
-    // select safe path
-    bool found_safe_path = pull_out_utils::selectSafePath(
-      valid_paths, road_lanes, check_lanes, planner_data_->dynamic_object, current_pose,
-      current_twist, common_parameters.vehicle_width, parameters_, local_vehicle_footprint,
-      &safe_path);
-    safe_retreat_path.pull_out_path = safe_path;
-    safe_retreat_path.backed_pose = backed_pose;
-
-    return std::make_pair(true, found_safe_path);
-  }
-  return std::make_pair(false, false);
-}
-
 std::vector<Pose> PullOutModule::searchBackedPoses()
 {
   const auto current_pose = planner_data_->self_pose->pose;
@@ -583,9 +354,15 @@ std::vector<Pose> PullOutModule::searchBackedPoses()
 
   // get backward shoulder path
   const auto arc_position_pose = lanelet::utils::getArcCoordinates(pull_out_lanes, current_pose);
-  const auto backward_shoulder_path = planner_data_->route_handler->getCenterLinePath(
+  auto backward_shoulder_path = planner_data_->route_handler->getCenterLinePath(
     pull_out_lanes, arc_position_pose.length - pull_out_lane_length_,
     arc_position_pose.length + pull_out_lane_length_);
+
+  // lateral shift to current_pose
+  const double distance_from_center_line = arc_position_pose.distance;
+  for (auto & p : backward_shoulder_path.points) {
+    p.point.pose = calcOffsetPose(p.point.pose, 0, distance_from_center_line, 0);
+  }
 
   // check collision between footprint and onject at the backed pose
   const auto vehicle_info = getVehicleInfo(planner_data_->parameters);
@@ -604,87 +381,6 @@ std::vector<Pose> PullOutModule::searchBackedPoses()
     backed_poses.push_back(*backed_pose);
   }
   return backed_poses;
-}
-
-bool PullOutModule::getBackDistance(
-  const lanelet::ConstLanelets & pull_out_lanes, const double check_distance,
-  PullOutPath & safe_path, double & back_distance) const
-{
-  std::vector<PullOutPath> valid_paths;
-
-  const auto & route_handler = planner_data_->route_handler;
-  const auto current_pose = planner_data_->self_pose->pose;
-  const auto current_twist = planner_data_->self_odometry->twist.twist;
-  const auto common_parameters = planner_data_->parameters;
-
-  const double back_distance_search_resolution = 1;
-  const double maximum_back_distance = 15;
-
-  const auto road_lanes = getCurrentLanes();
-
-  const auto vehicle_info = getVehicleInfo(planner_data_->parameters);
-  const auto local_vehicle_footprint = createVehicleFootprint(vehicle_info);
-
-  double yaw_shoulder_lane;
-  {
-    lanelet::ConstLanelet closest_shoulder_lanelet;
-    if (!lanelet::utils::query::getClosestLanelet(
-          pull_out_lanes, current_pose, &closest_shoulder_lanelet)) {
-      return false;
-    }
-
-    const auto arc_position_pose = lanelet::utils::getArcCoordinates(pull_out_lanes, current_pose);
-
-    const auto shoulder_line_path = route_handler->getCenterLinePath(
-      pull_out_lanes, arc_position_pose.length - pull_out_lane_length_,
-      arc_position_pose.length + pull_out_lane_length_);
-    const auto idx = motion_utils::findNearestIndex(shoulder_line_path.points, current_pose);
-    yaw_shoulder_lane = tf2::getYaw(shoulder_line_path.points.at(*idx).point.pose.orientation);
-  }
-
-  for (double current_back_distance = back_distance_search_resolution;
-       current_back_distance <= maximum_back_distance;
-       current_back_distance += back_distance_search_resolution) {
-    if (!pull_out_lanes.empty()) {
-      const auto backed_pose =
-        pull_out_utils::getBackedPose(current_pose, yaw_shoulder_lane, current_back_distance);
-
-      // find candidate paths
-      const auto pull_out_paths = pull_out_utils::getPullOutPaths(
-        *route_handler, road_lanes, pull_out_lanes, backed_pose, common_parameters, parameters_,
-        true);
-
-      // get lanes used for detection
-      lanelet::ConstLanelets check_lanes;
-      if (!pull_out_paths.empty()) {
-        const auto & longest_path = pull_out_paths.front();
-        // we want to see check_distance [m] behind vehicle so add lane changing length
-        const double check_distance_with_path =
-          check_distance + longest_path.preparation_length + longest_path.pull_out_length;
-        check_lanes = route_handler->getCheckTargetLanesFromPath(
-          longest_path.path, pull_out_lanes, check_distance_with_path);
-      }
-
-      // select valid path
-      valid_paths = pull_out_utils::selectValidPaths(
-        pull_out_paths, road_lanes, check_lanes, *route_handler->getOverallGraphPtr(), current_pose,
-        route_handler->isInGoalRouteSection(road_lanes.back()), route_handler->getGoalPose());
-
-      if (valid_paths.empty()) {
-        continue;
-      }
-      // select safe path
-      bool found_safe_path = pull_out_utils::selectSafePath(
-        valid_paths, road_lanes, check_lanes, planner_data_->dynamic_object, current_pose,
-        current_twist, common_parameters.vehicle_width, parameters_, local_vehicle_footprint,
-        &safe_path);
-      if (found_safe_path) {
-        back_distance = current_back_distance;
-        return found_safe_path;
-      }
-    }
-  }
-  return false;
 }
 
 bool PullOutModule::isInLane(
@@ -767,8 +463,10 @@ void PullOutModule::checkBackFinished()
   const auto distance = tier4_autoware_utils::calcDistance2d(current_pose, backed_pose);
 
   const bool is_near_backed_pose = distance < 1.0;
+  const double ego_vel = util::l2Norm(planner_data_->self_odometry->twist.twist.linear);
+  const bool is_stopped = ego_vel < 0.01;
 
-  if (!status_.back_finished && is_near_backed_pose) {
+  if (!status_.back_finished && is_near_backed_pose && is_stopped) {
     std::cerr << "back finished" << std::endl;
     status_.back_finished = true;
 
