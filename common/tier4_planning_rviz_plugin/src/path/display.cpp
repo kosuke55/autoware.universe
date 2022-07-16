@@ -166,7 +166,6 @@ void AutowarePathDisplay::processMessage(
     // path_manual_object_->begin("BaseWhiteNoLighting", Ogre::RenderOperation::OT_TRIANGLE_STRIP);
     velocity_manual_object_->begin("BaseWhiteNoLighting", Ogre::RenderOperation::OT_LINE_STRIP);
 
-    bool prev_is_forward_driving = true;
     for (auto && path_point : msg_ptr->points) {
       /*
        * Path
@@ -190,9 +189,6 @@ void AutowarePathDisplay::processMessage(
             path_point.pose.orientation.w, path_point.pose.orientation.x,
             path_point.pose.orientation.y, path_point.pose.orientation.z);
           if (path_point.longitudinal_velocity_mps < 0) {
-          // if (
-          //   path_point.longitudinal_velocity_mps < 0 ||
-          //   (!prev_is_forward_driving && path_point.longitudinal_velocity_mps == 0)) {
             quat *= quat_yaw_reverse;
           }
           vec_out = quat * vec_in;
@@ -207,9 +203,6 @@ void AutowarePathDisplay::processMessage(
             path_point.pose.orientation.w, path_point.pose.orientation.x,
             path_point.pose.orientation.y, path_point.pose.orientation.z);
           if (path_point.longitudinal_velocity_mps < 0) {
-          // if (
-          //   path_point.longitudinal_velocity_mps < 0 ||
-          //   (!prev_is_forward_driving && path_point.longitudinal_velocity_mps == 0)) {
             quat *= quat_yaw_reverse;
           }
           vec_out = quat * vec_in;
@@ -218,8 +211,6 @@ void AutowarePathDisplay::processMessage(
             path_point.pose.position.z + vec_out.z());
           path_manual_object_->colour(color);
         }
-
-        prev_is_forward_driving = path_point.longitudinal_velocity_mps > 0;
       }
       /*
        * Velocity

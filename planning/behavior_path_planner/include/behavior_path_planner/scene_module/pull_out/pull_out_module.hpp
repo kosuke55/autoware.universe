@@ -22,9 +22,11 @@
 #include "behavior_path_planner/scene_module/utils/path_shifter.hpp"
 #include "behavior_path_planner/utilities.hpp"
 
+#include <lane_departure_checker/lane_departure_checker.hpp>
 #include <lanelet2_extension/utility/message_conversion.hpp>
 #include <lanelet2_extension/utility/utilities.hpp>
 #include <vehicle_info_util/vehicle_info.hpp>
+#include <vehicle_info_util/vehicle_info_util.hpp>
 
 #include <autoware_auto_planning_msgs/msg/path_with_lane_id.hpp>
 
@@ -37,6 +39,8 @@
 
 namespace behavior_path_planner
 {
+using lane_departure_checker::LaneDepartureChecker;
+
 struct PullOutStatus
 {
   PathWithLaneId lane_follow_path;
@@ -87,19 +91,10 @@ private:
 
   PathWithLaneId getReferencePath() const;
   lanelet::ConstLanelets getCurrentLanes() const;
-  // lanelet::ConstLanelets getPullOutLanes(const lanelet::ConstLanelets & current_lanes) const;
-  std::pair<bool, bool> getSafePath(
-    const lanelet::ConstLanelets & pull_out_lanes, const double check_distance,
-    PullOutPath & safe_path) const;
-  std::pair<bool, bool> getSafeRetreatPath(
-    const lanelet::ConstLanelets & pull_out_lanes, const double check_distance,
-    RetreatPath & safe_backed_path, double & back_distance) const;
   PathWithLaneId getFullPath() const;
   std::vector<Pose> searchBackedPoses();
 
-  bool getBackDistance(
-    const lanelet::ConstLanelets & pullover_lanes, const double check_distance,
-    PullOutPath & safe_path, double & back_distance) const;
+  std::shared_ptr<LaneDepartureChecker> lane_departure_checker_;
 
   // turn signal
   TurnSignalInfo calcTurnSignalInfo(const ShiftPoint & shift_point) const;

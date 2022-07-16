@@ -167,8 +167,6 @@ void AutowarePathWithLaneIdDisplay::processMessage(
     // path_manual_object_->begin("BaseWhiteNoLighting", Ogre::RenderOperation::OT_TRIANGLE_STRIP);
     velocity_manual_object_->begin("BaseWhiteNoLighting", Ogre::RenderOperation::OT_LINE_STRIP);
 
-
-    bool prev_is_forward_driving = true;
     for (auto && e : msg_ptr->points) {
       /*
        * Path
@@ -191,14 +189,9 @@ void AutowarePathWithLaneIdDisplay::processMessage(
           Eigen::Quaternionf quat(
             e.point.pose.orientation.w, e.point.pose.orientation.x, e.point.pose.orientation.y,
             e.point.pose.orientation.z);
-          
-          // back
-          if (e.point.longitudinal_velocity_mps < 0 || (!prev_is_forward_driving && e.point.longitudinal_velocity_mps == 0)) {
+          if (e.point.longitudinal_velocity_mps < 0) {
             quat *= quat_yaw_reverse;
-          } 
-
-          
-
+          }
           vec_out = quat * vec_in;
           path_manual_object_->position(
             e.point.pose.position.x + vec_out.x(), e.point.pose.position.y + vec_out.y(),
@@ -210,8 +203,7 @@ void AutowarePathWithLaneIdDisplay::processMessage(
           Eigen::Quaternionf quat(
             e.point.pose.orientation.w, e.point.pose.orientation.x, e.point.pose.orientation.y,
             e.point.pose.orientation.z);
-          // if (e.point.longitudinal_velocity_mps < 0) {
-          if (e.point.longitudinal_velocity_mps < 0 || (!prev_is_forward_driving && e.point.longitudinal_velocity_mps == 0)) {
+          if (e.point.longitudinal_velocity_mps < 0) {
             quat *= quat_yaw_reverse;
           }
           vec_out = quat * vec_in;
@@ -220,8 +212,6 @@ void AutowarePathWithLaneIdDisplay::processMessage(
             e.point.pose.position.z + vec_out.z());
           path_manual_object_->colour(color);
         }
-
-        prev_is_forward_driving = e.point.longitudinal_velocity_mps > 0;
       }
       /*
        * Velocity
