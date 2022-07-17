@@ -39,6 +39,7 @@
 
 namespace behavior_path_planner
 {
+using geometry_msgs::msg::PoseArray;
 using lane_departure_checker::LaneDepartureChecker;
 
 struct PullOutStatus
@@ -86,8 +87,12 @@ private:
   double check_distance_ = 100.0;
   std::vector<Pose> backed_pose_candidates_;
   PoseStamped backed_pose_;
+  vehicle_info_util::VehicleInfo vehicle_info_;
+  std::unique_ptr<rclcpp::Time> last_back_finished_time_;
 
   rclcpp::Publisher<PoseStamped>::SharedPtr backed_pose_pub_;
+  rclcpp::Publisher<PoseArray>::SharedPtr full_path_pose_array_pub_;
+  rclcpp::Clock::SharedPtr clock_;
 
   PathWithLaneId getReferencePath() const;
   lanelet::ConstLanelets getCurrentLanes() const;
@@ -97,20 +102,17 @@ private:
   std::shared_ptr<LaneDepartureChecker> lane_departure_checker_;
 
   // turn signal
-  TurnSignalInfo calcTurnSignalInfo(const ShiftPoint & shift_point) const;
+  TurnSignalInfo calcTurnSignalInfo(const Pose start_pose, const Pose end_pose) const;
 
   void updatePullOutStatus();
   bool isInLane(
     const lanelet::ConstLanelet & candidate_lanelet,
     const tier4_autoware_utils::LinearRing2d & vehicle_footprint) const;
   bool isLongEnough(const lanelet::ConstLanelets & lanelets) const;
-  bool isSafe() const;
-  bool isNearEndOfLane() const;
-  bool isCurrentSpeedLow() const;
   bool hasFinishedPullOut() const;
   void checkBackFinished();
-  vehicle_info_util::VehicleInfo getVehicleInfo(
-    const BehaviorPathPlannerParameters & parameters) const;
+
+  void publishDebugData() const;
 };
 }  // namespace behavior_path_planner
 

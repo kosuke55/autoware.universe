@@ -456,7 +456,7 @@ PullOutParameters BehaviorPathPlannerNode::getPullOutParam()
   p.pull_out_prepare_duration = dp("pull_out_prepare_duration", 2.0);
   p.pull_out_duration = dp("pull_out_duration", 4.0);
   p.pull_out_finish_judge_buffer = dp("pull_out_finish_judge_buffer", 1.0);
-  p.minimum_pull_out_velocity = dp("minimum_pull_out_velocity", 8.3);
+  p.shift_pull_out_velocity = dp("shift_pull_out_velocity", 8.3);
   p.prediction_duration = dp("prediction_duration", 8.0);
   p.prediction_time_resolution = dp("prediction_time_resolution", 0.5);
   p.static_obstacle_velocity_thresh = dp("static_obstacle_velocity_thresh", 0.1);

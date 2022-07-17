@@ -25,6 +25,8 @@ using autoware_auto_planning_msgs::msg::PathWithLaneId;
 struct PullOutPath
 {
   PathWithLaneId path;
+  Pose start_pose;
+  Pose end_pose;
   ShiftedPath shifted_path;
   ShiftPoint shift_point;
   double acceleration = 0.0;

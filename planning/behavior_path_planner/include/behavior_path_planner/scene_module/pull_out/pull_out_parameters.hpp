@@ -26,7 +26,7 @@ struct PullOutParameters
   double pull_out_prepare_duration;
   double pull_out_duration;
   double pull_out_finish_judge_buffer;
-  double minimum_pull_out_velocity;
+  double shift_pull_out_velocity;
   double prediction_duration;
   double prediction_time_resolution;
   double static_obstacle_velocity_thresh;

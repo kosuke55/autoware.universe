@@ -33,7 +33,7 @@ public:
     rclcpp::Node & node, const PullOutParameters & parameters,
     std::shared_ptr<LaneDepartureChecker> & lane_departure_checker);
 
-  boost::optional<PathWithLaneId> plan(Pose start_pose, Pose goal_pose) override;
+  boost::optional<PullOutPath> plan(Pose start_pose, Pose goal_pose) override;
 
   std::vector<PullOutPath> getPullOutPaths(
     const RouteHandler & route_handler, const lanelet::ConstLanelets & original_lanelets,
