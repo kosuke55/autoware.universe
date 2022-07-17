@@ -7,7 +7,7 @@
       pull_out_prepare_duration: 4.0
       pull_out_duration: 2.0
       pull_out_finish_judge_buffer: 1.0
-      minimum_pull_out_velocity: 2.0
+      shift_pull_out_velocity: 2.0
       prediction_duration: 30.0
       prediction_time_resolution: 0.5
       static_obstacle_velocity_thresh: 1.5

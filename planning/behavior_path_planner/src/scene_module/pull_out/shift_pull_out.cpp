@@ -32,7 +32,7 @@ ShiftPullOut::ShiftPullOut(
 {
 }
 
-boost::optional<PathWithLaneId> ShiftPullOut::plan(Pose start_pose, Pose goal_pose)
+boost::optional<PullOutPath> ShiftPullOut::plan(Pose start_pose, Pose goal_pose)
 {
   PullOutPath safe_path;
   std::vector<PullOutPath> valid_paths;
@@ -82,7 +82,7 @@ boost::optional<PathWithLaneId> ShiftPullOut::plan(Pose start_pose, Pose goal_po
         continue;
       }
       full_path_ = path.path;
-      return path.path;
+      return path;
     }
   }
   return boost::none;
@@ -102,7 +102,7 @@ std::vector<PullOutPath> ShiftPullOut::getPullOutPaths(
   // rename parameter
   const double backward_path_length = common_parameter.backward_path_length;
   const double forward_path_length = common_parameter.forward_path_length;
-  const double minimum_pull_out_velocity = parameter.minimum_pull_out_velocity;
+  const double shift_pull_out_velocity = parameter.shift_pull_out_velocity;
   const double before_pull_out_straight_distance = parameter.before_pull_out_straight_distance;
   const double minimum_lateral_jerk = parameter.minimum_lateral_jerk;
   const double maximum_lateral_jerk = parameter.maximum_lateral_jerk;
@@ -114,8 +114,6 @@ std::vector<PullOutPath> ShiftPullOut::getPullOutPaths(
        lateral_jerk += jerk_resolution) {
     PathShifter path_shifter;
     ShiftedPath shifted_path;
-    const double v1 = minimum_pull_out_velocity;
-
     const double distance_to_road_center = getArcCoordinates(road_lanelets, start_pose).distance;
     const double distance_to_shoulder_center =
       getArcCoordinates(shoulder_lanelets, start_pose).distance;
@@ -127,11 +125,6 @@ std::vector<PullOutPath> ShiftPullOut::getPullOutPaths(
       double s_end = arc_position.length + before_pull_out_straight_distance;
       s_end = std::max(s_end, s_start + std::numeric_limits<double>::epsilon());
       shoulder_reference_path = route_handler.getCenterLinePath(shoulder_lanelets, s_start, s_end);
-    }
-    for (auto & point : shoulder_reference_path.points) {
-      point.point.longitudinal_velocity_mps = std::min(
-        point.point.longitudinal_velocity_mps, static_cast<float>(minimum_pull_out_velocity));
-      point.point.pose = calcOffsetPose(point.point.pose, 0, distance_to_shoulder_center, 0);
     }
 
     PathWithLaneId road_lane_reference_path;
@@ -145,8 +138,8 @@ std::vector<PullOutPath> ShiftPullOut::getPullOutPaths(
       road_lane_reference_path = route_handler.getCenterLinePath(road_lanelets, s_start, s_end);
     }
 
-    const double pull_out_distance =
-      path_shifter.calcLongitudinalDistFromJerk(abs(distance_to_road_center), lateral_jerk, v1);
+    const double pull_out_distance = path_shifter.calcLongitudinalDistFromJerk(
+      abs(distance_to_road_center), lateral_jerk, shift_pull_out_velocity);
 
     // get shift point start/end
     const auto shift_point_start = shoulder_reference_path.points.back();
@@ -191,25 +184,19 @@ std::vector<PullOutPath> ShiftPullOut::getPullOutPaths(
         auto & point = shifted_path.path.points.at(i);
         if (i < *pull_out_end_idx) {
           point.point.longitudinal_velocity_mps = std::min(
-            point.point.longitudinal_velocity_mps,
-            shoulder_reference_path.points.back().point.longitudinal_velocity_mps);
+            point.point.longitudinal_velocity_mps, static_cast<float>(shift_pull_out_velocity));
           continue;
         } else if (i > *goal_idx) {
           point.point.longitudinal_velocity_mps = 0.0;
           continue;
         }
-        auto distance_to_goal =
-          calcDistance2d(point.point.pose, shifted_path.path.points.at(*goal_idx).point.pose);
-        point.point.longitudinal_velocity_mps = std::min(
-          minimum_pull_out_velocity,
-          std::max(
-            0.0, (distance_to_goal / distance_pull_out_end_to_goal * minimum_pull_out_velocity)));
-        point.lane_ids = shift_point_end.lane_ids;
       }
 
       candidate_path.path = combineReferencePath(shoulder_reference_path, shifted_path.path);
       candidate_path.shifted_path = shifted_path;
       candidate_path.shift_point = shift_point;
+      candidate_path.start_pose = shift_point.start;
+      candidate_path.end_pose = shift_point.end;
     } else {
       RCLCPP_ERROR_STREAM(
         rclcpp::get_logger("behavior_path_planner").get_child("pull_out").get_child("util"),
