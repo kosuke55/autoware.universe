@@ -1012,6 +1012,37 @@ inline boost::optional<size_t> insertStopPoint(
 
   return stop_idx;
 }
+
+template <class T>
+inline bool isDrivingForward(const T points_with_twist)
+{
+  // if points size is smaller than 2
+  if (points_with_twist.empty()) {
+    return true;
+  }
+  if (points_with_twist.size() == 1) {
+    if (0.0 <= points_with_twist.front().longitudinal_velocity_mps) {
+      return true;
+    }
+    return false;
+  }
+
+  // check the first point direction
+  const auto & first_points_with_twist_point = points_with_twist.at(0);
+  const auto & second_points_with_twist_point = points_with_twist.at(1);
+
+  const double first_points_with_twist_yaw =
+    tf2::getYaw(first_points_with_twist_point.pose.orientation);
+  const double driving_direction_yaw = tier4_autoware_utils::calcAzimuthAngle(
+    first_points_with_twist_point.pose.position, second_points_with_twist_point.pose.position);
+  if (
+    std::abs(tier4_autoware_utils::normalizeRadian(
+      first_points_with_twist_yaw - driving_direction_yaw)) < M_PI_2) {
+    return true;
+  }
+
+  return false;
+}
 }  // namespace motion_utils
 
 #endif  // MOTION_UTILS__TRAJECTORY__TRAJECTORY_HPP_
