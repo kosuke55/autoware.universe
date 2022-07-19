@@ -63,7 +63,8 @@ class GeometricParallelParking
 public:
   bool isParking() const;
   bool plan(const Pose goal_pose, lanelet::ConstLanelets lanes, const bool is_forward);
-  void setParams(
+  bool planReverse(const Pose goal_pose, lanelet::ConstLanelets lanes);
+  void setData(
     const std::shared_ptr<const PlannerData> & planner_data, ParallelParkingParameters parameters);
   void incrementPathIndex();
   void clear();
@@ -94,7 +95,8 @@ private:
 
   bool planOneTraial(
     const Pose goal_pose, const double start_pose_offset, const double R_E_r,
-    const lanelet::ConstLanelets lanes, const bool is_forward);
+    const lanelet::ConstLanelets lanes, const bool is_forward,
+    const double end_pose_offset);
   PathWithLaneId generateArcPath(
     const Pose & center, const float radius, const float start_rad, float end_rad,
     const bool is_left_turn, const bool is_forward);
@@ -104,7 +106,7 @@ private:
   Pose calcStartPose(
     const Pose goal_pose, const double start_pose_offset, const double R_E_r,
     const bool is_forward);
-  void generateStraightPath(const Pose start_pose);
+  PathWithLaneId generateStraightPath(const Pose start_pose);
 
   PoseStamped Cr_;
   PoseStamped Cl_;

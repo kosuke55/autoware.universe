@@ -48,7 +48,10 @@ PullOutModule::PullOutModule(
   vehicle_info_ = vehicle_info_util::VehicleInfoUtil(node).getVehicleInfo();
   lane_departure_checker_->setVehicleInfo(vehicle_info_);
 
-  pull_out_planner_ = std::make_shared<ShiftPullOut>(node, parameters, lane_departure_checker_);
+  // pull_out_planner_ = std::make_shared<ShiftPullOut>(node, parameters, lane_departure_checker_);
+
+  pull_out_planner_ = std::make_shared<GeometricPullOut>(
+    node, parameters, getGeometricParallelParkingParameters(), lane_departure_checker_);
 
   // debug publisher
   backed_pose_pub_ = node.create_publisher<PoseStamped>("~/pull_out/debug/backed_pose", 1);
@@ -86,12 +89,12 @@ void PullOutModule::onExit()
 
 bool PullOutModule::isExecutionRequested() const
 {
+  std::cerr << "reqeusted" << std::endl;
   if (current_state_ == BT::NodeStatus::RUNNING) {
     return true;
   }
 
-  const bool car_is_stopping =
-    (util::l2Norm(planner_data_->self_odometry->twist.twist.linear) <= 1.5) ? true : false;
+  const bool is_stopped = util::l2Norm(planner_data_->self_odometry->twist.twist.linear) <= 1.5;
 
   lanelet::Lanelet closest_shoulder_lanelet;
 
@@ -99,7 +102,8 @@ bool PullOutModule::isExecutionRequested() const
     lanelet::utils::query::getClosestLanelet(
       planner_data_->route_handler->getShoulderLanelets(), planner_data_->self_pose->pose,
       &closest_shoulder_lanelet) &&
-    car_is_stopping) {
+    is_stopped) {
+    std::cerr << "reqeusted " << __LINE__ << std::endl;
     // Create vehicle footprint
     const auto local_vehicle_footprint = createVehicleFootprint(vehicle_info_);
     const auto vehicle_footprint = transformVector(
@@ -108,11 +112,16 @@ bool PullOutModule::isExecutionRequested() const
     const auto road_lanes = getCurrentLanes();
 
     // check if goal pose is in shoulder lane and distance is long enough for pull out
+    std::cerr << "isInlane: " << isInLane(closest_shoulder_lanelet, vehicle_footprint)
+              << " isLongEnough: " << isLongEnough(road_lanes) << std::endl;
+
     if (isInLane(closest_shoulder_lanelet, vehicle_footprint) && isLongEnough(road_lanes)) {
+      std::cerr << "reqeusted " << __LINE__ << std::endl;
       return true;
     }
   }
 
+  std::cerr << "reqeusted false" << std::endl;
   return false;
 }
 
@@ -163,6 +172,8 @@ BehaviorModuleOutput PullOutModule::plan()
   output.path = std::make_shared<PathWithLaneId>(path);
   output.turn_signal_info =
     calcTurnSignalInfo(status_.pull_out_path.start_pose, status_.pull_out_path.end_pose);
+
+  publishDebugData();
 
   return output;
 }
@@ -222,6 +233,7 @@ BehaviorModuleOutput PullOutModule::planWaitingApproval()
 
   waitApproval();
 
+  publishDebugData();
   return output;
 }
 
@@ -230,9 +242,22 @@ void PullOutModule::setParameters(const PullOutParameters & parameters)
   parameters_ = parameters;
 }
 
+// todo: commonize this with pull_over? make own param file?
+ParallelParkingParameters PullOutModule::getGeometricParallelParkingParameters() const
+{
+  ParallelParkingParameters params;
+
+  params.th_arrived_distance_m = 1.0;
+  params.th_stopped_velocity_mps = 0.01;
+  params.arc_path_interval = 1.0;
+
+  return params;
+}
+
 // running only when waiting approval
 void PullOutModule::updatePullOutStatus()
 {
+  std::cerr << "update pull out status" << std::endl;
   const auto & route_handler = planner_data_->route_handler;
   const auto common_parameters = planner_data_->parameters;
 
@@ -253,6 +278,7 @@ void PullOutModule::updatePullOutStatus()
     pull_out_planner_->setPlannerData(planner_data_);
     const auto pull_out_path = pull_out_planner_->plan(backed_pose, goal_pose);
     if (pull_out_path) {  // found safe path
+      std::cerr << "find safe path" << std::endl;
       found_safe_path = true;
       status_.pull_out_path = *pull_out_path;
       status_.backed_pose = backed_pose;
@@ -445,9 +471,9 @@ void PullOutModule::checkBackFinished()
   const auto backed_pose = status_.backed_pose;
   const auto distance = tier4_autoware_utils::calcDistance2d(current_pose, backed_pose);
 
-  const bool is_near_backed_pose = distance < 1.0; // todo: param
+  const bool is_near_backed_pose = distance < 1.0;  // todo: param
   const double ego_vel = util::l2Norm(planner_data_->self_odometry->twist.twist.linear);
-  const bool is_stopped = ego_vel < 0.01; // todo: param
+  const bool is_stopped = ego_vel < 0.01;  // todo: param
 
   if (!status_.back_finished && is_near_backed_pose && is_stopped) {
     std::cerr << "back finished" << std::endl;
@@ -509,7 +535,8 @@ void PullOutModule::publishDebugData() const
   backed_pose.header = header;
   backed_pose_pub_->publish(backed_pose);
 
-  const auto full_path_pose_array = util::convertToGeometryPoseArray(getFullPath());
+  auto full_path_pose_array = util::convertToGeometryPoseArray(getFullPath());
+  full_path_pose_array.header = header;
   full_path_pose_array_pub_->publish(full_path_pose_array);
 }
 }  // namespace behavior_path_planner

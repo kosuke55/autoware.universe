@@ -15,6 +15,8 @@
 #ifndef BEHAVIOR_PATH_PLANNER__SCENE_MODULE__PULL_OUT__PULL_OUT_MODULE_HPP_
 #define BEHAVIOR_PATH_PLANNER__SCENE_MODULE__PULL_OUT__PULL_OUT_MODULE_HPP_
 
+#include "behavior_path_planner/scene_module/pull_out/geometric_pull_out.hpp"
+#include "behavior_path_planner/scene_module/utils/geometric_parallel_parking.hpp"
 #include "behavior_path_planner/scene_module/pull_out/pull_out_parameters.hpp"
 #include "behavior_path_planner/scene_module/pull_out/pull_out_path.hpp"
 #include "behavior_path_planner/scene_module/pull_out/shift_pull_out.hpp"
@@ -97,6 +99,7 @@ private:
   PathWithLaneId getReferencePath() const;
   lanelet::ConstLanelets getCurrentLanes() const;
   PathWithLaneId getFullPath() const;
+  ParallelParkingParameters getGeometricParallelParkingParameters() const;
   std::vector<Pose> searchBackedPoses();
 
   std::shared_ptr<LaneDepartureChecker> lane_departure_checker_;
