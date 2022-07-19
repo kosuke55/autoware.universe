@@ -39,6 +39,7 @@
 
 using autoware_auto_planning_msgs::msg::PathWithLaneId;
 using behavior_path_planner::util::convertToGeometryPoseArray;
+using behavior_path_planner::util::removeOverlappingPoints;
 using geometry_msgs::msg::Pose;
 using geometry_msgs::msg::PoseArray;
 using geometry_msgs::msg::PoseStamped;
@@ -71,7 +72,8 @@ PathWithLaneId GeometricParallelParking::getFullPath() const
   for (const auto & p : paths_) {
     path.points.insert(path.points.end(), p.points.begin(), p.points.end());
   }
-  return path;
+
+  return removeOverlappingPoints(path);
 }
 
 PathWithLaneId GeometricParallelParking::getArcPath() const
