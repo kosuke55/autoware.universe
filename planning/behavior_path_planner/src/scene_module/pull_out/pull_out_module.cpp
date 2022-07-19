@@ -34,6 +34,7 @@
 #include <utility>
 #include <vector>
 
+using behavior_path_planner::util::removeOverlappingPoints;
 using motion_utils::calcLongitudinalOffsetPose;
 using tier4_autoware_utils::calcOffsetPose;
 namespace behavior_path_planner
@@ -48,10 +49,10 @@ PullOutModule::PullOutModule(
   vehicle_info_ = vehicle_info_util::VehicleInfoUtil(node).getVehicleInfo();
   lane_departure_checker_->setVehicleInfo(vehicle_info_);
 
-  pull_out_planner_ = std::make_shared<ShiftPullOut>(node, parameters, lane_departure_checker_);
+  // pull_out_planner_ = std::make_shared<ShiftPullOut>(node, parameters, lane_departure_checker_);
 
-  // pull_out_planner_ = std::make_shared<GeometricPullOut>(
-  //   node, parameters, getGeometricParallelParkingParameters(), lane_departure_checker_);
+  pull_out_planner_ = std::make_shared<GeometricPullOut>(
+    node, parameters, getGeometricParallelParkingParameters(), lane_departure_checker_);
 
   // debug publisher
   backed_pose_pub_ = node.create_publisher<PoseStamped>("~/pull_out/debug/backed_pose", 1);
@@ -115,7 +116,8 @@ bool PullOutModule::isExecutionRequested() const
     std::cerr << "isInlane: " << isInLane(closest_shoulder_lanelet, vehicle_footprint)
               << " isLongEnough: " << isLongEnough(road_lanes) << std::endl;
 
-    if (isInLane(closest_shoulder_lanelet, vehicle_footprint) && isLongEnough(road_lanes)) {
+    // not need isLongEnough()? it is only for shift
+    if (isInLane(closest_shoulder_lanelet, vehicle_footprint)) {
       std::cerr << "reqeusted " << __LINE__ << std::endl;
       return true;
     }
@@ -144,27 +146,22 @@ BT::NodeStatus PullOutModule::updateState()
 
 BehaviorModuleOutput PullOutModule::plan()
 {
-  constexpr double RESAMPLE_INTERVAL = 1.0;
-
   PathWithLaneId path;
-  if (!status_.back_finished) {
-    path = status_.backward_path;
-  } else {
-    path = util::resamplePathWithSpline(status_.pull_out_path.path, RESAMPLE_INTERVAL);
+  if (status_.back_finished) {
+    if (hasFinishedCurrentPath()) pull_out_planner_->incrementPathIndex();
+    path = pull_out_planner_->getCurrentPath();
     status_.back_finished = true;
-
-    // keep stopped until the turn signal is turned on for a sufficient period of time
-    const double time_diff = (clock_->now() - *last_back_finished_time_).seconds();
-    std::cerr << "time_diff:  " << time_diff << std::endl;
-    if (
-      last_back_finished_time_ != nullptr &&
-      (clock_->now() - *last_back_finished_time_).seconds() < 3.0) {
-      std::cerr << "keep stopeed" << std::endl;
-      for (auto & p : path.points) {
-        p.point.longitudinal_velocity_mps = 0.0;
-      }
-    }
+  } else {
+    path = status_.backward_path;
   }
+
+
+  // tmp
+  double max_vel = 0.0;
+  for (auto & p : path.points) {
+    max_vel = std::max(static_cast<double>(p.point.longitudinal_velocity_mps), max_vel);
+  }
+  std::cerr << "pull_out max_vel: " << max_vel << std::endl;
 
   path.drivable_area = status_.pull_out_path.path.drivable_area;
 
@@ -218,14 +215,12 @@ BehaviorModuleOutput PullOutModule::planWaitingApproval()
       lanes, resolution, common_parameters.vehicle_length, planner_data_);
     updateRTCStatus(0);
   }
-  for (size_t i = 1; i < candidate_path.points.size(); i++) {
-    candidate_path.points.at(i).point.longitudinal_velocity_mps = 0.0;
-  }
 
   PathWithLaneId stop_path = candidate_path;
   for (auto & p : stop_path.points) {
     p.point.longitudinal_velocity_mps = 0.0;
   }
+  // stop_path = removeOverlappingPoints(stop_path); //tmp
   output.path = std::make_shared<PathWithLaneId>(stop_path);
   output.turn_signal_info =
     calcTurnSignalInfo(status_.pull_out_path.start_pose, status_.pull_out_path.end_pose);
@@ -487,6 +482,41 @@ void PullOutModule::checkBackFinished()
     updateRTCStatus(0.0);
     current_state_ = BT::NodeStatus::SUCCESS;  // for breaking loop
   }
+}
+
+bool PullOutModule::isStopped()
+{
+  odometry_buffer_.push_back(planner_data_->self_odometry);
+  // Delete old data in buffer
+  while (true) {
+    const auto time_diff = rclcpp::Time(odometry_buffer_.back()->header.stamp) -
+                           rclcpp::Time(odometry_buffer_.front()->header.stamp);
+    if (time_diff.seconds() < 1.0) {  // todo: make param
+      // if (time_diff.seconds() < parameters_.th_stopped_time_sec) {
+      break;
+    }
+    odometry_buffer_.pop_front();
+  }
+  bool is_stopped = true;
+  for (const auto & odometry : odometry_buffer_) {
+    const double ego_vel = util::l2Norm(odometry->twist.twist.linear);
+    if (ego_vel > 0.01) {  // todo: make param
+    // if (ego_vel > parameters_.th_stopped_velocity_mps) {
+      is_stopped = false;
+      break;
+    }
+  }
+  return is_stopped;
+}
+
+bool PullOutModule::hasFinishedCurrentPath()
+{
+  const auto current_path_end = status_.pull_out_path.path.points.back();
+  const auto self_pose = planner_data_->self_pose->pose;
+  const bool is_near_target = tier4_autoware_utils::calcDistance2d(current_path_end, self_pose) < 1.0; // todo: make param
+                              // parameters_.th_arrived_distance_m;
+
+  return is_near_target && isStopped();
 }
 
 TurnSignalInfo PullOutModule::calcTurnSignalInfo(const Pose start_pose, const Pose end_pose) const

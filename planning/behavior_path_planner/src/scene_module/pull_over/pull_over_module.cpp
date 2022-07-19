@@ -868,7 +868,8 @@ bool PullOverModule::isStopped()
   while (true) {
     const auto time_diff = rclcpp::Time(odometry_buffer_.back()->header.stamp) -
                            rclcpp::Time(odometry_buffer_.front()->header.stamp);
-    if (time_diff.seconds() < parameters_.th_stopped_time_sec) {
+    if (time_diff.seconds() < 1.0) {  // todo: make param
+      // if (time_diff.seconds() < parameters_.th_stopped_time_sec) {
       break;
     }
     odometry_buffer_.pop_front();

@@ -69,6 +69,8 @@ public:
   void incrementPathIndex();
   void clear();
 
+  std::vector<PathWithLaneId> getPaths() const { return paths_; }
+  PathWithLaneId getPathByIdx(size_t const idx) const;
   PathWithLaneId getCurrentPath() const;
   PathWithLaneId getFullPath() const;
   PathWithLaneId getArcPath() const;
@@ -85,23 +87,23 @@ private:
 
   // todo: use vehicle info after merging
   // https://github.com/autowarefoundation/autoware.universe/pull/740
-  float max_steer_deg_ = 40.0;  // max steering angle [deg].
-  float max_steer_rad_;
-  float R_E_min_;   // base_link
-  float R_Bl_min_;  // front_left
+  double max_steer_deg_ = 40.0;  // max steering angle [deg].
+  double max_steer_rad_;
+  double R_E_min_;   // base_link
+  double R_Bl_min_;  // front_left
 
   std::vector<PathWithLaneId> paths_;
   size_t current_path_idx_ = 0;
 
   bool planOneTraial(
     const Pose goal_pose, const double start_pose_offset, const double R_E_r,
-    const lanelet::ConstLanelets lanes, const bool is_forward,
-    const double end_pose_offset);
+    const lanelet::ConstLanelets lanes, const bool is_forward, const double end_pose_offset,
+    const double velocity);
   PathWithLaneId generateArcPath(
-    const Pose & center, const float radius, const float start_rad, float end_rad,
-    const bool is_left_turn, const bool is_forward);
+    const Pose & center, const double radius, const double start_yaw, double end_yaw,
+    const double velocity, const bool is_left_turn, const bool is_forward);
   PathPointWithLaneId generateArcPathPoint(
-    const Pose & center, const float radius, const float yaw, const bool is_left_turn,
+    const Pose & center, const double radius, const double yaw, const bool is_left_turn,
     const bool is_forward);
   Pose calcStartPose(
     const Pose goal_pose, const double start_pose_offset, const double R_E_r,

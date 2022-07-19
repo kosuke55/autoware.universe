@@ -48,7 +48,12 @@ public:
   }
 
   virtual boost::optional<PullOutPath> plan(Pose start_pose, Pose goal_pose) = 0;
-  virtual PathWithLaneId getFullPath() const {return full_path_;}
+  PathWithLaneId getFullPath() const {return full_path_;}
+  PathWithLaneId getCurrentPath() const { return paths_.at(current_path_idx_); }
+  virtual void incrementPathIndex()
+  {
+    current_path_idx_ = std::min(current_path_idx_ + 1, paths_.size() - 1);
+  }
 
 protected:
   std::shared_ptr<const PlannerData> planner_data_;
@@ -56,6 +61,8 @@ protected:
   LinearRing2d vehicle_footprint_;
   PullOutParameters parameters_;
   PathWithLaneId full_path_;
+  std::vector<PathWithLaneId> paths_;
+  size_t current_path_idx_ = 0;
 };
 }  // namespace behavior_path_planner
 

@@ -15,11 +15,12 @@
 #include "behavior_path_planner/scene_module/pull_out/shift_pull_out.hpp"
 
 #include "behavior_path_planner/scene_module/pull_out/util.hpp"
+#include "behavior_path_planner/path_utilities.hpp"
 
 using lanelet::utils::getArcCoordinates;
+using motion_utils::findNearestIndex;
 using tier4_autoware_utils::calcDistance2d;
 using tier4_autoware_utils::calcOffsetPose;
-using motion_utils::findNearestIndex;
 namespace behavior_path_planner
 {
 using pull_out_utils::combineReferencePath;
@@ -191,8 +192,8 @@ std::vector<PullOutPath> ShiftPullOut::getPullOutPaths(
           continue;
         }
       }
-
-      candidate_path.path = combineReferencePath(shoulder_reference_path, shifted_path.path);
+      const auto combined_path = combineReferencePath(shoulder_reference_path, shifted_path.path);
+      candidate_path.path = util::resamplePathWithSpline(combined_path, 1.0);
       candidate_path.shifted_path = shifted_path;
       candidate_path.shift_point = shift_point;
       candidate_path.start_pose = shift_point.start;

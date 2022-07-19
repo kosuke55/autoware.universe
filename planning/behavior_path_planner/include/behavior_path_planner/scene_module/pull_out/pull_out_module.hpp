@@ -46,9 +46,7 @@ using lane_departure_checker::LaneDepartureChecker;
 
 struct PullOutStatus
 {
-  PathWithLaneId lane_follow_path;
   PullOutPath pull_out_path;
-  PullOutPath retreat_path;
   PathWithLaneId backward_path;
   lanelet::ConstLanelets current_lanes;
   lanelet::ConstLanelets pull_out_lanes;
@@ -91,6 +89,7 @@ private:
   PoseStamped backed_pose_;
   vehicle_info_util::VehicleInfo vehicle_info_;
   std::unique_ptr<rclcpp::Time> last_back_finished_time_;
+  std::deque<nav_msgs::msg::Odometry::ConstSharedPtr> odometry_buffer_;
 
   rclcpp::Publisher<PoseStamped>::SharedPtr backed_pose_pub_;
   rclcpp::Publisher<PoseArray>::SharedPtr full_path_pose_array_pub_;
@@ -114,6 +113,8 @@ private:
   bool isLongEnough(const lanelet::ConstLanelets & lanelets) const;
   bool hasFinishedPullOut() const;
   void checkBackFinished();
+  bool isStopped();
+  bool hasFinishedCurrentPath();
 
   void publishDebugData() const;
 };
