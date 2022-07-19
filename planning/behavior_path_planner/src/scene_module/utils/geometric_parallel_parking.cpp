@@ -96,6 +96,10 @@ bool GeometricParallelParking::plan(
   const Pose goal_pose, const lanelet::ConstLanelets lanes, const bool is_forward)
 {
   const auto common_params = planner_data_->parameters;
+
+  const double end_pose_offset = is_forward ? -parameters_.after_forward_parking_straight_distance
+                                            : parameters_.after_backward_parking_straight_distance;
+
   // plan path only when parking has not started
   if (!isParking()) {
     if (is_forward) {
@@ -103,18 +107,40 @@ bool GeometricParallelParking::plan(
       // so reduce the steer angle at that time for seach no lane departure path.
       for (double steer = max_steer_rad_; steer > 0.05; steer -= 0.1) {
         const double R_E_r = common_params.wheel_base / std::tan(steer);
-        if (planOneTraial(goal_pose, 0, R_E_r, lanes, is_forward)) return true;
+        if (planOneTraial(goal_pose, 0, R_E_r, lanes, is_forward, end_pose_offset)) return true;
       }
     } else {
       // When turning backward to the left, the front right goes out,
       // so make the parking start point in front for seach no lane departure path
       // (same to reducing the steer angle)
       for (double dx = 0; dx < 5; dx += 1.0) {
-        if (planOneTraial(goal_pose, dx, R_E_min_, lanes, is_forward)) return true;
+        if (planOneTraial(goal_pose, dx, R_E_min_, lanes, is_forward, end_pose_offset)) return true;
       }
     }
   }
   return false;
+}
+
+bool GeometricParallelParking::planReverse(
+  const Pose start_pose, const lanelet::ConstLanelets lanes)
+{
+  const bool is_forward = false;
+  const double start_pose_offset = 0.0;
+  for (double dx = 0; dx < 5; dx += 1.0) {
+    // plan reverse path of parking. see start_pose as goal_pose
+    if (planOneTraial(start_pose, dx, R_E_min_, lanes, is_forward, start_pose_offset)) {
+      // remove straight_path
+      paths_.erase(paths_.begin());
+      // reverse to turn_right -> turn_left
+      std::reverse(paths_.begin(), paths_.end());
+
+      for (auto & path : paths_) {
+        std::reverse(path.points.begin(), path.points.end());
+      }
+
+      return true;
+    }
+  }
 }
 
 Pose GeometricParallelParking::calcStartPose(
@@ -134,7 +160,7 @@ Pose GeometricParallelParking::calcStartPose(
   return start_pose;
 }
 
-void GeometricParallelParking::generateStraightPath(const Pose start_pose)
+PathWithLaneId GeometricParallelParking::generateStraightPath(const Pose start_pose)
 {
   // get stright path before parking.
   const auto current_lanes = util::getExtendedCurrentLanes(planner_data_);
@@ -154,20 +180,20 @@ void GeometricParallelParking::generateStraightPath(const Pose start_pose)
 
   path.points.back().point.longitudinal_velocity_mps = 0;
 
-  paths_.push_back(path);
+  return path;
 }
 
 bool GeometricParallelParking::planOneTraial(
   const Pose goal_pose, const double start_pose_offset, const double R_E_r,
-  const lanelet::ConstLanelets lanes, const bool is_forward)
+  const lanelet::ConstLanelets lanes, const bool is_forward,
+  const double end_pose_offset)
 {
   path_pose_array_.poses.clear();
   paths_.clear();
 
-  const double after_parking_straight_distance =
-    is_forward ? -parameters_.after_forward_parking_straight_distance
-               : parameters_.after_backward_parking_straight_distance;
-  const Pose arc_end_pose = calcOffsetPose(goal_pose, after_parking_straight_distance, 0, 0);
+  // const double end_pose_offset = is_forward ? -parameters_.after_forward_parking_straight_distance
+  //                                           : parameters_.after_backward_parking_straight_distance;
+  const Pose arc_end_pose = calcOffsetPose(goal_pose, end_pose_offset, 0, 0);
   const Pose start_pose = calcStartPose(arc_end_pose, start_pose_offset, R_E_r, is_forward);
   const Pose current_pose = planner_data_->self_pose->pose;
   const Pose current_to_start = inverseTransformPose(start_pose, current_pose);
@@ -227,7 +253,8 @@ bool GeometricParallelParking::planOneTraial(
     }
   }
 
-  generateStraightPath(start_pose);
+  const auto straight_path = generateStraightPath(start_pose);
+  paths_.push_back(straight_path);
 
   // Generate arc path(left turn -> right turn)
   Pose Cl = calcOffsetPose(start_pose, 0, R_E_l, 0);
@@ -241,17 +268,20 @@ bool GeometricParallelParking::planOneTraial(
 
   PathWithLaneId path_turn_right = generateArcPath(
     Cr, R_E_r, normalizeRadian(psi + M_PI_2 + theta_l), M_PI_2, !is_forward, is_forward);
+
   // Need to add straight path to last right_turning for parking in parallel
-  PathPointWithLaneId straight_point{};
-  lanelet::ConstLanelet goal_lane;
-  lanelet::utils::query::getClosestLanelet(lanes, goal_pose, &goal_lane);
-  straight_point.point.pose = goal_pose;
-  // Use z of previous point because z of goal is 0.
-  // https://github.com/autowarefoundation/autoware.universe/issues/711
-  straight_point.point.pose.position.z = path_turn_right.points.back().point.pose.position.z;
-  straight_point.point.longitudinal_velocity_mps = 0.0;
-  straight_point.lane_ids.push_back(goal_lane.id());
-  path_turn_right.points.push_back(straight_point);
+  if (std::abs(end_pose_offset) > 0) {
+    PathPointWithLaneId straight_point{};
+    lanelet::ConstLanelet goal_lane;
+    lanelet::utils::query::getClosestLanelet(lanes, goal_pose, &goal_lane);
+    straight_point.point.pose = goal_pose;
+    // Use z of previous point because z of goal is 0.
+    // https://github.com/autowarefoundation/autoware.universe/issues/711
+    straight_point.point.pose.position.z = path_turn_right.points.back().point.pose.position.z;
+    straight_point.point.longitudinal_velocity_mps = 0.0;
+    straight_point.lane_ids.push_back(goal_lane.id());
+    path_turn_right.points.push_back(straight_point);
+  }
 
   path_turn_left.header = planner_data_->route_handler->getRouteHeader();
   path_turn_left.drivable_area = util::generateDrivableArea(
@@ -284,8 +314,15 @@ PathWithLaneId GeometricParallelParking::generateArcPath(
 {
   PathWithLaneId path;
 
-  const float velocity =
+  // const 
+   float velocity =
     is_forward ? parameters_.forward_parking_velocity : parameters_.backward_parking_velocity;
+
+
+  // tmp 
+  velocity = 1.0;
+
+
   const float yaw_interval = parameters_.arc_path_interval / radius;
   float yaw = start_yaw;
   if (is_left_turn) {
@@ -353,7 +390,7 @@ PathPointWithLaneId GeometricParallelParking::generateArcPathPoint(
   return p;
 }
 
-void GeometricParallelParking::setParams(
+void GeometricParallelParking::setData(
   const std::shared_ptr<const PlannerData> & planner_data, ParallelParkingParameters parameters)
 {
   planner_data_ = planner_data;

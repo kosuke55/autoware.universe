@@ -92,6 +92,24 @@ BehaviorModuleOutput PullOverModule::run()
   return plan();
 }
 
+ParallelParkingParameters PullOverModule::getGeometricParallelParkingParameters() const
+{
+  ParallelParkingParameters params;
+
+  params.th_arrived_distance_m = parameters_.th_arrived_distance_m;
+  params.th_stopped_velocity_mps = parameters_.th_stopped_velocity_mps;
+  params.after_forward_parking_straight_distance =
+    parameters_.after_forward_parking_straight_distance;
+  params.after_backward_parking_straight_distance =
+    parameters_.after_backward_parking_straight_distance;
+  params.forward_parking_velocity = parameters_.forward_parking_velocity;
+  params.backward_parking_velocity = parameters_.backward_parking_velocity;
+  params.arc_path_interval = parameters_.arc_path_interval;
+  params.min_acc = parameters_.min_acc;
+
+  return params;
+}
+
 void PullOverModule::onEntry()
 {
   RCLCPP_DEBUG(getLogger(), "PULL_OVER onEntry");
@@ -116,15 +134,7 @@ void PullOverModule::onEntry()
     *last_received_time_ != planner_data_->route_handler->getRouteHeader().stamp) {
     // Initialize parallel parking planner status
     parallel_parking_planner_.clear();
-    parallel_parking_parameters_ = ParallelParkingParameters{
-      parameters_.th_arrived_distance_m,
-      parameters_.th_stopped_velocity_mps,
-      parameters_.after_forward_parking_straight_distance,
-      parameters_.after_backward_parking_straight_distance,
-      parameters_.forward_parking_velocity,
-      parameters_.backward_parking_velocity,
-      parameters_.arc_path_interval,
-      parameters_.min_acc};
+    parallel_parking_parameters_ = getGeometricParallelParkingParameters();
 
     resetStatus();
   }
@@ -354,7 +364,7 @@ bool PullOverModule::planWithEfficientPath()
   if (parameters_.enable_arc_forward_parking) {
     for (const auto goal_candidate : goal_candidates_) {
       modified_goal_pose_ = goal_candidate.goal_pose;
-      parallel_parking_planner_.setParams(planner_data_, parallel_parking_parameters_);
+      parallel_parking_planner_.setData(planner_data_, parallel_parking_parameters_);
       if (
         parallel_parking_planner_.plan(modified_goal_pose_, status_.lanes, true) &&
         isLongEnoughToParkingStart(
@@ -375,7 +385,7 @@ bool PullOverModule::planWithEfficientPath()
   if (parameters_.enable_arc_backward_parking) {
     for (const auto goal_candidate : goal_candidates_) {
       modified_goal_pose_ = goal_candidate.goal_pose;
-      parallel_parking_planner_.setParams(planner_data_, parallel_parking_parameters_);
+      parallel_parking_planner_.setData(planner_data_, parallel_parking_parameters_);
       if (
         parallel_parking_planner_.plan(modified_goal_pose_, status_.lanes, false) &&
         isLongEnoughToParkingStart(
@@ -414,7 +424,7 @@ bool PullOverModule::planWithCloseGoal()
       return true;
     }
 
-    parallel_parking_planner_.setParams(planner_data_, parallel_parking_parameters_);
+    parallel_parking_planner_.setData(planner_data_, parallel_parking_parameters_);
     // Generate arc forward path.
     if (
       parameters_.enable_arc_forward_parking &&
