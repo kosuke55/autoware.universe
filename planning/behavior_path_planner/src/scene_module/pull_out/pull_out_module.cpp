@@ -48,10 +48,10 @@ PullOutModule::PullOutModule(
   vehicle_info_ = vehicle_info_util::VehicleInfoUtil(node).getVehicleInfo();
   lane_departure_checker_->setVehicleInfo(vehicle_info_);
 
-  // pull_out_planner_ = std::make_shared<ShiftPullOut>(node, parameters, lane_departure_checker_);
+  pull_out_planner_ = std::make_shared<ShiftPullOut>(node, parameters, lane_departure_checker_);
 
-  pull_out_planner_ = std::make_shared<GeometricPullOut>(
-    node, parameters, getGeometricParallelParkingParameters(), lane_departure_checker_);
+  // pull_out_planner_ = std::make_shared<GeometricPullOut>(
+  //   node, parameters, getGeometricParallelParkingParameters(), lane_departure_checker_);
 
   // debug publisher
   backed_pose_pub_ = node.create_publisher<PoseStamped>("~/pull_out/debug/backed_pose", 1);
