@@ -98,7 +98,8 @@ bool PullOutModule::isExecutionRequested() const
     return true;
   }
 
-  const bool is_stopped = util::l2Norm(planner_data_->self_odometry->twist.twist.linear) <= 1.5;
+  const bool is_stopped =
+    util::l2Norm(planner_data_->self_odometry->twist.twist.linear) < 0.01;  // todo: make param
 
   lanelet::Lanelet closest_shoulder_lanelet;
 
@@ -131,6 +132,7 @@ BT::NodeStatus PullOutModule::updateState()
   RCLCPP_DEBUG(getLogger(), "PULL_OUT updateState");
 
   if (hasFinishedPullOut()) {
+    std::cerr << "hasFinishedPullOut" << std::endl;
     current_state_ = BT::NodeStatus::SUCCESS;
     return current_state_;
   }
@@ -144,7 +146,9 @@ BehaviorModuleOutput PullOutModule::plan()
 {
   PathWithLaneId path;
   if (status_.back_finished) {
-    if (hasFinishedCurrentPath()) pull_out_planner_->incrementPathIndex();
+    if (hasFinishedCurrentPath()) {
+      pull_out_planner_->incrementPathIndex();
+    }
     path = pull_out_planner_->getCurrentPath();
     status_.back_finished = true;
   } else {

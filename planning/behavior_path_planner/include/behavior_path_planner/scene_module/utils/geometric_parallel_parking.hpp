@@ -63,13 +63,16 @@ class GeometricParallelParking
 public:
   bool isParking() const;
   bool plan(const Pose & goal_pose, const lanelet::ConstLanelets & lanes, const bool is_forward);
-  bool planDeparting(const Pose & goal_pose, const lanelet::ConstLanelets & lanes);
+  bool planDeparting(
+    const Pose & start_pose, const Pose & goal_pose, const lanelet::ConstLanelets & road_lanes,
+    const lanelet::ConstLanelets & shoulder_lanes);
   void setData(
     const std::shared_ptr<const PlannerData> & planner_data,
     const ParallelParkingParameters & parameters);
   void incrementPathIndex();
   void clear();
 
+  std::vector<PathWithLaneId> getArcPaths() const { return arc_paths_; }
   std::vector<PathWithLaneId> getPaths() const { return paths_; }
   PathWithLaneId getPathByIdx(size_t const idx) const;
   PathWithLaneId getCurrentPath() const;
@@ -92,9 +95,11 @@ private:
   double R_E_min_;   // base_link
   double R_Bl_min_;  // front_left
 
+  std::vector<PathWithLaneId> arc_paths_;
   std::vector<PathWithLaneId> paths_;
   size_t current_path_idx_ = 0;
 
+  void clearPaths();
   bool isEnoughDistanceToStart(const Pose & start_pose) const;
   std::vector<PathWithLaneId> planOneTraial(
     const Pose & start_pose, const Pose & goal_pose, const double R_E_r,

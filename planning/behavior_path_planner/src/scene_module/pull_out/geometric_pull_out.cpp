@@ -39,6 +39,7 @@ boost::optional<PullOutPath> GeometricPullOut::plan(Pose start_pose, Pose goal_p
 {
   PullOutPath output;
 
+  // conbine road lane and shoulder lane
   const auto road_lanes = util::getCurrentLanes(planner_data_);
   const auto shoulder_lanes = getPullOutLanes(road_lanes, planner_data_);
   auto lanes = road_lanes;
@@ -46,7 +47,7 @@ boost::optional<PullOutPath> GeometricPullOut::plan(Pose start_pose, Pose goal_p
 
   // todo: set params only once?
   planner_.setData(planner_data_, parallel_parking_parameters_);
-  planner_.planDeparting(start_pose, lanes);
+  planner_.planDeparting(start_pose, goal_pose, road_lanes, shoulder_lanes);
 
   // collsion check with objects in shoulder lanes
   const double collision_margin = 1.0;  // todo: make param
@@ -64,15 +65,8 @@ boost::optional<PullOutPath> GeometricPullOut::plan(Pose start_pose, Pose goal_p
   paths_ = planner_.getPaths();
 
   output.path = planner_.getCurrentPath();
-  output.start_pose = planner_.getPathByIdx(0).points.back().point.pose;
-  output.end_pose = planner_.getPathByIdx(1).points.back().point.pose;
-
-  // tmp
-  double max_vel = 0.0;
-  for (auto & p : output.path.points) {
-    max_vel = std::max(static_cast<double>(p.point.longitudinal_velocity_mps), max_vel);
-  }
-  std::cerr << "max_vel: " << max_vel << std::endl;
+  output.start_pose = planner_.getArcPaths().at(0).points.back().point.pose;
+  output.end_pose = planner_.getArcPaths().at(1).points.back().point.pose;
 
   return output;
 }

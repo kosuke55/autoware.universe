@@ -46,6 +46,7 @@ using geometry_msgs::msg::PoseArray;
 using geometry_msgs::msg::PoseStamped;
 using geometry_msgs::msg::Transform;
 using geometry_msgs::msg::TransformStamped;
+using lanelet::utils::getArcCoordinates;
 using tier4_autoware_utils::calcDistance2d;
 using tier4_autoware_utils::calcOffsetPose;
 using tier4_autoware_utils::deg2rad;
@@ -156,6 +157,7 @@ std::vector<PathWithLaneId> GeometricParallelParking::generateParkingPaths(
   if (arc_paths.empty()) {
     return std::vector<PathWithLaneId>{};
   }
+  arc_paths_ = arc_paths;
 
   // set parking velocity and stop velocity at the end of the path
   setVelocityToArcPaths(arc_paths, velocity);
@@ -163,18 +165,24 @@ std::vector<PathWithLaneId> GeometricParallelParking::generateParkingPaths(
   // straight path from current to parking start
   const auto straight_path = generateStraightPath(start_pose);
 
-  // concat to straight_path -> arc_path*2
+  // conbine straight_path -> arc_path*2
   auto paths = arc_paths;
   paths.insert(paths.begin(), straight_path);
 
   return paths;
 }
 
+void GeometricParallelParking::clearPaths()
+{
+  arc_paths_.clear();
+  path_pose_array_.poses.clear();
+  paths_.clear();
+}
+
 bool GeometricParallelParking::plan(
   const Pose & goal_pose, const lanelet::ConstLanelets & lanes, const bool is_forward)
 {
-  path_pose_array_.poses.clear();
-  paths_.clear();
+  clearPaths();
 
   const auto common_params = planner_data_->parameters;
   const double end_pose_offset = is_forward ? -parameters_.after_forward_parking_straight_distance
@@ -222,10 +230,14 @@ bool GeometricParallelParking::plan(
 }
 
 bool GeometricParallelParking::planDeparting(
-  const Pose & start_pose, const lanelet::ConstLanelets & lanes)
+  const Pose & start_pose, const Pose & goal_pose, const lanelet::ConstLanelets & road_lanes,
+  const lanelet::ConstLanelets & shoulder_lanes)
 {
-  path_pose_array_.poses.clear();
-  paths_.clear();
+  clearPaths();
+
+  // conbine road lane and shoulder lane
+  auto lanes = road_lanes;
+  lanes.insert(lanes.end(), shoulder_lanes.begin(), shoulder_lanes.end());
 
   const bool is_forward = false;          // parking backward means departing foward
   const double start_pose_offset = 0.0;   // start_pose is current_pose
@@ -235,7 +247,7 @@ bool GeometricParallelParking::planDeparting(
     // departing end pose which is the second arc path end
     const Pose end_pose = calcStartPose(start_pose, end_pose_offset, R_E_min_, is_forward);
 
-    // plan reverse path of parking. see start_pose as end_pose <-> start_pose
+    // plan reverse path of parking. end_pose <-> start_pose
     auto arc_paths =
       planOneTraial(end_pose, start_pose, R_E_min_, lanes, is_forward, start_pose_offset);
     if (arc_paths.empty()) {
@@ -249,10 +261,26 @@ bool GeometricParallelParking::planDeparting(
     for (auto & path : arc_paths) {
       std::reverse(path.points.begin(), path.points.end());
     }
+    arc_paths_ = arc_paths;
+
+    // get road center line path from departing end to goal, and conbine after the second arc path
+    PathWithLaneId road_center_line_path;
+    {
+      const Pose end_pose = calcStartPose(start_pose, end_pose_offset, R_E_min_, is_forward);
+      const double s_start = getArcCoordinates(road_lanes, end_pose).length + 1.0;  // need buffer?
+      const double s_end = getArcCoordinates(road_lanes, goal_pose).length;
+      road_center_line_path =
+        planner_data_->route_handler->getCenterLinePath(road_lanes, s_start, s_end, true);
+    }
+    auto paths = arc_paths;
+    paths.back().points.insert(
+      paths.back().points.end(), road_center_line_path.points.begin(),
+      road_center_line_path.points.end());
+    removeOverlappingPoints(paths.back());
 
     // set departing velocity and stop velocity at the end of the path
-    setVelocityToArcPaths(arc_paths, departing_velocity);
-    paths_ = arc_paths;
+    setVelocityToArcPaths(paths, departing_velocity);
+    paths_ = paths;
 
     return true;
   }
