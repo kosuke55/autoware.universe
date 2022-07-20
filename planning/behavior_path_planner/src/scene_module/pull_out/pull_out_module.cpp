@@ -49,10 +49,10 @@ PullOutModule::PullOutModule(
   vehicle_info_ = vehicle_info_util::VehicleInfoUtil(node).getVehicleInfo();
   lane_departure_checker_->setVehicleInfo(vehicle_info_);
 
-  // pull_out_planner_ = std::make_shared<ShiftPullOut>(node, parameters, lane_departure_checker_);
+  pull_out_planner_ = std::make_shared<ShiftPullOut>(node, parameters, lane_departure_checker_);
 
-  pull_out_planner_ = std::make_shared<GeometricPullOut>(
-    node, parameters, getGeometricParallelParkingParameters(), lane_departure_checker_);
+  // pull_out_planner_ = std::make_shared<GeometricPullOut>(
+  //   node, parameters, getGeometricParallelParkingParameters(), lane_departure_checker_);
 
   // debug publisher
   backed_pose_pub_ = node.create_publisher<PoseStamped>("~/pull_out/debug/backed_pose", 1);
@@ -132,7 +132,6 @@ BT::NodeStatus PullOutModule::updateState()
   RCLCPP_DEBUG(getLogger(), "PULL_OUT updateState");
 
   if (hasFinishedPullOut()) {
-    std::cerr << "hasFinishedPullOut" << std::endl;
     current_state_ = BT::NodeStatus::SUCCESS;
     return current_state_;
   }
@@ -154,13 +153,6 @@ BehaviorModuleOutput PullOutModule::plan()
   } else {
     path = status_.backward_path;
   }
-
-  // tmp
-  double max_vel = 0.0;
-  for (auto & p : path.points) {
-    max_vel = std::max(static_cast<double>(p.point.longitudinal_velocity_mps), max_vel);
-  }
-  std::cerr << "pull_out max_vel: " << max_vel << std::endl;
 
   path.drivable_area = status_.pull_out_path.path.drivable_area;
 
@@ -251,7 +243,6 @@ ParallelParkingParameters PullOutModule::getGeometricParallelParkingParameters()
 // running only when waiting approval
 void PullOutModule::updatePullOutStatus()
 {
-  std::cerr << "update pull out status" << std::endl;
   const auto & route_handler = planner_data_->route_handler;
   const auto common_parameters = planner_data_->parameters;
 
@@ -272,7 +263,6 @@ void PullOutModule::updatePullOutStatus()
     pull_out_planner_->setPlannerData(planner_data_);
     const auto pull_out_path = pull_out_planner_->plan(backed_pose, goal_pose);
     if (pull_out_path) {  // found safe path
-      std::cerr << "find safe path" << std::endl;
       found_safe_path = true;
       status_.pull_out_path = *pull_out_path;
       status_.backed_pose = backed_pose;
