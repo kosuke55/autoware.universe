@@ -98,11 +98,10 @@ private:
   bool isEnoughDistanceToStart(const Pose & start_pose) const;
   std::vector<PathWithLaneId> planOneTraial(
     const Pose & start_pose, const Pose & goal_pose, const double R_E_r,
-    const lanelet::ConstLanelets & lanes, const bool is_forward, const double end_pose_offset,
-    const double velocity);
+    const lanelet::ConstLanelets & lanes, const bool is_forward, const double end_pose_offset);
   PathWithLaneId generateArcPath(
     const Pose & center, const double radius, const double start_yaw, double end_yaw,
-    const double velocity, const bool is_left_turn, const bool is_forward);
+    const bool is_left_turn, const bool is_forward);
   PathPointWithLaneId generateArcPathPoint(
     const Pose & center, const double radius, const double yaw, const bool is_left_turn,
     const bool is_forward);

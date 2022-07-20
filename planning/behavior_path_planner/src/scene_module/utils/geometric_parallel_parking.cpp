@@ -152,9 +152,7 @@ std::vector<PathWithLaneId> GeometricParallelParking::generateParkingPaths(
     return std::vector<PathWithLaneId>{};
   }
 
-  auto arc_paths = planOneTraial(
-    start_pose, goal_pose, R_E_r, lanes, is_forward, end_pose_offset,
-    parameters_.forward_parking_velocity);
+  auto arc_paths = planOneTraial(start_pose, goal_pose, R_E_r, lanes, is_forward, end_pose_offset);
   if (arc_paths.empty()) {
     return std::vector<PathWithLaneId>{};
   }
@@ -238,20 +236,23 @@ bool GeometricParallelParking::planDeparting(
     const Pose end_pose = calcStartPose(start_pose, end_pose_offset, R_E_min_, is_forward);
 
     // plan reverse path of parking. see start_pose as end_pose <-> start_pose
-    auto arc_paths = planOneTraial(
-      end_pose, start_pose, R_E_min_, lanes, is_forward, start_pose_offset, departing_velocity);
+    auto arc_paths =
+      planOneTraial(end_pose, start_pose, R_E_min_, lanes, is_forward, start_pose_offset);
     if (arc_paths.empty()) {
       continue;
     }
-    paths_ = arc_paths;
 
     // reverse to turn_right -> turn_left
-    std::reverse(paths_.begin(), paths_.end());
+    std::reverse(arc_paths.begin(), arc_paths.end());
 
     // reverse path points order
-    for (auto & path : paths_) {
+    for (auto & path : arc_paths) {
       std::reverse(path.points.begin(), path.points.end());
     }
+
+    // set departing velocity and stop velocity at the end of the path
+    setVelocityToArcPaths(arc_paths, departing_velocity);
+    paths_ = arc_paths;
 
     return true;
   }
@@ -301,8 +302,7 @@ PathWithLaneId GeometricParallelParking::generateStraightPath(const Pose & start
 
 std::vector<PathWithLaneId> GeometricParallelParking::planOneTraial(
   const Pose & start_pose, const Pose & goal_pose, const double R_E_r,
-  const lanelet::ConstLanelets & lanes, const bool is_forward, const double end_pose_offset,
-  const double velocity)
+  const lanelet::ConstLanelets & lanes, const bool is_forward, const double end_pose_offset)
 {
   const auto common_params = planner_data_->parameters;
 
@@ -353,11 +353,11 @@ std::vector<PathWithLaneId> GeometricParallelParking::planOneTraial(
     (2 * R_E_l * (R_E_l + R_E_r)));
   theta_l = is_forward ? theta_l : -theta_l;
 
-  PathWithLaneId path_turn_left = generateArcPath(
-    Cl, R_E_l, -M_PI_2, normalizeRadian(-M_PI_2 + theta_l), velocity, is_forward, is_forward);
+  PathWithLaneId path_turn_left =
+    generateArcPath(Cl, R_E_l, -M_PI_2, normalizeRadian(-M_PI_2 + theta_l), is_forward, is_forward);
 
   PathWithLaneId path_turn_right = generateArcPath(
-    Cr, R_E_r, normalizeRadian(psi + M_PI_2 + theta_l), M_PI_2, velocity, !is_forward, is_forward);
+    Cr, R_E_r, normalizeRadian(psi + M_PI_2 + theta_l), M_PI_2, !is_forward, is_forward);
 
   // Need to add straight path to last right_turning for parking in parallel
   if (std::abs(end_pose_offset) > 0) {
@@ -398,7 +398,6 @@ std::vector<PathWithLaneId> GeometricParallelParking::planOneTraial(
 
 PathWithLaneId GeometricParallelParking::generateArcPath(
   const Pose & center, const double radius, const double start_yaw, double end_yaw,
-  const double velocity,
   const bool is_left_turn,  // is_left_turn means clockwise around center.
   const bool is_forward)
 {
