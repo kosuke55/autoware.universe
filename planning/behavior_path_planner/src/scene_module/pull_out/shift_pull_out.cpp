@@ -14,8 +14,8 @@
 
 #include "behavior_path_planner/scene_module/pull_out/shift_pull_out.hpp"
 
-#include "behavior_path_planner/scene_module/pull_out/util.hpp"
 #include "behavior_path_planner/path_utilities.hpp"
+#include "behavior_path_planner/scene_module/pull_out/util.hpp"
 
 using lanelet::utils::getArcCoordinates;
 using motion_utils::findNearestIndex;

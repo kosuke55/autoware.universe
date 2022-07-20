@@ -569,8 +569,8 @@ void BehaviorPathPlannerNode::run()
   mutex_pd_.unlock();
 
   PathWithLaneId clipped_path;
-   bool skip = skipSmoothGoalConnection(bt_manager_->getModulesStatus());
-   skip = true;
+  bool skip = skipSmoothGoalConnection(bt_manager_->getModulesStatus());
+  skip = true;
   if (skip) {
     clipped_path = *path;
   } else {

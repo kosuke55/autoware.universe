@@ -73,11 +73,15 @@ void PullOutModule::onEntry()
   current_state_ = BT::NodeStatus::SUCCESS;
   updatePullOutStatus();
 
-  // Get arclength to start lane change
-  const auto current_pose = planner_data_->self_pose->pose;
-  const auto arclength_start =
-    lanelet::utils::getArcCoordinates(status_.pull_out_lanes, current_pose);
-  status_.start_distance = arclength_start.length;
+  // initialize when receiving new route
+  if (
+    last_route_received_time_.get() == nullptr ||
+    *last_route_received_time_ != planner_data_->route_handler->getRouteHeader().stamp) {
+    pull_out_planner_->clear();
+    resetStatus();
+  }
+  last_route_received_time_ =
+    std::make_unique<rclcpp::Time>(planner_data_->route_handler->getRouteHeader().stamp);
 }
 
 void PullOutModule::onExit()
@@ -90,7 +94,6 @@ void PullOutModule::onExit()
 
 bool PullOutModule::isExecutionRequested() const
 {
-  std::cerr << "reqeusted" << std::endl;
   if (current_state_ == BT::NodeStatus::RUNNING) {
     return true;
   }
@@ -104,7 +107,6 @@ bool PullOutModule::isExecutionRequested() const
       planner_data_->route_handler->getShoulderLanelets(), planner_data_->self_pose->pose,
       &closest_shoulder_lanelet) &&
     is_stopped) {
-    std::cerr << "reqeusted " << __LINE__ << std::endl;
     // Create vehicle footprint
     const auto local_vehicle_footprint = createVehicleFootprint(vehicle_info_);
     const auto vehicle_footprint = transformVector(
@@ -113,17 +115,11 @@ bool PullOutModule::isExecutionRequested() const
     const auto road_lanes = getCurrentLanes();
 
     // check if goal pose is in shoulder lane and distance is long enough for pull out
-    std::cerr << "isInlane: " << isInLane(closest_shoulder_lanelet, vehicle_footprint)
-              << " isLongEnough: " << isLongEnough(road_lanes) << std::endl;
-
-    // not need isLongEnough()? it is only for shift
     if (isInLane(closest_shoulder_lanelet, vehicle_footprint)) {
-      std::cerr << "reqeusted " << __LINE__ << std::endl;
       return true;
     }
   }
 
-  std::cerr << "reqeusted false" << std::endl;
   return false;
 }
 
@@ -154,7 +150,6 @@ BehaviorModuleOutput PullOutModule::plan()
   } else {
     path = status_.backward_path;
   }
-
 
   // tmp
   double max_vel = 0.0;
@@ -307,10 +302,6 @@ void PullOutModule::updatePullOutStatus()
     status_.pull_out_path.path.drivable_area = util::generateDrivableArea(
       lanes, resolution, common_parameters.vehicle_length, planner_data_);
   }
-
-  const auto arclength_start =
-    lanelet::utils::getArcCoordinates(status_.pull_out_lanes, current_pose);
-  status_.start_distance = arclength_start.length;
 
   status_.pull_out_path.path.header = planner_data_->route_handler->getRouteHeader();
 }
@@ -501,7 +492,7 @@ bool PullOutModule::isStopped()
   for (const auto & odometry : odometry_buffer_) {
     const double ego_vel = util::l2Norm(odometry->twist.twist.linear);
     if (ego_vel > 0.01) {  // todo: make param
-    // if (ego_vel > parameters_.th_stopped_velocity_mps) {
+                           // if (ego_vel > parameters_.th_stopped_velocity_mps) {
       is_stopped = false;
       break;
     }
@@ -513,8 +504,9 @@ bool PullOutModule::hasFinishedCurrentPath()
 {
   const auto current_path_end = status_.pull_out_path.path.points.back();
   const auto self_pose = planner_data_->self_pose->pose;
-  const bool is_near_target = tier4_autoware_utils::calcDistance2d(current_path_end, self_pose) < 1.0; // todo: make param
-                              // parameters_.th_arrived_distance_m;
+  const bool is_near_target = tier4_autoware_utils::calcDistance2d(current_path_end, self_pose) <
+                              1.0;  // todo: make param
+                                    // parameters_.th_arrived_distance_m;
 
   return is_near_target && isStopped();
 }

@@ -37,6 +37,7 @@ public:
 
   boost::optional<PullOutPath> plan(Pose start_pose, Pose goal_pose) override;
   void incrementPathIndex() override;
+  void clear() override;
 
   std::shared_ptr<LaneDepartureChecker> lane_departure_checker_;
   GeometricParallelParking planner_;

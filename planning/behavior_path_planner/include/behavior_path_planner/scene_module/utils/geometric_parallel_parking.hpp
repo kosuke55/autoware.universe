@@ -62,10 +62,11 @@ class GeometricParallelParking
 {
 public:
   bool isParking() const;
-  bool plan(const Pose goal_pose, lanelet::ConstLanelets lanes, const bool is_forward);
-  bool planReverse(const Pose goal_pose, lanelet::ConstLanelets lanes);
+  bool plan(const Pose & goal_pose, const lanelet::ConstLanelets & lanes, const bool is_forward);
+  bool planDeparting(const Pose & goal_pose, const lanelet::ConstLanelets & lanes);
   void setData(
-    const std::shared_ptr<const PlannerData> & planner_data, ParallelParkingParameters parameters);
+    const std::shared_ptr<const PlannerData> & planner_data,
+    const ParallelParkingParameters & parameters);
   void incrementPathIndex();
   void clear();
 
@@ -78,7 +79,6 @@ public:
   PoseStamped getCl() const { return Cl_; }
   PoseStamped getStartPose() const { return start_pose_; }
   PoseStamped getArcEndPose() const { return arc_end_pose_; }
-
   PoseArray getPathPoseArray() const { return path_pose_array_; }
 
 private:
@@ -95,9 +95,10 @@ private:
   std::vector<PathWithLaneId> paths_;
   size_t current_path_idx_ = 0;
 
-  bool planOneTraial(
-    const Pose goal_pose, const double start_pose_offset, const double R_E_r,
-    const lanelet::ConstLanelets lanes, const bool is_forward, const double end_pose_offset,
+  bool isEnoughDistanceToStart(const Pose & start_pose) const;
+  std::vector<PathWithLaneId> planOneTraial(
+    const Pose & start_pose, const Pose & goal_pose, const double R_E_r,
+    const lanelet::ConstLanelets & lanes, const bool is_forward, const double end_pose_offset,
     const double velocity);
   PathWithLaneId generateArcPath(
     const Pose & center, const double radius, const double start_yaw, double end_yaw,
@@ -106,9 +107,14 @@ private:
     const Pose & center, const double radius, const double yaw, const bool is_left_turn,
     const bool is_forward);
   Pose calcStartPose(
-    const Pose goal_pose, const double start_pose_offset, const double R_E_r,
+    const Pose & goal_pose, const double start_pose_offset, const double R_E_r,
     const bool is_forward);
-  PathWithLaneId generateStraightPath(const Pose start_pose);
+  std::vector<PathWithLaneId> generateParkingPaths(
+    const Pose & start_pose, const Pose & goal_pose, const double R_E_r,
+    const lanelet::ConstLanelets lanes, const bool is_forward, const double end_pose_offset,
+    const double velocity);
+  PathWithLaneId generateStraightPath(const Pose & start_pose);
+  void setVelocityToArcPaths(std::vector<PathWithLaneId> & arc_paths, const double velocity);
 
   PoseStamped Cr_;
   PoseStamped Cl_;

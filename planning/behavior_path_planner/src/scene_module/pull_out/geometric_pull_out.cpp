@@ -17,9 +17,9 @@
 #include "behavior_path_planner/scene_module/pull_out/util.hpp"
 
 using lanelet::utils::getArcCoordinates;
+using motion_utils::findNearestIndex;
 using tier4_autoware_utils::calcDistance2d;
 using tier4_autoware_utils::calcOffsetPose;
-using motion_utils::findNearestIndex;
 namespace behavior_path_planner
 {
 using pull_out_utils::combineReferencePath;
@@ -46,7 +46,7 @@ boost::optional<PullOutPath> GeometricPullOut::plan(Pose start_pose, Pose goal_p
 
   // todo: set params only once?
   planner_.setData(planner_data_, parallel_parking_parameters_);
-  planner_.planReverse(start_pose, lanes);
+  planner_.planDeparting(start_pose, lanes);
 
   // collsion check with objects in shoulder lanes
   const double collision_margin = 1.0;  // todo: make param
@@ -69,8 +69,7 @@ boost::optional<PullOutPath> GeometricPullOut::plan(Pose start_pose, Pose goal_p
 
   // tmp
   double max_vel = 0.0;
-  for(auto & p: output.path.points)
-  {
+  for (auto & p : output.path.points) {
     max_vel = std::max(static_cast<double>(p.point.longitudinal_velocity_mps), max_vel);
   }
   std::cerr << "max_vel: " << max_vel << std::endl;
@@ -83,6 +82,14 @@ void GeometricPullOut::incrementPathIndex()
   current_path_idx_ = std::min(current_path_idx_ + 1, paths_.size() - 1);
   // also need the internal index for planner_.getCurrentPath()
   planner_.incrementPathIndex();
+}
+
+void GeometricPullOut::clear()
+{
+  full_path_ = PathWithLaneId{};
+  paths_.clear();
+  current_path_idx_ = 0;
+  planner_.clear();
 }
 
 }  // namespace behavior_path_planner

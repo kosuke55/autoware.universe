@@ -16,11 +16,11 @@
 #define BEHAVIOR_PATH_PLANNER__SCENE_MODULE__PULL_OUT__PULL_OUT_MODULE_HPP_
 
 #include "behavior_path_planner/scene_module/pull_out/geometric_pull_out.hpp"
-#include "behavior_path_planner/scene_module/utils/geometric_parallel_parking.hpp"
 #include "behavior_path_planner/scene_module/pull_out/pull_out_parameters.hpp"
 #include "behavior_path_planner/scene_module/pull_out/pull_out_path.hpp"
 #include "behavior_path_planner/scene_module/pull_out/shift_pull_out.hpp"
 #include "behavior_path_planner/scene_module/scene_module_interface.hpp"
+#include "behavior_path_planner/scene_module/utils/geometric_parallel_parking.hpp"
 #include "behavior_path_planner/scene_module/utils/path_shifter.hpp"
 #include "behavior_path_planner/utilities.hpp"
 
@@ -52,10 +52,8 @@ struct PullOutStatus
   lanelet::ConstLanelets pull_out_lanes;
   std::vector<uint64_t> lane_follow_lane_ids;
   std::vector<uint64_t> pull_out_lane_ids;
-  bool is_safe;
-  double start_distance;
-  bool back_finished;
-  bool is_retreat_path_valid;
+  bool is_safe = false;
+  bool back_finished = false;
   Pose backed_pose;
 };
 
@@ -77,6 +75,7 @@ public:
   void onExit() override;
 
   void setParameters(const PullOutParameters & parameters);
+  void resetStatus() { status_ = PullOutStatus{}; };
 
 private:
   std::shared_ptr<PullOutBase> pull_out_planner_;
@@ -94,6 +93,7 @@ private:
   rclcpp::Publisher<PoseStamped>::SharedPtr backed_pose_pub_;
   rclcpp::Publisher<PoseArray>::SharedPtr full_path_pose_array_pub_;
   rclcpp::Clock::SharedPtr clock_;
+  std::unique_ptr<rclcpp::Time> last_route_received_time_;
 
   PathWithLaneId getReferencePath() const;
   lanelet::ConstLanelets getCurrentLanes() const;

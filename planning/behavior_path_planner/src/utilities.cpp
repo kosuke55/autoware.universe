@@ -694,7 +694,7 @@ PredictedObjects filterObjectsByLanelets(
 {
   PredictedObjects filtered_objects;
   const auto indices = filterObjectIndicesByLanelets(objects, target_lanelets);
-  for(const size_t i: indices){
+  for (const size_t i : indices) {
     filtered_objects.objects.push_back(objects.objects.at(i));
   }
   return filtered_objects;

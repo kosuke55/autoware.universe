@@ -17,8 +17,8 @@
 
 #include "behavior_path_planner/data_manager.hpp"
 #include "behavior_path_planner/parameters.hpp"
-#include "behavior_path_planner/scene_module/pull_out/pull_out_path.hpp"
 #include "behavior_path_planner/scene_module/pull_out/pull_out_parameters.hpp"
+#include "behavior_path_planner/scene_module/pull_out/pull_out_path.hpp"
 #include "behavior_path_planner/util/create_vehicle_footprint.hpp"
 
 #include <autoware_auto_planning_msgs/msg/path_with_lane_id.hpp>
@@ -48,11 +48,17 @@ public:
   }
 
   virtual boost::optional<PullOutPath> plan(Pose start_pose, Pose goal_pose) = 0;
-  PathWithLaneId getFullPath() const {return full_path_;}
+  PathWithLaneId getFullPath() const { return full_path_; }
   PathWithLaneId getCurrentPath() const { return paths_.at(current_path_idx_); }
   virtual void incrementPathIndex()
   {
     current_path_idx_ = std::min(current_path_idx_ + 1, paths_.size() - 1);
+  }
+  virtual void clear()
+  {
+    full_path_ = PathWithLaneId{};
+    paths_.clear();
+    current_path_idx_ = 0;
   }
 
 protected:
