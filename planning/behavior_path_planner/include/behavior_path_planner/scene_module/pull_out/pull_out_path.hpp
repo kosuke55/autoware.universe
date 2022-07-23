@@ -24,7 +24,7 @@ namespace behavior_path_planner
 using autoware_auto_planning_msgs::msg::PathWithLaneId;
 struct PullOutPath
 {
-  PathWithLaneId path;
+  std::vector<PathWithLaneId> paths;
   Pose start_pose;
   Pose end_pose;
   ShiftedPath shifted_path;

@@ -71,17 +71,24 @@ void PullOutModule::onEntry()
 {
   RCLCPP_DEBUG(getLogger(), "PULL_OUT onEntry");
   current_state_ = BT::NodeStatus::SUCCESS;
-  updatePullOutStatus();
 
   // initialize when receiving new route
   if (
     last_route_received_time_.get() == nullptr ||
     *last_route_received_time_ != planner_data_->route_handler->getRouteHeader().stamp) {
     pull_out_planner_->clear();
+    std::cerr << "receive new route, so reset status " << std::endl;
     resetStatus();
   }
   last_route_received_time_ =
     std::make_unique<rclcpp::Time>(planner_data_->route_handler->getRouteHeader().stamp);
+
+  // update pull out status only when before back finished(first approval)
+  // if (!status_.back_finished) {
+  if (true) { // todo
+    std::cerr << "back not finished, so update pull " << std::endl;
+    updatePullOutStatus();
+  }
 }
 
 void PullOutModule::onExit()
@@ -146,15 +153,13 @@ BehaviorModuleOutput PullOutModule::plan()
   PathWithLaneId path;
   if (status_.back_finished) {
     if (hasFinishedCurrentPath()) {
-      pull_out_planner_->incrementPathIndex();
+      std::cerr << "increment path idx" << std::endl;
+      incrementPathIndex();
     }
-    path = pull_out_planner_->getCurrentPath();
-    status_.back_finished = true;
+    path = getCurrentPath();
   } else {
     path = status_.backward_path;
   }
-
-  path.drivable_area = status_.pull_out_path.path.drivable_area;
 
   BehaviorModuleOutput output;
   output.path = std::make_shared<PathWithLaneId>(path);
@@ -191,33 +196,19 @@ BehaviorModuleOutput PullOutModule::planWaitingApproval()
   const auto current_lanes = getCurrentLanes();
   const auto shoulder_lanes = pull_out_utils::getPullOutLanes(current_lanes, planner_data_);
 
-  // updatePullOutStatus();
-
-  PathWithLaneId candidate_path;
-  // Generate drivable area
-  {
-    candidate_path = status_.back_finished ? status_.pull_out_path.path : status_.backward_path;
-
-    lanelet::ConstLanelets lanes;
-    lanes.insert(lanes.end(), current_lanes.begin(), current_lanes.end());
-    lanes.insert(lanes.end(), shoulder_lanes.begin(), shoulder_lanes.end());
-    const double resolution = common_parameters.drivable_area_resolution;
-    candidate_path.drivable_area = util::generateDrivableArea(
-      lanes, resolution, common_parameters.vehicle_length, planner_data_);
-    updateRTCStatus(0);
-  }
-
-  PathWithLaneId stop_path = candidate_path;
+  const auto candidate_path = status_.back_finished ? getCurrentPath() : status_.backward_path;
+  auto stop_path = candidate_path;
   for (auto & p : stop_path.points) {
     p.point.longitudinal_velocity_mps = 0.0;
   }
-  // stop_path = removeOverlappingPoints(stop_path); //tmp
+
   output.path = std::make_shared<PathWithLaneId>(stop_path);
   output.turn_signal_info =
     calcTurnSignalInfo(status_.pull_out_path.start_pose, status_.pull_out_path.end_pose);
   output.path_candidate = std::make_shared<PathWithLaneId>(candidate_path);
 
   waitApproval();
+  updateRTCStatus(0);  // todo : set distance
 
   publishDebugData();
   return output;
@@ -240,6 +231,17 @@ ParallelParkingParameters PullOutModule::getGeometricParallelParkingParameters()
   return params;
 }
 
+void PullOutModule::incrementPathIndex()
+{
+  status_.current_path_idx =
+    std::min(status_.current_path_idx + 1, status_.pull_out_path.paths.size() - 1);
+}
+
+PathWithLaneId PullOutModule::getCurrentPath() const
+{
+  return status_.pull_out_path.paths.at(status_.current_path_idx);
+}
+
 // running only when waiting approval
 void PullOutModule::updatePullOutStatus()
 {
@@ -259,7 +261,7 @@ void PullOutModule::updatePullOutStatus()
   // plan pull_out path with each backed pose
   bool found_safe_path = false;
   backed_pose_candidates_ = searchBackedPoses();  // the first backed_pose is current_pose
-  for (auto const & backed_pose : backed_pose_candidates_) {
+  for (const auto & backed_pose : backed_pose_candidates_) {
     pull_out_planner_->setPlannerData(planner_data_);
     const auto pull_out_path = pull_out_planner_->plan(backed_pose, goal_pose);
     if (pull_out_path) {  // found safe path
@@ -269,35 +271,32 @@ void PullOutModule::updatePullOutStatus()
       break;
     }
 
-    // backed_pose in not current_pose, so need back.
+    // backed_pose in not current_pose(index > 0), so need back.
+    std::cerr << "neet back" << std::endl;
     status_.back_finished = false;
   }
-  if (!found_safe_path) return;
+  if (!found_safe_path) {
+    std::cerr << "not found safe path" << std::endl;
+    RCLCPP_ERROR_THROTTLE(getLogger(), *clock_, 5000, "Not found safe pull out path");
+    status_.is_safe = false;
+    return;
+  }
 
   checkBackFinished();
   if (!status_.back_finished) {
     status_.backward_path = pull_out_utils::getBackwardPath(
       *route_handler, pull_out_lanes, current_pose, status_.backed_pose);
+    status_.backward_path.drivable_area = util::generateDrivableArea(
+      pull_out_lanes, common_parameters.drivable_area_resolution, common_parameters.vehicle_length,
+      planner_data_);
   }
 
   // Update status
   status_.is_safe = found_safe_path;
-
   status_.lane_follow_lane_ids = util::getIds(current_lanes);
   status_.pull_out_lane_ids = util::getIds(pull_out_lanes);
 
-  // Generate drivable area
-  {
-    lanelet::ConstLanelets lanes;
-    lanes.insert(lanes.end(), current_lanes.begin(), current_lanes.end());
-    lanes.insert(lanes.end(), pull_out_lanes.begin(), pull_out_lanes.end());
-
-    const double resolution = common_parameters.drivable_area_resolution;
-    status_.pull_out_path.path.drivable_area = util::generateDrivableArea(
-      lanes, resolution, common_parameters.vehicle_length, planner_data_);
-  }
-
-  status_.pull_out_path.path.header = planner_data_->route_handler->getRouteHeader();
+  // status_.pull_out_path.path.header = planner_data_->route_handler->getRouteHeader();
 }
 
 PathWithLaneId PullOutModule::getReferencePath() const
@@ -353,6 +352,7 @@ lanelet::ConstLanelets PullOutModule::getCurrentLanes() const
     common_parameters.forward_path_length);
 }
 
+// make this class?
 std::vector<Pose> PullOutModule::searchBackedPoses()
 {
   const auto current_pose = planner_data_->self_pose->pose;
@@ -382,12 +382,16 @@ std::vector<Pose> PullOutModule::searchBackedPoses()
        back_distance += search_resolution) {
     const auto backed_pose = calcLongitudinalOffsetPose(
       backward_shoulder_path.points, current_pose.position, -back_distance);
-    if (!backed_pose) continue;
+    if (!backed_pose) {
+      continue;
+    }
+
     if (util::checkCollisionBetweenFootprintAndObjects(
           local_vehicle_footprint, *backed_pose, *(planner_data_->dynamic_object),
           collision_check_margin)) {
       break;  // poses behind this has a collision, so break.
     };
+
     backed_poses.push_back(*backed_pose);
   }
   return backed_poses;
@@ -496,7 +500,8 @@ bool PullOutModule::isStopped()
 
 bool PullOutModule::hasFinishedCurrentPath()
 {
-  const auto current_path_end = status_.pull_out_path.path.points.back();
+  const auto current_path = getCurrentPath();
+  const auto current_path_end = current_path.points.back();
   const auto self_pose = planner_data_->self_pose->pose;
   const bool is_near_target = tier4_autoware_utils::calcDistance2d(current_path_end, self_pose) <
                               1.0;  // todo: make param

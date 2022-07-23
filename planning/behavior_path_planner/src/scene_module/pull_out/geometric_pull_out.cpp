@@ -64,7 +64,7 @@ boost::optional<PullOutPath> GeometricPullOut::plan(Pose start_pose, Pose goal_p
   // sync paths_
   paths_ = planner_.getPaths();
 
-  output.path = planner_.getCurrentPath();
+  output.paths = paths_;
   output.start_pose = planner_.getArcPaths().at(0).points.back().point.pose;
   output.end_pose = planner_.getArcPaths().at(1).points.back().point.pose;
 

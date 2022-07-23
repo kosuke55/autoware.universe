@@ -47,6 +47,7 @@ using lane_departure_checker::LaneDepartureChecker;
 struct PullOutStatus
 {
   PullOutPath pull_out_path;
+  size_t current_path_idx = 0;
   PathWithLaneId backward_path;
   lanelet::ConstLanelets current_lanes;
   lanelet::ConstLanelets pull_out_lanes;
@@ -106,6 +107,8 @@ private:
   // turn signal
   TurnSignalInfo calcTurnSignalInfo(const Pose start_pose, const Pose end_pose) const;
 
+  void incrementPathIndex();
+  PathWithLaneId getCurrentPath() const;
   void updatePullOutStatus();
   bool isInLane(
     const lanelet::ConstLanelet & candidate_lanelet,
