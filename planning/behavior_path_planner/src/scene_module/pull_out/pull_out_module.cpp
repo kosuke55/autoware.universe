@@ -49,10 +49,12 @@ PullOutModule::PullOutModule(
   vehicle_info_ = vehicle_info_util::VehicleInfoUtil(node).getVehicleInfo();
   lane_departure_checker_->setVehicleInfo(vehicle_info_);
 
-  pull_out_planner_ = std::make_shared<ShiftPullOut>(node, parameters, lane_departure_checker_);
+  // todo: make enable param
+  pull_out_planners_.push_back(
+    std::make_shared<ShiftPullOut>(node, parameters, lane_departure_checker_));
 
-  // pull_out_planner_ = std::make_shared<GeometricPullOut>(
-  //   node, parameters, getGeometricParallelParkingParameters(), lane_departure_checker_);
+  pull_out_planners_.push_back(std::make_shared<GeometricPullOut>(
+    node, parameters, getGeometricParallelParkingParameters(), lane_departure_checker_));
 
   // debug publisher
   backed_pose_pub_ = node.create_publisher<PoseStamped>("~/pull_out/debug/backed_pose", 1);
@@ -76,7 +78,9 @@ void PullOutModule::onEntry()
   if (
     last_route_received_time_.get() == nullptr ||
     *last_route_received_time_ != planner_data_->route_handler->getRouteHeader().stamp) {
-    pull_out_planner_->clear();
+    for (const auto & pull_out_planner : pull_out_planners_) {
+      pull_out_planner->clear();
+    }
     std::cerr << "receive new route, so reset status " << std::endl;
     resetStatus();
   }
@@ -86,7 +90,7 @@ void PullOutModule::onEntry()
   // update pull out status only when before back finished(first approval)
   // if (!status_.back_finished) {
   if (true) { // todo
-    std::cerr << "back not finished, so update pull " << std::endl;
+    // std::cerr << "back not finished, so update pull " << std::endl;
     updatePullOutStatus();
   }
 }
@@ -173,9 +177,24 @@ BehaviorModuleOutput PullOutModule::plan()
 
 CandidateOutput PullOutModule::planCandidate() const { return CandidateOutput{}; }
 
+std::shared_ptr<PullOutBase> PullOutModule::getCurrentPlanner() const
+{
+  for (const auto & planner : pull_out_planners_) {
+    if (status_.planner_type == planner->getPlannerType()) {
+      return planner;
+    }
+  }
+  return nullptr;
+}
+
 PathWithLaneId PullOutModule::getFullPath() const
 {
-  const auto pull_out_path = pull_out_planner_->getFullPath();
+  const auto pull_out_planner = getCurrentPlanner();
+  if(pull_out_planner == nullptr){
+    return PathWithLaneId{};
+  }
+
+  const auto pull_out_path = pull_out_planner->getFullPath();
 
   if (status_.back_finished) {
     // not need backward path or finish it
@@ -262,19 +281,25 @@ void PullOutModule::updatePullOutStatus()
   bool found_safe_path = false;
   backed_pose_candidates_ = searchBackedPoses();  // the first backed_pose is current_pose
   for (const auto & backed_pose : backed_pose_candidates_) {
-    pull_out_planner_->setPlannerData(planner_data_);
-    const auto pull_out_path = pull_out_planner_->plan(backed_pose, goal_pose);
-    if (pull_out_path) {  // found safe path
-      found_safe_path = true;
-      status_.pull_out_path = *pull_out_path;
-      status_.backed_pose = backed_pose;
+    // plan with each planner
+    for (const auto & planner : pull_out_planners_) {
+      planner->setPlannerData(planner_data_);
+      const auto pull_out_path = planner->plan(backed_pose, goal_pose);
+      if (pull_out_path) {  // found safe path
+        found_safe_path = true;
+        status_.pull_out_path = *pull_out_path;
+        status_.backed_pose = backed_pose;
+        status_.planner_type = planner->getPlannerType();
+        break;
+      }
+    }
+    if (found_safe_path) {
       break;
     }
-
     // backed_pose in not current_pose(index > 0), so need back.
-    std::cerr << "neet back" << std::endl;
     status_.back_finished = false;
   }
+
   if (!found_safe_path) {
     std::cerr << "not found safe path" << std::endl;
     RCLCPP_ERROR_THROTTLE(getLogger(), *clock_, 5000, "Not found safe pull out path");

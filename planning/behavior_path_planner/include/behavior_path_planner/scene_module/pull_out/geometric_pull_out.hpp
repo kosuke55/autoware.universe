@@ -35,6 +35,7 @@ public:
     const ParallelParkingParameters & parallel_parking_parameters,
     std::shared_ptr<LaneDepartureChecker> & lane_departure_checker);
 
+  PlannerType getPlannerType() override { return PlannerType::GEOMETRIC; };
   boost::optional<PullOutPath> plan(Pose start_pose, Pose goal_pose) override;
   void incrementPathIndex() override;
   void clear() override;

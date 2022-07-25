@@ -17,6 +17,7 @@
 
 #include "behavior_path_planner/data_manager.hpp"
 #include "behavior_path_planner/parameters.hpp"
+#include "behavior_path_planner/scene_module/pull_out/planner_type.hpp"
 #include "behavior_path_planner/scene_module/pull_out/pull_out_parameters.hpp"
 #include "behavior_path_planner/scene_module/pull_out/pull_out_path.hpp"
 #include "behavior_path_planner/util/create_vehicle_footprint.hpp"
@@ -47,6 +48,7 @@ public:
     planner_data_ = planner_data;
   }
 
+  virtual PlannerType getPlannerType() = 0;
   virtual boost::optional<PullOutPath> plan(Pose start_pose, Pose goal_pose) = 0;
   PathWithLaneId getFullPath() const { return full_path_; }
   PathWithLaneId getCurrentPath() const { return paths_.at(current_path_idx_); }

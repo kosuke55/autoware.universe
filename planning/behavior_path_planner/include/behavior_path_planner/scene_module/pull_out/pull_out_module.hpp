@@ -48,6 +48,7 @@ struct PullOutStatus
 {
   PullOutPath pull_out_path;
   size_t current_path_idx = 0;
+  PlannerType planner_type;
   PathWithLaneId backward_path;
   lanelet::ConstLanelets current_lanes;
   lanelet::ConstLanelets pull_out_lanes;
@@ -79,7 +80,7 @@ public:
   void resetStatus() { status_ = PullOutStatus{}; };
 
 private:
-  std::shared_ptr<PullOutBase> pull_out_planner_;
+  std::vector<std::shared_ptr<PullOutBase>> pull_out_planners_;
   PullOutParameters parameters_;
   PullOutStatus status_;
 
@@ -96,6 +97,7 @@ private:
   rclcpp::Clock::SharedPtr clock_;
   std::unique_ptr<rclcpp::Time> last_route_received_time_;
 
+  std::shared_ptr<PullOutBase> getCurrentPlanner() const;
   PathWithLaneId getReferencePath() const;
   lanelet::ConstLanelets getCurrentLanes() const;
   PathWithLaneId getFullPath() const;
