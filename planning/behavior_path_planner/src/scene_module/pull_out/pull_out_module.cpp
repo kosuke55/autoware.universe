@@ -87,16 +87,13 @@ void PullOutModule::onEntry()
     for (const auto & pull_out_planner : pull_out_planners_) {
       pull_out_planner->clear();
     }
-    std::cerr << "receive new route, so reset status " << std::endl;
+    RCLCPP_INFO(getLogger(), "Receive new route, so reset status");
     resetStatus();
   }
   last_route_received_time_ =
     std::make_unique<rclcpp::Time>(planner_data_->route_handler->getRouteHeader().stamp);
 
-  // update pull out status only when before back finished(first approval)
-  // if (!status_.back_finished) {
   updatePullOutStatus();
-  // }
 }
 
 void PullOutModule::onExit()
@@ -160,14 +157,13 @@ BehaviorModuleOutput PullOutModule::plan()
 {
   BehaviorModuleOutput output;
   if (!status_.is_safe) {
-    RCLCPP_ERROR_THROTTLE(getLogger(), *clock_, 5000, "Not found safe pull out path");
     return output;
   }
 
   PathWithLaneId path;
   if (status_.back_finished) {
     if (hasFinishedCurrentPath()) {
-      std::cerr << "increment path idx" << std::endl;
+      RCLCPP_INFO(getLogger(), "Increment path index");
       incrementPathIndex();
     }
     path = getCurrentPath();
@@ -320,7 +316,6 @@ void PullOutModule::updatePullOutStatus()
   }
 
   if (!found_safe_path) {
-    std::cerr << "not found safe path" << std::endl;
     RCLCPP_ERROR_THROTTLE(getLogger(), *clock_, 5000, "Not found safe pull out path");
     status_.is_safe = false;
     return;
@@ -466,7 +461,7 @@ void PullOutModule::checkBackFinished()
   const bool is_stopped = ego_vel < parameters_.th_stopped_velocity_mps;
 
   if (!status_.back_finished && is_near && is_stopped) {
-    std::cerr << "back finished" << std::endl;
+    RCLCPP_INFO(getLogger(), "back finished");
     status_.back_finished = true;
     last_back_finished_time_ = std::make_unique<rclcpp::Time>(clock_->now());
 
