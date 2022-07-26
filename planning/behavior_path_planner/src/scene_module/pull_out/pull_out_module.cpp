@@ -158,6 +158,12 @@ BT::NodeStatus PullOutModule::updateState()
 
 BehaviorModuleOutput PullOutModule::plan()
 {
+  BehaviorModuleOutput output;
+  if (!status_.is_safe) {
+    RCLCPP_ERROR_THROTTLE(getLogger(), *clock_, 5000, "Not found safe pull out path");
+    return output;
+  }
+
   PathWithLaneId path;
   if (status_.back_finished) {
     if (hasFinishedCurrentPath()) {
@@ -169,7 +175,6 @@ BehaviorModuleOutput PullOutModule::plan()
     path = status_.backward_path;
   }
 
-  BehaviorModuleOutput output;
   output.path = std::make_shared<PathWithLaneId>(path);
   output.turn_signal_info =
     calcTurnSignalInfo(status_.pull_out_path.start_pose, status_.pull_out_path.end_pose);
