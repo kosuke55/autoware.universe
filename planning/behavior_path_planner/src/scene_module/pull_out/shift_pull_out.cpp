@@ -49,29 +49,15 @@ boost::optional<PullOutPath> ShiftPullOut::plan(Pose start_pose, Pose goal_pose)
   lanes.insert(lanes.end(), road_lanes.begin(), road_lanes.end());
   lanes.insert(lanes.end(), shoulder_lanes.begin(), shoulder_lanes.end());
 
-  const double check_distance = 100.0;
-  const double collision_margin = 1.0;  // todo: make it param
-
   if (!shoulder_lanes.empty()) {
     // find candidate paths
     const auto pull_out_paths = getPullOutPaths(
       *route_handler, road_lanes, shoulder_lanes, start_pose, goal_pose, common_parameters,
       parameters_);
 
-    // get lanes used for detection
-    lanelet::ConstLanelets check_lanes;
-    if (!pull_out_paths.empty()) {
-      const auto & longest_path = pull_out_paths.front();
-      // we want to see check_distance [m] behind vehicle so add lane changing length
-      const double check_distance_with_path =
-        check_distance + longest_path.preparation_length + longest_path.pull_out_length;
-      check_lanes = route_handler->getCheckTargetLanesFromPath(
-        longest_path.paths.front(), shoulder_lanes, check_distance_with_path);
-    }
-
     // select valid path
     valid_paths = selectValidPaths(
-      pull_out_paths, road_lanes, check_lanes, *route_handler->getOverallGraphPtr(), start_pose,
+      pull_out_paths, road_lanes, *route_handler->getOverallGraphPtr(), start_pose,
       route_handler->isInGoalRouteSection(road_lanes.back()), goal_pose);
     if (valid_paths.empty()) {
       return boost::none;
@@ -82,10 +68,10 @@ boost::optional<PullOutPath> ShiftPullOut::plan(Pose start_pose, Pose goal_pose)
 
     // get safe path
     for (auto & pull_out_path : valid_paths) {
-      auto & shift_path = pull_out_path.paths.front();  // shift path is not separate but only one.
+      auto & shift_path = pull_out_path.partial_paths.front();  // shift path is not separate but only one.
       if (util::checkCollisionBetweenPathFootprintsAndObjects(
-            vehicle_footprint_, pull_out_path.paths.front(), shoulder_lane_objects,
-            collision_margin)) {
+            vehicle_footprint_, pull_out_path.partial_paths.front(), shoulder_lane_objects,
+            parameters_.collision_check_margin)) {
         continue;
       }
       full_path_ = shift_path;
@@ -210,11 +196,18 @@ std::vector<PullOutPath> ShiftPullOut::getPullOutPaths(
       }
 
       const auto combined_path = combineReferencePath(shoulder_reference_path, shifted_path.path);
-      candidate_path.paths.push_back(util::resamplePathWithSpline(combined_path, 1.0));
+      candidate_path.partial_paths.push_back(util::resamplePathWithSpline(combined_path, 1.0));
       candidate_path.shifted_path = shifted_path;
       candidate_path.shift_point = shift_point;
       candidate_path.start_pose = shift_point.start;
       candidate_path.end_pose = shift_point.end;
+
+      // add goal pose because resampling removes it
+      // but this point will be removed by SmoothGoalConnection again
+      PathPointWithLaneId goal_path_point = shifted_path.path.points.back();
+      goal_path_point.point.pose = goal_pose;
+      goal_path_point.point.longitudinal_velocity_mps = 0.0;
+      candidate_path.partial_paths.front().points.push_back(goal_path_point);
     } else {
       RCLCPP_ERROR_STREAM(
         rclcpp::get_logger("behavior_path_planner").get_child("pull_out").get_child("util"),
@@ -222,10 +215,17 @@ std::vector<PullOutPath> ShiftPullOut::getPullOutPaths(
       continue;
     }
 
-    // check lane departure
+    // check lane departure to shift end point
+    PathWithLaneId path_to_shift_end;
+    {
+      const auto & path_to_goal = candidate_path.partial_paths.front();
+      path_to_shift_end.points.insert(
+        path_to_shift_end.points.begin(), path_to_goal.points.begin(),
+        path_to_goal.points.begin() + *pull_out_end_idx + 1);
+    }
     auto lanes = road_lanelets;
     lanes.insert(lanes.end(), shoulder_lanelets.begin(), shoulder_lanelets.end());
-    if (lane_departure_checker_->checkPathWillLeaveLane(lanes, candidate_path.paths.front())) {
+    if (lane_departure_checker_->checkPathWillLeaveLane(lanes, path_to_shift_end)) {
       continue;
     }
 
@@ -237,7 +237,6 @@ std::vector<PullOutPath> ShiftPullOut::getPullOutPaths(
 
 std::vector<PullOutPath> ShiftPullOut::selectValidPaths(
   const std::vector<PullOutPath> & paths, const lanelet::ConstLanelets & road_lanes,
-  const lanelet::ConstLanelets & shoulder_lanes,
   const lanelet::routing::RoutingGraphContainer & overall_graphs, const Pose & current_pose,
   const bool isInGoalRouteSection, const Pose & goal_pose)
 {

@@ -49,15 +49,21 @@ PullOutModule::PullOutModule(
   vehicle_info_ = vehicle_info_util::VehicleInfoUtil(node).getVehicleInfo();
   lane_departure_checker_->setVehicleInfo(vehicle_info_);
 
-  // todo: make enable param
-  pull_out_planners_.push_back(
-    std::make_shared<ShiftPullOut>(node, parameters, lane_departure_checker_));
-
-  pull_out_planners_.push_back(std::make_shared<GeometricPullOut>(
-    node, parameters, getGeometricParallelParkingParameters(), lane_departure_checker_));
+  // set enabled planner
+  if (parameters_.enable_shift_pull_out) {
+    pull_out_planners_.push_back(
+      std::make_shared<ShiftPullOut>(node, parameters, lane_departure_checker_));
+  }
+  if (parameters_.enable_geometric_pull_out) {
+    pull_out_planners_.push_back(
+      std::make_shared<GeometricPullOut>(node, parameters, getGeometricPullOutParameters()));
+  }
+  if (pull_out_planners_.empty()) {
+    RCLCPP_DEBUG(getLogger(), "Not found enabled planner");
+  }
 
   // debug publisher
-  backed_pose_pub_ = node.create_publisher<PoseStamped>("~/pull_out/debug/backed_pose", 1);
+  pull_out_start_pose_pub_ = node.create_publisher<PoseStamped>("~/pull_out/debug/backed_pose", 1);
   full_path_pose_array_pub_ =
     node.create_publisher<PoseArray>("~/pull_out/debug/full_path_pose_array", 1);
 }
@@ -89,10 +95,8 @@ void PullOutModule::onEntry()
 
   // update pull out status only when before back finished(first approval)
   // if (!status_.back_finished) {
-  if (true) { // todo
-    // std::cerr << "back not finished, so update pull " << std::endl;
-    updatePullOutStatus();
-  }
+  updatePullOutStatus();
+  // }
 }
 
 void PullOutModule::onExit()
@@ -109,8 +113,8 @@ bool PullOutModule::isExecutionRequested() const
     return true;
   }
 
-  const bool is_stopped =
-    util::l2Norm(planner_data_->self_odometry->twist.twist.linear) < 0.01;  // todo: make param
+  const bool is_stopped = util::l2Norm(planner_data_->self_odometry->twist.twist.linear) <
+                          parameters_.th_arrived_distance_m;
 
   lanelet::Lanelet closest_shoulder_lanelet;
 
@@ -190,7 +194,7 @@ std::shared_ptr<PullOutBase> PullOutModule::getCurrentPlanner() const
 PathWithLaneId PullOutModule::getFullPath() const
 {
   const auto pull_out_planner = getCurrentPlanner();
-  if(pull_out_planner == nullptr){
+  if (pull_out_planner == nullptr) {
     return PathWithLaneId{};
   }
 
@@ -227,7 +231,8 @@ BehaviorModuleOutput PullOutModule::planWaitingApproval()
   output.path_candidate = std::make_shared<PathWithLaneId>(candidate_path);
 
   waitApproval();
-  updateRTCStatus(0);  // todo : set distance
+  // requset approval when stopped at the corresponding point, so distance is 0
+  updateRTCStatus(0.0);
 
   publishDebugData();
   return output;
@@ -238,14 +243,14 @@ void PullOutModule::setParameters(const PullOutParameters & parameters)
   parameters_ = parameters;
 }
 
-// todo: commonize this with pull_over? make own param file?
-ParallelParkingParameters PullOutModule::getGeometricParallelParkingParameters() const
+ParallelParkingParameters PullOutModule::getGeometricPullOutParameters() const
 {
   ParallelParkingParameters params;
 
-  params.th_arrived_distance_m = 1.0;
-  params.th_stopped_velocity_mps = 0.01;
-  params.arc_path_interval = 1.0;
+  params.th_arrived_distance_m = parameters_.th_arrived_distance_m;
+  params.th_stopped_velocity_mps = parameters_.th_stopped_velocity_mps;
+  params.arc_path_interval = parameters_.arc_path_interval;
+  params.departing_velocity = parameters_.geometric_pull_out_velocity;
 
   return params;
 }
@@ -253,12 +258,12 @@ ParallelParkingParameters PullOutModule::getGeometricParallelParkingParameters()
 void PullOutModule::incrementPathIndex()
 {
   status_.current_path_idx =
-    std::min(status_.current_path_idx + 1, status_.pull_out_path.paths.size() - 1);
+    std::min(status_.current_path_idx + 1, status_.pull_out_path.partial_paths.size() - 1);
 }
 
 PathWithLaneId PullOutModule::getCurrentPath() const
 {
-  return status_.pull_out_path.paths.at(status_.current_path_idx);
+  return status_.pull_out_path.partial_paths.at(status_.current_path_idx);
 }
 
 // running only when waiting approval
@@ -266,6 +271,8 @@ void PullOutModule::updatePullOutStatus()
 {
   const auto & route_handler = planner_data_->route_handler;
   const auto common_parameters = planner_data_->parameters;
+  const auto current_pose = planner_data_->self_pose->pose;
+  const auto goal_pose = planner_data_->route_handler->getGoalPose();
 
   const auto current_lanes = getCurrentLanes();
   status_.current_lanes = current_lanes;
@@ -274,21 +281,28 @@ void PullOutModule::updatePullOutStatus()
   const auto pull_out_lanes = pull_out_utils::getPullOutLanes(current_lanes, planner_data_);
   status_.pull_out_lanes = pull_out_lanes;
 
-  const auto current_pose = planner_data_->self_pose->pose;
-  const auto goal_pose = planner_data_->route_handler->getGoalPose();
+  // search pull out start candidates backward
+  std::vector<Pose> pull_out_start_candidates;
+  {
+    if (parameters_.enable_back) {
+      // the first element is current_pose
+      pull_out_start_candidates = searchBackedPoses();
+    } else {
+      // pull_out_start candidate is only current pose
+      pull_out_start_candidates.push_back(current_pose);
+    }
+  }
 
-  // plan pull_out path with each backed pose
   bool found_safe_path = false;
-  backed_pose_candidates_ = searchBackedPoses();  // the first backed_pose is current_pose
-  for (const auto & backed_pose : backed_pose_candidates_) {
+  for (const auto & pull_out_start_pose : pull_out_start_candidates) {
     // plan with each planner
     for (const auto & planner : pull_out_planners_) {
       planner->setPlannerData(planner_data_);
-      const auto pull_out_path = planner->plan(backed_pose, goal_pose);
+      const auto pull_out_path = planner->plan(pull_out_start_pose, goal_pose);
       if (pull_out_path) {  // found safe path
         found_safe_path = true;
         status_.pull_out_path = *pull_out_path;
-        status_.backed_pose = backed_pose;
+        status_.pull_out_start_pose = pull_out_start_pose;
         status_.planner_type = planner->getPlannerType();
         break;
       }
@@ -296,7 +310,7 @@ void PullOutModule::updatePullOutStatus()
     if (found_safe_path) {
       break;
     }
-    // backed_pose in not current_pose(index > 0), so need back.
+    // pull out start pose is not current_pose(index > 0), so need back.
     status_.back_finished = false;
   }
 
@@ -310,7 +324,7 @@ void PullOutModule::updatePullOutStatus()
   checkBackFinished();
   if (!status_.back_finished) {
     status_.backward_path = pull_out_utils::getBackwardPath(
-      *route_handler, pull_out_lanes, current_pose, status_.backed_pose);
+      *route_handler, pull_out_lanes, current_pose, status_.pull_out_start_pose);
     status_.backward_path.drivable_area = util::generateDrivableArea(
       pull_out_lanes, common_parameters.drivable_area_resolution, common_parameters.vehicle_length,
       planner_data_);
@@ -322,40 +336,6 @@ void PullOutModule::updatePullOutStatus()
   status_.pull_out_lane_ids = util::getIds(pull_out_lanes);
 
   // status_.pull_out_path.path.header = planner_data_->route_handler->getRouteHeader();
-}
-
-PathWithLaneId PullOutModule::getReferencePath() const
-{
-  PathWithLaneId reference_path;
-
-  const auto & route_handler = planner_data_->route_handler;
-  const auto current_pose = planner_data_->self_pose->pose;
-  const auto goal_pose = planner_data_->route_handler->getGoalPose();
-  const auto common_parameters = planner_data_->parameters;
-
-  // Set header
-  reference_path.header = route_handler->getRouteHeader();
-
-  const auto current_lanes = getCurrentLanes();
-  const auto pull_out_lanes = pull_out_utils::getPullOutLanes(current_lanes, planner_data_);
-
-  if (current_lanes.empty()) {
-    return reference_path;
-  }
-
-  reference_path = util::getCenterLinePath(
-    *route_handler, pull_out_lanes, current_pose, common_parameters.backward_path_length,
-    common_parameters.forward_path_length, common_parameters);
-
-  reference_path = util::setDecelerationVelocity(
-    *route_handler, reference_path, current_lanes, parameters_.after_pull_out_straight_distance,
-    common_parameters.minimum_pull_out_length, parameters_.before_pull_out_straight_distance,
-    parameters_.deceleration_interval, goal_pose);
-
-  reference_path.drivable_area = util::generateDrivableArea(
-    pull_out_lanes, common_parameters.drivable_area_resolution, common_parameters.vehicle_length,
-    planner_data_);
-  return reference_path;
 }
 
 lanelet::ConstLanelets PullOutModule::getCurrentLanes() const
@@ -381,10 +361,6 @@ lanelet::ConstLanelets PullOutModule::getCurrentLanes() const
 std::vector<Pose> PullOutModule::searchBackedPoses()
 {
   const auto current_pose = planner_data_->self_pose->pose;
-  const double search_resolution = 2.0;
-  const double maximum_back_distance = 15;
-  const double collision_check_margin = 1.0;
-
   const auto current_lanes = getCurrentLanes();
   const auto pull_out_lanes = pull_out_utils::getPullOutLanes(current_lanes, planner_data_);
 
@@ -403,8 +379,8 @@ std::vector<Pose> PullOutModule::searchBackedPoses()
   // check collision between footprint and onject at the backed pose
   const auto local_vehicle_footprint = createVehicleFootprint(vehicle_info_);
   std::vector<Pose> backed_poses;
-  for (double back_distance = 0.0; back_distance <= maximum_back_distance;
-       back_distance += search_resolution) {
+  for (double back_distance = 0.0; back_distance <= parameters_.max_back_distance;
+       back_distance += parameters_.backward_search_resolution) {
     const auto backed_pose = calcLongitudinalOffsetPose(
       backward_shoulder_path.points, current_pose.position, -back_distance);
     if (!backed_pose) {
@@ -413,7 +389,7 @@ std::vector<Pose> PullOutModule::searchBackedPoses()
 
     if (util::checkCollisionBetweenFootprintAndObjects(
           local_vehicle_footprint, *backed_pose, *(planner_data_->dynamic_object),
-          collision_check_margin)) {
+          parameters_.collision_check_margin)) {
       break;  // poses behind this has a collision, so break.
     };
 
@@ -477,14 +453,14 @@ void PullOutModule::checkBackFinished()
 {
   // check ego car is close enough to goal pose
   const auto current_pose = planner_data_->self_pose->pose;
-  const auto backed_pose = status_.backed_pose;
-  const auto distance = tier4_autoware_utils::calcDistance2d(current_pose, backed_pose);
+  const auto distance =
+    tier4_autoware_utils::calcDistance2d(current_pose, status_.pull_out_start_pose);
 
-  const bool is_near_backed_pose = distance < 1.0;  // todo: param
+  const bool is_near = distance < parameters_.th_arrived_distance_m;
   const double ego_vel = util::l2Norm(planner_data_->self_odometry->twist.twist.linear);
-  const bool is_stopped = ego_vel < 0.01;  // todo: param
+  const bool is_stopped = ego_vel < parameters_.th_stopped_velocity_mps;
 
-  if (!status_.back_finished && is_near_backed_pose && is_stopped) {
+  if (!status_.back_finished && is_near && is_stopped) {
     std::cerr << "back finished" << std::endl;
     status_.back_finished = true;
     last_back_finished_time_ = std::make_unique<rclcpp::Time>(clock_->now());
@@ -493,6 +469,7 @@ void PullOutModule::checkBackFinished()
     waitApproval();
     removeRTCStatus();
     uuid_ = generateUUID();
+    // requset approval when stopped at the corresponding point, so distance is 0
     updateRTCStatus(0.0);
     current_state_ = BT::NodeStatus::SUCCESS;  // for breaking loop
   }
@@ -505,8 +482,7 @@ bool PullOutModule::isStopped()
   while (true) {
     const auto time_diff = rclcpp::Time(odometry_buffer_.back()->header.stamp) -
                            rclcpp::Time(odometry_buffer_.front()->header.stamp);
-    if (time_diff.seconds() < 1.0) {  // todo: make param
-      // if (time_diff.seconds() < parameters_.th_stopped_time_sec) {
+    if (time_diff.seconds() < parameters_.th_stopped_time_sec) {
       break;
     }
     odometry_buffer_.pop_front();
@@ -514,8 +490,7 @@ bool PullOutModule::isStopped()
   bool is_stopped = true;
   for (const auto & odometry : odometry_buffer_) {
     const double ego_vel = util::l2Norm(odometry->twist.twist.linear);
-    if (ego_vel > 0.01) {  // todo: make param
-                           // if (ego_vel > parameters_.th_stopped_velocity_mps) {
+    if (ego_vel > parameters_.th_stopped_velocity_mps) {
       is_stopped = false;
       break;
     }
@@ -529,8 +504,7 @@ bool PullOutModule::hasFinishedCurrentPath()
   const auto current_path_end = current_path.points.back();
   const auto self_pose = planner_data_->self_pose->pose;
   const bool is_near_target = tier4_autoware_utils::calcDistance2d(current_path_end, self_pose) <
-                              1.0;  // todo: make param
-                                    // parameters_.th_arrived_distance_m;
+                              parameters_.th_arrived_distance_m;
 
   return is_near_target && isStopped();
 }
@@ -542,8 +516,8 @@ TurnSignalInfo PullOutModule::calcTurnSignalInfo(const Pose start_pose, const Po
   // turn hazard light when backward driving
   if (!status_.back_finished) {
     turn_signal.hazard_signal.command = HazardLightsCommand::ENABLE;
-    turn_signal.signal_distance =
-      tier4_autoware_utils::calcDistance2d(status_.backed_pose, planner_data_->self_pose->pose);
+    turn_signal.signal_distance = tier4_autoware_utils::calcDistance2d(
+      status_.pull_out_start_pose, planner_data_->self_pose->pose);
     return turn_signal;
   }
 
@@ -560,7 +534,7 @@ TurnSignalInfo PullOutModule::calcTurnSignalInfo(const Pose start_pose, const Po
   }
 
   // turn on right signal until passing pull_out end point
-  const double turn_signal_off_buffer = 3.0;
+  const double turn_signal_off_buffer = std::min(parameters_.pull_out_finish_judge_buffer, 3.0);
   if (distance_from_pull_out_end < turn_signal_off_buffer) {
     turn_signal.turn_signal.command = TurnIndicatorsCommand::ENABLE_RIGHT;
   } else {
@@ -576,10 +550,10 @@ void PullOutModule::publishDebugData() const
 {
   auto header = planner_data_->route_handler->getRouteHeader();
 
-  PoseStamped backed_pose;
-  backed_pose.pose = status_.backed_pose;
-  backed_pose.header = header;
-  backed_pose_pub_->publish(backed_pose);
+  PoseStamped pull_out_start_pose;
+  pull_out_start_pose.pose = status_.pull_out_start_pose;
+  pull_out_start_pose.header = header;
+  pull_out_start_pose_pub_->publish(pull_out_start_pose);
 
   auto full_path_pose_array = util::convertToGeometryPoseArray(getFullPath());
   full_path_pose_array.header = header;

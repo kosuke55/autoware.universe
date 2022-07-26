@@ -92,7 +92,7 @@ BehaviorModuleOutput PullOverModule::run()
   return plan();
 }
 
-ParallelParkingParameters PullOverModule::getGeometricParallelParkingParameters() const
+ParallelParkingParameters PullOverModule::getGeometricPullOutParameters() const
 {
   ParallelParkingParameters params;
 
@@ -134,7 +134,7 @@ void PullOverModule::onEntry()
     *last_received_time_ != planner_data_->route_handler->getRouteHeader().stamp) {
     // Initialize parallel parking planner status
     parallel_parking_planner_.clear();
-    parallel_parking_parameters_ = getGeometricParallelParkingParameters();
+    parallel_parking_parameters_ = getGeometricPullOutParameters();
 
     resetStatus();
   }

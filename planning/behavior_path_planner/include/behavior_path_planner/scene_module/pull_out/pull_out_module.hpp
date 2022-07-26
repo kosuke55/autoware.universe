@@ -56,7 +56,7 @@ struct PullOutStatus
   std::vector<uint64_t> pull_out_lane_ids;
   bool is_safe = false;
   bool back_finished = false;
-  Pose backed_pose;
+  Pose pull_out_start_pose;
 };
 
 class PullOutModule : public SceneModuleInterface
@@ -92,16 +92,15 @@ private:
   std::unique_ptr<rclcpp::Time> last_back_finished_time_;
   std::deque<nav_msgs::msg::Odometry::ConstSharedPtr> odometry_buffer_;
 
-  rclcpp::Publisher<PoseStamped>::SharedPtr backed_pose_pub_;
+  rclcpp::Publisher<PoseStamped>::SharedPtr pull_out_start_pose_pub_;
   rclcpp::Publisher<PoseArray>::SharedPtr full_path_pose_array_pub_;
   rclcpp::Clock::SharedPtr clock_;
   std::unique_ptr<rclcpp::Time> last_route_received_time_;
 
   std::shared_ptr<PullOutBase> getCurrentPlanner() const;
-  PathWithLaneId getReferencePath() const;
   lanelet::ConstLanelets getCurrentLanes() const;
   PathWithLaneId getFullPath() const;
-  ParallelParkingParameters getGeometricParallelParkingParameters() const;
+  ParallelParkingParameters getGeometricPullOutParameters() const;
   std::vector<Pose> searchBackedPoses();
 
   std::shared_ptr<LaneDepartureChecker> lane_departure_checker_;

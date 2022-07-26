@@ -119,10 +119,11 @@ bool GeometricParallelParking::isEnoughDistanceToStart(const Pose & start_pose) 
   }
 
   // not enogh to restart from stopped
+  constexpr double min_restart_distance = 3.0;
   if (
     current_vel < parameters_.th_stopped_velocity_mps &&
     current_to_start.position.x > parameters_.th_arrived_distance_m &&
-    current_to_start.position.x < 3.0) {
+    current_to_start.position.x < min_restart_distance) {
     return false;
   }
 
@@ -197,8 +198,10 @@ bool GeometricParallelParking::plan(
   if (is_forward) {
     // When turning forward to the right, the front left goes out,
     // so reduce the steer angle at that time for seach no lane departure path.
-    const double start_pose_offset = 0.0;
-    for (double steer = max_steer_rad_; steer > 0.05; steer -= 0.1) {
+    constexpr double start_pose_offset = 0.0;
+    constexpr double min_steer_rad = 0.05;
+    constexpr double steer_interval = 0.1;
+    for (double steer = max_steer_rad_; steer > min_steer_rad; steer -= steer_interval) {
       paths_.clear();
       const double R_E_r = common_params.wheel_base / std::tan(steer);
       const Pose start_pose = calcStartPose(arc_end_pose, start_pose_offset, R_E_r, is_forward);
@@ -214,7 +217,10 @@ bool GeometricParallelParking::plan(
     // When turning backward to the left, the front right goes out,
     // so make the parking start point in front for seach no lane departure path
     // (same to reducing the steer angle)
-    for (double start_pose_offset = 0; start_pose_offset < 5.0; start_pose_offset += 1.0) {
+    constexpr double max_offset = 5.0;
+    constexpr double offset_interval = 1.0;
+    for (double start_pose_offset = 0; start_pose_offset < max_offset;
+         start_pose_offset += offset_interval) {
       const Pose start_pose = calcStartPose(arc_end_pose, start_pose_offset, R_E_min_, is_forward);
       const auto paths = generateParkingPaths(
         start_pose, goal_pose, R_E_min_, lanes, is_forward, end_pose_offset,
@@ -239,11 +245,13 @@ bool GeometricParallelParking::planDeparting(
   auto lanes = road_lanes;
   lanes.insert(lanes.end(), shoulder_lanes.begin(), shoulder_lanes.end());
 
-  const bool is_forward = false;          // parking backward means departing foward
-  const double start_pose_offset = 0.0;   // start_pose is current_pose
-  const double departing_velocity = 1.0;  // todo: make param
+  constexpr bool is_forward = false;          // parking backward means departing foward
+  constexpr double start_pose_offset = 0.0;   // start_pose is current_pose
+  constexpr double max_offset = 5.0;
+  constexpr double offset_interval = 1.0;
 
-  for (double end_pose_offset = 0; end_pose_offset < 5.0; end_pose_offset += 1.0) {
+  for (double end_pose_offset = 0; end_pose_offset < max_offset;
+       end_pose_offset += offset_interval) {
     // departing end pose which is the second arc path end
     const Pose end_pose = calcStartPose(start_pose, end_pose_offset, R_E_min_, is_forward);
 
@@ -279,7 +287,7 @@ bool GeometricParallelParking::planDeparting(
     removeOverlappingPoints(paths.back());
 
     // set departing velocity and stop velocity at the end of the path
-    setVelocityToArcPaths(paths, departing_velocity);
+    setVelocityToArcPaths(paths, parameters_.departing_velocity);
     paths_ = paths;
 
     return true;

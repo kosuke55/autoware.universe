@@ -20,24 +20,24 @@ namespace behavior_path_planner
 {
 struct PullOutParameters
 {
-  double min_stop_distance;
-  double stop_time;
-  double hysteresis_buffer_distance;
-  double pull_out_prepare_duration;
-  double pull_out_duration;
+  bool enable_shift_pull_out;
+  bool enable_geometric_pull_out;
+  bool enable_back;
+  double th_arrived_distance_m;
+  double th_stopped_velocity_mps;
+  double th_stopped_time_sec;
+  double collision_check_margin;
   double pull_out_finish_judge_buffer;
+  // search start pose backward
+  double max_back_distance;
+  double backward_search_resolution;
+  double min_stop_distance;
+  // geometric pull out
+  double geometric_pull_out_velocity;
+  double arc_path_interval;
+  // shift pull out
   double shift_pull_out_velocity;
-  double prediction_duration;
-  double prediction_time_resolution;
-  double static_obstacle_velocity_thresh;
-  double maximum_deceleration;
   int pull_out_sampling_num;
-  bool enable_collision_check_at_prepare_phase;
-  bool use_predicted_path_outside_lanelet;
-  bool use_all_predicted_path;
-  bool use_dynamic_object;
-  bool enable_blocked_by_obstacle;
-  double pull_out_search_distance;
   double before_pull_out_straight_distance;
   double after_pull_out_straight_distance;
   double maximum_lateral_jerk;

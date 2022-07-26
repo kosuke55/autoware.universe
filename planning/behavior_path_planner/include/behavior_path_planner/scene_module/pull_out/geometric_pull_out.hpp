@@ -19,28 +19,22 @@
 #include "behavior_path_planner/scene_module/pull_out/pull_out_path.hpp"
 #include "behavior_path_planner/scene_module/utils/geometric_parallel_parking.hpp"
 
-#include <lane_departure_checker/lane_departure_checker.hpp>
-
 #include <autoware_auto_planning_msgs/msg/path_with_lane_id.hpp>
 
 namespace behavior_path_planner
 {
-using lane_departure_checker::LaneDepartureChecker;
-
 class GeometricPullOut : public PullOutBase
 {
 public:
   explicit GeometricPullOut(
     rclcpp::Node & node, const PullOutParameters & parameters,
-    const ParallelParkingParameters & parallel_parking_parameters,
-    std::shared_ptr<LaneDepartureChecker> & lane_departure_checker);
+    const ParallelParkingParameters & parallel_parking_parameters);
 
   PlannerType getPlannerType() override { return PlannerType::GEOMETRIC; };
   boost::optional<PullOutPath> plan(Pose start_pose, Pose goal_pose) override;
   void incrementPathIndex() override;
   void clear() override;
 
-  std::shared_ptr<LaneDepartureChecker> lane_departure_checker_;
   GeometricParallelParking planner_;
   ParallelParkingParameters parallel_parking_parameters_;
 };

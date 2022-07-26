@@ -54,6 +54,7 @@ struct ParallelParkingParameters
   double after_backward_parking_straight_distance;
   double forward_parking_velocity;
   double backward_parking_velocity;
+  double departing_velocity;
   double arc_path_interval;
   double min_acc;
 };

@@ -44,7 +44,6 @@ public:
 
   std::vector<PullOutPath> selectValidPaths(
     const std::vector<PullOutPath> & paths, const lanelet::ConstLanelets & current_lanes,
-    const lanelet::ConstLanelets & target_lanes,
     const lanelet::routing::RoutingGraphContainer & overall_graphs, const Pose & current_pose,
     const bool isInGoalRouteSection, const Pose & goal_pose);
 

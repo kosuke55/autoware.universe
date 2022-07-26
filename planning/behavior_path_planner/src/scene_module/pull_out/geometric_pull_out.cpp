@@ -27,11 +27,8 @@ using pull_out_utils::getPullOutLanes;
 
 GeometricPullOut::GeometricPullOut(
   rclcpp::Node & node, const PullOutParameters & parameters,
-  const ParallelParkingParameters & parallel_parking_parameters,
-  std::shared_ptr<LaneDepartureChecker> & lane_departure_checker)
-: PullOutBase{node, parameters},
-  parallel_parking_parameters_{parallel_parking_parameters},
-  lane_departure_checker_{lane_departure_checker}
+  const ParallelParkingParameters & parallel_parking_parameters)
+: PullOutBase{node, parameters}, parallel_parking_parameters_{parallel_parking_parameters}
 {
 }
 
@@ -64,7 +61,7 @@ boost::optional<PullOutPath> GeometricPullOut::plan(Pose start_pose, Pose goal_p
   // sync paths_
   paths_ = planner_.getPaths();
 
-  output.paths = paths_;
+  output.partial_paths = paths_;
   output.start_pose = planner_.getArcPaths().at(0).points.back().point.pose;
   output.end_pose = planner_.getArcPaths().at(1).points.back().point.pose;
 
