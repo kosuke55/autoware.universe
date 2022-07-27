@@ -68,7 +68,7 @@ PathWithLaneId getBackwardPath(
 
   PathWithLaneId backward_path;
   {
-    // foward center line path
+    // forward center line path
     backward_path = route_handler.getCenterLinePath(shoulder_lanelets, s_start, s_end, true);
 
     // backward center line path
