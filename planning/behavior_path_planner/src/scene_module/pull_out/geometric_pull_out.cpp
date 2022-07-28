@@ -48,39 +48,18 @@ boost::optional<PullOutPath> GeometricPullOut::plan(Pose start_pose, Pose goal_p
 
   // collsion check with objects in shoulder lanes
   const double collision_margin = 1.0;  // todo: make param
-  const auto full_path = planner_.getFullPath();
+  const auto arc_path = planner_.getArcPath();
   const auto shoulder_lane_objects =
     util::filterObjectsByLanelets(*(planner_data_->dynamic_object), shoulder_lanes);
   if (util::checkCollisionBetweenPathFootprintsAndObjects(
-        vehicle_footprint_, full_path, shoulder_lane_objects, collision_margin)) {
+        vehicle_footprint_, arc_path, shoulder_lane_objects, collision_margin)) {
     return boost::none;
   }
 
-  full_path_ = full_path;
-
-  // sync paths_
-  paths_ = planner_.getPaths();
-
-  output.partial_paths = paths_;
+  output.partial_paths = planner_.getPaths();
   output.start_pose = planner_.getArcPaths().at(0).points.back().point.pose;
   output.end_pose = planner_.getArcPaths().at(1).points.back().point.pose;
 
   return output;
 }
-
-void GeometricPullOut::incrementPathIndex()
-{
-  current_path_idx_ = std::min(current_path_idx_ + 1, paths_.size() - 1);
-  // also need the internal index for planner_.getCurrentPath()
-  planner_.incrementPathIndex();
-}
-
-void GeometricPullOut::clear()
-{
-  full_path_ = PathWithLaneId{};
-  paths_.clear();
-  current_path_idx_ = 0;
-  planner_.clear();
-}
-
 }  // namespace behavior_path_planner

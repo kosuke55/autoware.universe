@@ -133,7 +133,6 @@ void PullOverModule::onEntry()
     last_received_time_.get() == nullptr ||
     *last_received_time_ != planner_data_->route_handler->getRouteHeader().stamp) {
     // Initialize parallel parking planner status
-    parallel_parking_planner_.clear();
     parallel_parking_parameters_ = getGeometricPullOutParameters();
 
     resetStatus();

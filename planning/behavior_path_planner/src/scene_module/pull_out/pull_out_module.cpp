@@ -84,9 +84,6 @@ void PullOutModule::onEntry()
   if (
     last_route_received_time_.get() == nullptr ||
     *last_route_received_time_ != planner_data_->route_handler->getRouteHeader().stamp) {
-    for (const auto & pull_out_planner : pull_out_planners_) {
-      pull_out_planner->clear();
-    }
     RCLCPP_INFO(getLogger(), "Receive new route, so reset status");
     resetStatus();
   }
@@ -199,7 +196,12 @@ PathWithLaneId PullOutModule::getFullPath() const
     return PathWithLaneId{};
   }
 
-  const auto pull_out_path = pull_out_planner->getFullPath();
+  // combine partial pull out path
+  PathWithLaneId pull_out_path;
+  for (const auto partial_path : status_.pull_out_path.partial_paths) {
+    pull_out_path.points.insert(
+      pull_out_path.points.end(), partial_path.points.begin(), partial_path.points.end());
+  }
 
   if (status_.back_finished) {
     // not need backward path or finish it

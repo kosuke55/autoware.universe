@@ -71,7 +71,6 @@ public:
     const std::shared_ptr<const PlannerData> & planner_data,
     const ParallelParkingParameters & parameters);
   void incrementPathIndex();
-  void clear();
 
   std::vector<PathWithLaneId> getArcPaths() const { return arc_paths_; }
   std::vector<PathWithLaneId> getPaths() const { return paths_; }

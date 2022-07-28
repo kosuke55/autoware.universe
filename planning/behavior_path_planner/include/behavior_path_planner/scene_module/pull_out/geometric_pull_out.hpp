@@ -32,8 +32,6 @@ public:
 
   PlannerType getPlannerType() override { return PlannerType::GEOMETRIC; };
   boost::optional<PullOutPath> plan(Pose start_pose, Pose goal_pose) override;
-  void incrementPathIndex() override;
-  void clear() override;
 
   GeometricParallelParking planner_;
   ParallelParkingParameters parallel_parking_parameters_;

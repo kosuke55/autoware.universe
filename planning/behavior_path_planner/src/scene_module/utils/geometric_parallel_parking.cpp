@@ -80,8 +80,8 @@ PathWithLaneId GeometricParallelParking::getCurrentPath() const
 PathWithLaneId GeometricParallelParking::getFullPath() const
 {
   PathWithLaneId path{};
-  for (const auto & p : paths_) {
-    path.points.insert(path.points.end(), p.points.begin(), p.points.end());
+  for (const auto & partial_path : paths_) {
+    path.points.insert(path.points.end(), partial_path.points.begin(), partial_path.points.end());
   }
 
   return removeOverlappingPoints(path);
@@ -90,17 +90,10 @@ PathWithLaneId GeometricParallelParking::getFullPath() const
 PathWithLaneId GeometricParallelParking::getArcPath() const
 {
   PathWithLaneId path{};
-  for (size_t i = 1; i < paths_.size(); i++) {
-    const auto p = paths_.at(i);
-    path.points.insert(path.points.end(), p.points.begin(), p.points.end());
+  for (const auto arc_path : arc_paths_) {
+    path.points.insert(path.points.end(), arc_path.points.begin(), arc_path.points.end());
   }
   return path;
-}
-
-void GeometricParallelParking::clear()
-{
-  current_path_idx_ = 0;
-  paths_.clear();
 }
 
 bool GeometricParallelParking::isParking() const { return current_path_idx_ > 0; }
@@ -175,6 +168,7 @@ std::vector<PathWithLaneId> GeometricParallelParking::generateParkingPaths(
 
 void GeometricParallelParking::clearPaths()
 {
+  current_path_idx_ = 0;
   arc_paths_.clear();
   path_pose_array_.poses.clear();
   paths_.clear();

@@ -73,7 +73,6 @@ boost::optional<PullOutPath> ShiftPullOut::plan(Pose start_pose, Pose goal_pose)
             parameters_.collision_check_margin)) {
         continue;
       }
-      full_path_ = shift_path;
 
       // Generate drivable area
       const double resolution = common_parameters.drivable_area_resolution;
