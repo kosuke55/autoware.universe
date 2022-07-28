@@ -15,8 +15,8 @@
 #ifndef BEHAVIOR_PATH_PLANNER__SCENE_MODULE__PULL_OUT__SHIFT_PULL_OUT_HPP_
 #define BEHAVIOR_PATH_PLANNER__SCENE_MODULE__PULL_OUT__SHIFT_PULL_OUT_HPP_
 
-#include "behavior_path_planner/scene_module/pull_out/pull_out_base.hpp"
 #include "behavior_path_planner/scene_module/pull_out/pull_out_path.hpp"
+#include "behavior_path_planner/scene_module/pull_out/pull_out_planner_base.hpp"
 
 #include <lane_departure_checker/lane_departure_checker.hpp>
 
@@ -26,7 +26,7 @@ namespace behavior_path_planner
 {
 using lane_departure_checker::LaneDepartureChecker;
 
-class ShiftPullOut : public PullOutBase
+class ShiftPullOut : public PullOutPlannerBase
 {
 public:
   explicit ShiftPullOut(
@@ -44,8 +44,7 @@ public:
 
   std::vector<PullOutPath> selectValidPaths(
     const std::vector<PullOutPath> & paths, const lanelet::ConstLanelets & current_lanes,
-    const lanelet::routing::RoutingGraphContainer & overall_graphs, const Pose & current_pose,
-    const bool isInGoalRouteSection, const Pose & goal_pose);
+    const Pose & current_pose, const bool isInGoalRouteSection, const Pose & goal_pose);
 
   bool hasEnoughDistance(
     const PullOutPath & path, const lanelet::ConstLanelets & current_lanes,

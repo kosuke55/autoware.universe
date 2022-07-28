@@ -29,7 +29,7 @@ using pull_out_utils::getPullOutLanes;
 ShiftPullOut::ShiftPullOut(
   rclcpp::Node & node, const PullOutParameters & parameters,
   std::shared_ptr<LaneDepartureChecker> & lane_departure_checker)
-: PullOutBase{node, parameters}, lane_departure_checker_{lane_departure_checker}
+: PullOutPlannerBase{node, parameters}, lane_departure_checker_{lane_departure_checker}
 {
 }
 
@@ -38,8 +38,6 @@ boost::optional<PullOutPath> ShiftPullOut::plan(Pose start_pose, Pose goal_pose)
   PullOutPath safe_path;
   std::vector<PullOutPath> valid_paths;
   const auto & route_handler = planner_data_->route_handler;
-  const auto current_pose = planner_data_->self_pose->pose;
-  const auto current_twist = planner_data_->self_odometry->twist.twist;
   const auto common_parameters = planner_data_->parameters;
   const auto dynamic_objects = planner_data_->dynamic_object;
   const auto road_lanes = util::getCurrentLanes(planner_data_);
@@ -57,7 +55,7 @@ boost::optional<PullOutPath> ShiftPullOut::plan(Pose start_pose, Pose goal_pose)
 
     // select valid path
     valid_paths = selectValidPaths(
-      pull_out_paths, road_lanes, *route_handler->getOverallGraphPtr(), start_pose,
+      pull_out_paths, road_lanes, start_pose,
       route_handler->isInGoalRouteSection(road_lanes.back()), goal_pose);
     if (valid_paths.empty()) {
       return boost::none;
@@ -68,7 +66,8 @@ boost::optional<PullOutPath> ShiftPullOut::plan(Pose start_pose, Pose goal_pose)
 
     // get safe path
     for (auto & pull_out_path : valid_paths) {
-      auto & shift_path = pull_out_path.partial_paths.front();  // shift path is not separate but only one.
+      auto & shift_path =
+        pull_out_path.partial_paths.front();  // shift path is not separate but only one.
       if (util::checkCollisionBetweenPathFootprintsAndObjects(
             vehicle_footprint_, pull_out_path.partial_paths.front(), shoulder_lane_objects,
             parameters_.collision_check_margin)) {
@@ -102,7 +101,6 @@ std::vector<PullOutPath> ShiftPullOut::getPullOutPaths(
 
   // rename parameter
   const double backward_path_length = common_parameter.backward_path_length;
-  const double forward_path_length = common_parameter.forward_path_length;
   const double shift_pull_out_velocity = parameter.shift_pull_out_velocity;
   const double before_pull_out_straight_distance = parameter.before_pull_out_straight_distance;
   const double minimum_lateral_jerk = parameter.minimum_lateral_jerk;
@@ -116,8 +114,6 @@ std::vector<PullOutPath> ShiftPullOut::getPullOutPaths(
     PathShifter path_shifter;
     ShiftedPath shifted_path;
     const double distance_to_road_center = getArcCoordinates(road_lanelets, start_pose).distance;
-    const double distance_to_shoulder_center =
-      getArcCoordinates(shoulder_lanelets, start_pose).distance;
 
     PathWithLaneId shoulder_reference_path;
     {
@@ -237,8 +233,7 @@ std::vector<PullOutPath> ShiftPullOut::getPullOutPaths(
 
 std::vector<PullOutPath> ShiftPullOut::selectValidPaths(
   const std::vector<PullOutPath> & paths, const lanelet::ConstLanelets & road_lanes,
-  const lanelet::routing::RoutingGraphContainer & overall_graphs, const Pose & current_pose,
-  const bool isInGoalRouteSection, const Pose & goal_pose)
+  const Pose & current_pose, const bool isInGoalRouteSection, const Pose & goal_pose)
 {
   std::vector<PullOutPath> available_paths;
 

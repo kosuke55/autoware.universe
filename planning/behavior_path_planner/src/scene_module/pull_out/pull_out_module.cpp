@@ -182,7 +182,7 @@ BehaviorModuleOutput PullOutModule::plan()
 
 CandidateOutput PullOutModule::planCandidate() const { return CandidateOutput{}; }
 
-std::shared_ptr<PullOutBase> PullOutModule::getCurrentPlanner() const
+std::shared_ptr<PullOutPlannerBase> PullOutModule::getCurrentPlanner() const
 {
   for (const auto & planner : pull_out_planners_) {
     if (status_.planner_type == planner->getPlannerType()) {
@@ -216,7 +216,6 @@ PathWithLaneId PullOutModule::getFullPath() const
 BehaviorModuleOutput PullOutModule::planWaitingApproval()
 {
   BehaviorModuleOutput output;
-  const auto common_parameters = planner_data_->parameters;
   const auto current_lanes = getCurrentLanes();
   const auto shoulder_lanes = pull_out_utils::getPullOutLanes(current_lanes, planner_data_);
 
@@ -239,9 +238,10 @@ BehaviorModuleOutput PullOutModule::planWaitingApproval()
   return output;
 }
 
-void PullOutModule::setParameters(const PullOutParameters & parameters)
+void PullOutModule::resetStatus()
 {
-  parameters_ = parameters;
+  PullOutStatus initial_status;
+  status_ = initial_status;
 }
 
 ParallelParkingParameters PullOutModule::getGeometricPullOutParameters() const
@@ -516,8 +516,8 @@ TurnSignalInfo PullOutModule::calcTurnSignalInfo(const Pose start_pose, const Po
   // turn hazard light when backward driving
   if (!status_.back_finished) {
     turn_signal.hazard_signal.command = HazardLightsCommand::ENABLE;
-    turn_signal.signal_distance = tier4_autoware_utils::calcDistance2d(
-      status_.pull_out_start_pose, planner_data_->self_pose->pose);
+    turn_signal.signal_distance =
+      tier4_autoware_utils::calcDistance2d(start_pose, planner_data_->self_pose->pose);
     return turn_signal;
   }
 

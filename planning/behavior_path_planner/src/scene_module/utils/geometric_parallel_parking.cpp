@@ -65,7 +65,7 @@ void GeometricParallelParking::incrementPathIndex()
 
 PathWithLaneId GeometricParallelParking::getPathByIdx(size_t const idx) const
 {
-  if (paths_.empty() || idx < 0 || paths_.size() <= idx) {
+  if (paths_.empty() || paths_.size() <= idx) {
     return PathWithLaneId{};
   }
 
@@ -245,8 +245,8 @@ bool GeometricParallelParking::planDeparting(
   auto lanes = road_lanes;
   lanes.insert(lanes.end(), shoulder_lanes.begin(), shoulder_lanes.end());
 
-  constexpr bool is_forward = false;          // parking backward means departing forward
-  constexpr double start_pose_offset = 0.0;   // start_pose is current_pose
+  constexpr bool is_forward = false;         // parking backward means departing forward
+  constexpr double start_pose_offset = 0.0;  // start_pose is current_pose
   constexpr double max_offset = 5.0;
   constexpr double offset_interval = 1.0;
 

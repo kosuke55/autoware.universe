@@ -28,7 +28,7 @@ using pull_out_utils::getPullOutLanes;
 GeometricPullOut::GeometricPullOut(
   rclcpp::Node & node, const PullOutParameters & parameters,
   const ParallelParkingParameters & parallel_parking_parameters)
-: PullOutBase{node, parameters}, parallel_parking_parameters_{parallel_parking_parameters}
+: PullOutPlannerBase{node, parameters}, parallel_parking_parameters_{parallel_parking_parameters}
 {
 }
 

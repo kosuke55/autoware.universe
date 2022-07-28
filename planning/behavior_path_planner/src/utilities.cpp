@@ -549,8 +549,10 @@ double getDistanceBetweenPredictedPathAndObject(
 //     return min_distance;
 //   }
 //   const auto s_start =
-//     lanelet::utils::getArcCoordinates(road_lanes, ego_path.path.points.front().point.pose).length;
-//   const auto s_end = lanelet::utils::getArcCoordinates(road_lanes, ego_path.shift_point.end).length;
+//     lanelet::utils::getArcCoordinates(road_lanes,
+//     ego_path.path.points.front().point.pose).length;
+//   const auto s_end = lanelet::utils::getArcCoordinates(road_lanes,
+//   ego_path.shift_point.end).length;
 
 //   for (auto s = s_start + distance_resolution; s < s_end; s += distance_resolution) {
 //     Pose ego_pose;

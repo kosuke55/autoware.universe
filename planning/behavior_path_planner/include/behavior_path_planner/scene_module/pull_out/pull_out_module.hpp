@@ -76,11 +76,11 @@ public:
   void onEntry() override;
   void onExit() override;
 
-  void setParameters(const PullOutParameters & parameters);
-  void resetStatus() { status_ = PullOutStatus{}; };
+  void setParameters(const PullOutParameters & parameters) { parameters_ = parameters; };
+  void resetStatus();
 
 private:
-  std::vector<std::shared_ptr<PullOutBase>> pull_out_planners_;
+  std::vector<std::shared_ptr<PullOutPlannerBase>> pull_out_planners_;
   PullOutParameters parameters_;
   PullOutStatus status_;
 
@@ -97,7 +97,7 @@ private:
   rclcpp::Clock::SharedPtr clock_;
   std::unique_ptr<rclcpp::Time> last_route_received_time_;
 
-  std::shared_ptr<PullOutBase> getCurrentPlanner() const;
+  std::shared_ptr<PullOutPlannerBase> getCurrentPlanner() const;
   lanelet::ConstLanelets getCurrentLanes() const;
   PathWithLaneId getFullPath() const;
   ParallelParkingParameters getGeometricPullOutParameters() const;

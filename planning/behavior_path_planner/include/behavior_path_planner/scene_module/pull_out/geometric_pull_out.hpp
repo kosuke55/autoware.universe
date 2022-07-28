@@ -15,15 +15,15 @@
 #ifndef BEHAVIOR_PATH_PLANNER__SCENE_MODULE__PULL_OUT__GEOMETRIC_PULL_OUT_HPP_
 #define BEHAVIOR_PATH_PLANNER__SCENE_MODULE__PULL_OUT__GEOMETRIC_PULL_OUT_HPP_
 
-#include "behavior_path_planner/scene_module/pull_out/pull_out_base.hpp"
 #include "behavior_path_planner/scene_module/pull_out/pull_out_path.hpp"
+#include "behavior_path_planner/scene_module/pull_out/pull_out_planner_base.hpp"
 #include "behavior_path_planner/scene_module/utils/geometric_parallel_parking.hpp"
 
 #include <autoware_auto_planning_msgs/msg/path_with_lane_id.hpp>
 
 namespace behavior_path_planner
 {
-class GeometricPullOut : public PullOutBase
+class GeometricPullOut : public PullOutPlannerBase
 {
 public:
   explicit GeometricPullOut(
