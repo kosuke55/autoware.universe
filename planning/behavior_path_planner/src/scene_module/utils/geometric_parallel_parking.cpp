@@ -146,7 +146,9 @@ std::vector<PathWithLaneId> GeometricParallelParking::generateParkingPaths(
   if (!isEnoughDistanceToStart(start_pose)) {
     return std::vector<PathWithLaneId>{};
   }
-  const double lane_departure_margin = 0.0;  // todo make it param
+  const double lane_departure_margin = is_forward
+                                         ? parameters_.forward_parking_lane_departure_margin
+                                         : parameters_.backward_parking_lane_departure_margin;
   auto arc_paths = planOneTrial(
     start_pose, goal_pose, R_E_r, lanes, is_forward, end_pose_offset, lane_departure_margin);
   if (arc_paths.empty()) {
@@ -263,7 +265,7 @@ bool GeometricParallelParking::planDeparting(
     // plan reverse path of parking. end_pose <-> start_pose
     auto arc_paths = planOneTrial(
       *end_pose, start_pose, R_E_min_, lanes, is_forward, start_pose_offset,
-      parameters_.lane_departure_margin);
+      parameters_.departing_lane_departure_margin);
     if (arc_paths.empty()) {
       // not found path
       continue;

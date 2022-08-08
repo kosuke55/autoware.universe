@@ -86,6 +86,8 @@ struct PullOverParameters
   double after_backward_parking_straight_distance;
   double forward_parking_velocity;
   double backward_parking_velocity;
+  double forward_parking_lane_departure_margin;
+  double backward_parking_lane_departure_margin;
   double arc_path_interval;
   double max_steer_rad;
   // hazard. Not used now.

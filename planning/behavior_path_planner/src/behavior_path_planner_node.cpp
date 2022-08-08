@@ -401,6 +401,8 @@ PullOverParameters BehaviorPathPlannerNode::getPullOverParam()
   p.after_backward_parking_straight_distance = dp("after_backward_parking_straight_distance", 0.5);
   p.forward_parking_velocity = dp("forward_parking_velocity", 1.0);
   p.backward_parking_velocity = dp("backward_parking_velocity", -0.5);
+  p.forward_parking_lane_departure_margin = dp("forward_parking_lane_departure_margin", 0.2);
+  p.backward_parking_lane_departure_margin = dp("backward_parking_lane_departure_margin", 0.2);
   p.arc_path_interval = dp("arc_path_interval", 1.0);
   // hazard
   p.hazard_on_threshold_dis = dp("hazard_on_threshold_dis", 1.0);

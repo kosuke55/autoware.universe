@@ -104,6 +104,9 @@ ParallelParkingParameters PullOverModule::getGeometricPullOutParameters() const
     parameters_.after_backward_parking_straight_distance;
   params.forward_parking_velocity = parameters_.forward_parking_velocity;
   params.backward_parking_velocity = parameters_.backward_parking_velocity;
+  params.forward_parking_lane_departure_margin = parameters_.forward_parking_lane_departure_margin;
+  params.backward_parking_lane_departure_margin =
+    parameters_.backward_parking_lane_departure_margin;
   params.arc_path_interval = parameters_.arc_path_interval;
   params.max_deceleration = parameters_.max_deceleration;
   params.max_steer_rad = parameters_.max_steer_rad;

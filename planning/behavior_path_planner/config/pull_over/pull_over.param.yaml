@@ -21,7 +21,7 @@
       goal_search_interval: 1.0
       goal_to_obj_margin: 2.0
       # occupancy grid map
-      collision_check_margin: 0.0
+      collision_check_margin: 0.5
       theta_size: 360
       obstacle_threshold: 60
       # shift path
@@ -37,8 +37,11 @@
       after_backward_parking_straight_distance: 2.0
       forward_parking_velocity: 0.3
       backward_parking_velocity: -0.3
+      forward_parking_lane_departure_margin: 0.2
+      backward_parking_lane_departure_margin: 0.2
       arc_path_interval: 1.0
-      # hazard. Not used now.
+      max_steer_rad: 0.35  # 20deg
+      # hazard on when parked
       hazard_on_threshold_dis: 1.0
       hazard_on_threshold_vel: 0.5
       # check safety with dynamic objects. Not used now.
