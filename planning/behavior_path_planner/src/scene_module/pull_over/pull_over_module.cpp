@@ -258,7 +258,7 @@ void PullOverModule::researchGoal()
   const Pose goal_pose_map_coords = global2local(occupancy_grid_map_.getMap(), goal_pose);
   Pose start_pose = calcOffsetPose(goal_pose, dx, 0, 0);
   // Search non collision areas around the goal
-  while (true) {
+  while (rclcpp::ok()) {
     bool is_last_search = (dx >= parameters_.forward_goal_search_length);
     Pose search_pose = calcOffsetPose(goal_pose_map_coords, dx, 0, 0);
     bool is_collided = occupancy_grid_map_.detectCollision(
