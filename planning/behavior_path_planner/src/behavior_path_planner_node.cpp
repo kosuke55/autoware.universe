@@ -371,7 +371,7 @@ PullOverParameters BehaviorPathPlannerNode::getPullOverParam()
   p.th_stopped_time_sec = dp("th_stopped_time_sec", 2.0);
   p.margin_from_boundary = dp("margin_from_boundary", 0.3);
   p.decide_path_distance = dp("decide_path_distance", 10.0);
-  p.min_acc = dp("min_acc", -0.5);
+  p.max_deceleration = dp("max_deceleration", 0.5);
   p.enable_shift_parking = dp("enable_shift_parking", true);
   p.enable_arc_forward_parking = dp("enable_arc_forward_parking", true);
   p.enable_arc_backward_parking = dp("enable_arc_backward_parking", false);

@@ -92,6 +92,25 @@ BehaviorModuleOutput PullOverModule::run()
   return plan();
 }
 
+ParallelParkingParameters PullOverModule::getGeometricPullOutParameters() const
+{
+  ParallelParkingParameters params;
+
+  params.th_arrived_distance_m = parameters_.th_arrived_distance_m;
+  params.th_stopped_velocity_mps = parameters_.th_stopped_velocity_mps;
+  params.after_forward_parking_straight_distance =
+    parameters_.after_forward_parking_straight_distance;
+  params.after_backward_parking_straight_distance =
+    parameters_.after_backward_parking_straight_distance;
+  params.forward_parking_velocity = parameters_.forward_parking_velocity;
+  params.backward_parking_velocity = parameters_.backward_parking_velocity;
+  params.arc_path_interval = parameters_.arc_path_interval;
+  params.max_deceleration = parameters_.max_deceleration;
+  params.max_steer_rad = parameters_.max_steer_rad;
+
+  return params;
+}
+
 void PullOverModule::onEntry()
 {
   RCLCPP_DEBUG(getLogger(), "PULL_OVER onEntry");
@@ -115,16 +134,7 @@ void PullOverModule::onEntry()
     last_received_time_.get() == nullptr ||
     *last_received_time_ != planner_data_->route_handler->getRouteHeader().stamp) {
     // Initialize parallel parking planner status
-    parallel_parking_planner_.clear();
-    parallel_parking_parameters_ = ParallelParkingParameters{
-      parameters_.th_arrived_distance_m,
-      parameters_.th_stopped_velocity_mps,
-      parameters_.after_forward_parking_straight_distance,
-      parameters_.after_backward_parking_straight_distance,
-      parameters_.forward_parking_velocity,
-      parameters_.backward_parking_velocity,
-      parameters_.arc_path_interval,
-      parameters_.min_acc};
+    parallel_parking_parameters_ = getGeometricPullOutParameters();
 
     resetStatus();
   }
@@ -163,6 +173,11 @@ bool PullOverModule::isExecutionRequested() const
 
   // check if goal_pose is far
   const double goal_arc_length = lanelet::utils::getArcCoordinates(current_lanes, goal_pose).length;
+  if (std::abs(goal_arc_length) < std::numeric_limits<double>::epsilon()) {
+    // can not caluculate arc langth correctly, maybe lane loop.
+    return false;
+  }
+
   const double self_arc_length =
     lanelet::utils::getArcCoordinates(current_lanes, planner_data_->self_pose->pose).length;
   const double self_to_goal_arc_length = goal_arc_length - self_arc_length;
@@ -314,7 +329,7 @@ bool PullOverModule::isLongEnoughToParkingStart(
 
   const double current_vel = planner_data_->self_odometry->twist.twist.linear.x;
   const double current_to_stop_distance =
-    std::pow(current_vel, 2) / std::abs(parameters_.min_acc) / 2;
+    std::pow(current_vel, 2) / parameters_.max_deceleration / 2;
 
   // once stopped, it cannot start again if start_pose is close.
   // so need enough distance to restart
@@ -354,7 +369,7 @@ bool PullOverModule::planWithEfficientPath()
   if (parameters_.enable_arc_forward_parking) {
     for (const auto goal_candidate : goal_candidates_) {
       modified_goal_pose_ = goal_candidate.goal_pose;
-      parallel_parking_planner_.setParams(planner_data_, parallel_parking_parameters_);
+      parallel_parking_planner_.setData(planner_data_, parallel_parking_parameters_);
       if (
         parallel_parking_planner_.plan(modified_goal_pose_, status_.lanes, true) &&
         isLongEnoughToParkingStart(
@@ -375,7 +390,7 @@ bool PullOverModule::planWithEfficientPath()
   if (parameters_.enable_arc_backward_parking) {
     for (const auto goal_candidate : goal_candidates_) {
       modified_goal_pose_ = goal_candidate.goal_pose;
-      parallel_parking_planner_.setParams(planner_data_, parallel_parking_parameters_);
+      parallel_parking_planner_.setData(planner_data_, parallel_parking_parameters_);
       if (
         parallel_parking_planner_.plan(modified_goal_pose_, status_.lanes, false) &&
         isLongEnoughToParkingStart(
@@ -414,7 +429,7 @@ bool PullOverModule::planWithCloseGoal()
       return true;
     }
 
-    parallel_parking_planner_.setParams(planner_data_, parallel_parking_parameters_);
+    parallel_parking_planner_.setData(planner_data_, parallel_parking_parameters_);
     // Generate arc forward path.
     if (
       parameters_.enable_arc_forward_parking &&
@@ -710,7 +725,7 @@ PathWithLaneId PullOverModule::getStopPath()
 
   const double current_vel = planner_data_->self_odometry->twist.twist.linear.x;
   const double current_to_stop_distance =
-    std::pow(current_vel, 2) / std::abs(parameters_.min_acc) / 2;
+    std::pow(current_vel, 2) / parameters_.max_deceleration / 2;
   const auto arclength_current_pose =
     lanelet::utils::getArcCoordinates(status_.current_lanes, current_pose).length;
 

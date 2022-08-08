@@ -56,7 +56,7 @@ struct PullOverParameters
   double th_stopped_time_sec;
   double margin_from_boundary;
   double decide_path_distance;
-  double min_acc;
+  double max_deceleration;
   bool enable_shift_parking;
   bool enable_arc_forward_parking;
   bool enable_arc_backward_parking;
@@ -87,6 +87,7 @@ struct PullOverParameters
   double forward_parking_velocity;
   double backward_parking_velocity;
   double arc_path_interval;
+  double max_steer_rad;
   // hazard. Not used now.
   double hazard_on_threshold_dis;
   double hazard_on_threshold_vel;
@@ -198,13 +199,13 @@ private:
   std::pair<bool, bool> getSafePath(ShiftParkingPath & safe_path) const;
   Pose getRefinedGoal() const;
   Pose getParkingStartPose() const;
+  ParallelParkingParameters getGeometricPullOutParameters() const;
   bool isLongEnoughToParkingStart(const PathWithLaneId path, const Pose parking_start_pose) const;
   bool isLongEnough(
     const lanelet::ConstLanelets & lanelets, const Pose goal_pose, const double buffer = 0) const;
   bool isArcPath() const;
   double calcMinimumShiftPathDistance() const;
   double calcDistanceToPathChange() const;
-
   bool planShiftPath();
   bool isStopped();
   bool hasFinishedCurrentPath();

@@ -9,7 +9,7 @@
       pull_over_minimum_velocity: 0.3
       margin_from_boundary: 0.5
       decide_path_distance: 10.0
-      min_acc: -0.5
+      max_deceleration: 0.5
       enable_shift_parking: true
       enable_arc_forward_parking: true
       enable_arc_backward_parking: false
