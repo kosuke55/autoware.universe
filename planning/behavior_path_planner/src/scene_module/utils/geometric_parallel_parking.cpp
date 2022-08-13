@@ -106,7 +106,7 @@ bool GeometricParallelParking::isEnoughDistanceToStart(const Pose & start_pose) 
 
   // not enoght to stop with max deceleration
   const double current_vel = util::l2Norm(planner_data_->self_odometry->twist.twist.linear);
-  const double stop_distance = std::pow(current_vel, 2) / parameters_.max_deceleration / 2;
+  const double stop_distance = std::pow(current_vel, 2) / parameters_.maximum_deceleration / 2;
   if (current_to_start.position.x < stop_distance) {
     return false;
   }
