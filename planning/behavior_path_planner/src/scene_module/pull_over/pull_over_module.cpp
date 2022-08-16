@@ -875,7 +875,7 @@ bool PullOverModule::isStopped()
 {
   odometry_buffer_.push_back(planner_data_->self_odometry);
   // Delete old data in buffer
-  while (true) {
+  while (rclcpp::ok()) {
     const auto time_diff = rclcpp::Time(odometry_buffer_.back()->header.stamp) -
                            rclcpp::Time(odometry_buffer_.front()->header.stamp);
     if (time_diff.seconds() < parameters_.th_stopped_time_sec) {
