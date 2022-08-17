@@ -41,7 +41,7 @@ struct Param
 {
   double delay_time;
   double footprint_margin;
-  double maximum_deceleration;
+  double max_deceleration;
   double resample_interval;
   double search_radius;
 };
