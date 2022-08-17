@@ -325,7 +325,7 @@ BT::NodeStatus PullOverModule::updateState()
 }
 
 bool PullOverModule::isLongEnoughToParkingStart(
-  const PathWithLaneId path, const Pose parking_start_pose) const
+  const PathWithLaneId & path, const Pose & parking_start_pose) const
 {
   const auto dist_to_parking_start_pose = calcSignedArcLength(
     path.points, planner_data_->self_pose->pose, parking_start_pose.position,
@@ -862,7 +862,7 @@ double PullOverModule::calcMinimumShiftPathDistance() const
 }
 
 bool PullOverModule::isLongEnough(
-  const lanelet::ConstLanelets & lanelets, const Pose goal_pose, const double buffer) const
+  const lanelet::ConstLanelets & lanelets, const Pose & goal_pose, const double buffer) const
 {
   const auto current_pose = planner_data_->self_pose->pose;
   const double distance_to_goal =
@@ -982,7 +982,7 @@ bool PullOverModule::isArcPath() const
 }
 
 Marker PullOverModule::createParkingAreaMarker(
-  const Pose start_pose, const Pose end_pose, const int32_t id)
+  const Pose & start_pose, const Pose & end_pose, const int32_t id)
 {
   const auto color = status_.has_decided_path ? createMarkerColor(1.0, 1.0, 0.0, 0.999)   // yellow
                                               : createMarkerColor(0.0, 1.0, 0.0, 0.999);  // green

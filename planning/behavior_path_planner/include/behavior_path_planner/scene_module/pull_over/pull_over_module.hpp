@@ -201,9 +201,10 @@ private:
   Pose getRefinedGoal() const;
   Pose getParkingStartPose() const;
   ParallelParkingParameters getGeometricPullOutParameters() const;
-  bool isLongEnoughToParkingStart(const PathWithLaneId path, const Pose parking_start_pose) const;
+  bool isLongEnoughToParkingStart(
+    const PathWithLaneId & path, const Pose & parking_start_pose) const;
   bool isLongEnough(
-    const lanelet::ConstLanelets & lanelets, const Pose goal_pose, const double buffer = 0) const;
+    const lanelet::ConstLanelets & lanelets, const Pose & goal_pose, const double buffer = 0) const;
   bool isArcPath() const;
   double calcMinimumShiftPathDistance() const;
   double calcDistanceToPathChange() const;
@@ -220,7 +221,7 @@ private:
   std::pair<TurnIndicatorsCommand, double> getTurnInfo() const;
 
   // debug
-  Marker createParkingAreaMarker(const Pose back_pose, const Pose front_pose, const int32_t id);
+  Marker createParkingAreaMarker(const Pose & back_pose, const Pose & front_pose, const int32_t id);
   void publishDebugData();
   void printParkingPositionError() const;
 };
