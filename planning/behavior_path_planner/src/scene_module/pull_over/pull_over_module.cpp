@@ -41,6 +41,11 @@ using tier4_autoware_utils::createMarkerScale;
 using tier4_autoware_utils::createPoint;
 using tier4_autoware_utils::inverseTransformPose;
 
+#define debug(var)  do{std::cerr << #var << " : ";view(var);}while(0)
+template<typename T> void view(T e){std::cerr << e << std::endl;}
+template<typename T> void view(const std::vector<T>& v){for(const auto& e : v){ std::cerr << e << " "; } std::cerr << std::endl;}
+template<typename T> void view(const std::vector<std::vector<T> >& vv){ for(const auto& v : vv){ view(v); } }
+
 namespace behavior_path_planner
 {
 PullOverModule::PullOverModule(
@@ -348,11 +353,16 @@ bool PullOverModule::planWithEfficientPath()
     for (const auto goal_candidate : goal_candidates_) {
       modified_goal_pose_ = goal_candidate.goal_pose;
       if (
-        planShiftPath() &&
-        isLongEnoughToParkingStart(
-          shift_parking_path_.path, shift_parking_path_.shift_point.start) &&
-        !lane_departure_checker_->checkPathWillLeaveLane(
-          status_.lanes, shift_parking_path_.shifted_path.path)) {
+        planShiftPath() ){
+            view("found safe shift path");
+          
+
+      // if (planShiftPath()) {
+        // debug(isLongEnoughToParkingStart(
+        //   shift_parking_path_.path, shift_parking_path_.shift_point.start));
+        // debug(lane_departure_checker_->checkPathWillLeaveLane(
+        //   status_.lanes, shift_parking_path_.shifted_path.path));
+
         // shift parking path already confirm safe in it's own function.
         status_.path = shift_parking_path_.path;
         status_.path_type = PathType::SHIFT;
@@ -826,9 +836,19 @@ std::pair<bool, bool> PullOverModule::getSafePath(ShiftParkingPath & safe_path) 
     if (valid_paths.empty()) {
       return std::make_pair(false, false);
     }
+
+    // tmp
+    std::vector<ShiftParkingPath> no_departure_paths;
+    for (const auto & path : valid_paths) {
+      if (!lane_departure_checker_->checkPathWillLeaveLane(status_.lanes, path.path)) {
+        no_departure_paths.push_back(path);
+      }
+    }
+    debug(no_departure_paths.size());
+
     // select safe path
     bool found_safe_path =
-      pull_over_utils::selectSafePath(valid_paths, occupancy_grid_map_, safe_path);
+      pull_over_utils::selectSafePath(no_departure_paths, occupancy_grid_map_, safe_path);
     safe_path.is_safe = found_safe_path;
     return std::make_pair(true, found_safe_path);
   }

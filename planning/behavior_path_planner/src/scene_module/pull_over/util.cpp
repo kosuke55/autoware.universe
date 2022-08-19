@@ -37,6 +37,12 @@
 using tier4_autoware_utils::calcOffsetPose;
 using tier4_autoware_utils::inverseTransformPoint;
 
+#define debug(var)  do{std::cerr << #var << " : ";view(var);}while(0)
+template<typename T> void view(T e){std::cerr << e << std::endl;}
+template<typename T> void view(const std::vector<T>& v){for(const auto& e : v){ std::cerr << e << " "; } std::cerr << std::endl;}
+template<typename T> void view(const std::vector<std::vector<T> >& vv){ for(const auto& v : vv){ view(v); } }
+
+
 namespace behavior_path_planner
 {
 namespace pull_over_utils
@@ -195,7 +201,7 @@ std::vector<ShiftParkingPath> getShiftParkingPaths(
           p.position.x -= std::sin(yaw) * offset;
           p.position.y += std::cos(yaw) * offset;
         }
-        path_shifter.setPath(target_lane_reference_path);
+        path_shifter.setPath(util::resamplePathWithSpline(target_lane_reference_path, 1.0));
       }
     }
     ShiftPoint shift_point;
@@ -251,21 +257,25 @@ std::vector<ShiftParkingPath> getShiftParkingPaths(
 
       candidate_path.straight_path = road_lane_reference_path;
       // resample is needed for adding orientation to path points for collision check
-      candidate_path.path = util::resamplePathWithSpline(
-        combineReferencePath(road_lane_reference_path, shifted_path.path), 1.0);
+      // candidate_path.path = util::resamplePathWithSpline(
+      //   combineReferencePath(road_lane_reference_path, shifted_path.path), 1.0);
+      candidate_path.path = combineReferencePath(road_lane_reference_path, shifted_path.path);
 
       // add goal pose because resampling removes it
       PathPointWithLaneId goal_path_point{};
       goal_path_point.point.pose = goal_pose;
       goal_path_point.point.longitudinal_velocity_mps = 0.0;
       goal_path_point.lane_ids = shifted_path.path.points.back().lane_ids;
-      candidate_path.path.points.push_back(goal_path_point);
+      // candidate_path.path.points.push_back(goal_path_point);
+      candidate_path.path =
+        behavior_path_planner::util::removeOverlappingPoints(candidate_path.path);
 
-      const auto shift_start_idx =
-        motion_utils::findNearestIndex(candidate_path.path.points, shift_point.start.position);
-      for (size_t i = shift_start_idx; i < candidate_path.path.points.size(); i++) {
-        candidate_path.shifted_path.path.points.push_back(candidate_path.path.points.at(i));
-      }
+      // const auto shift_start_idx =
+      //   motion_utils::findNearestIndex(candidate_path.path.points, shift_point.start.position);
+      // for (size_t i = shift_start_idx; i < candidate_path.path.points.size(); i++) {
+      //   candidate_path.shifted_path.path.points.push_back(candidate_path.path.points.at(i));
+      // }
+      candidate_path.shifted_path = shifted_path;
 
       shift_point.start_idx = motion_utils::findNearestIndex(
         candidate_path.shifted_path.path.points, shift_point.start.position);

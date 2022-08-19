@@ -26,6 +26,14 @@
 #include <utility>
 #include <vector>
 
+
+#define debug(var)  do{std::cerr << #var << " : ";view(var);}while(0)
+template<typename T> void view(T e){std::cerr << e << std::endl;}
+template<typename T> void view(const std::vector<T>& v){for(const auto& e : v){ std::cerr << e << " "; } std::cerr << std::endl;}
+template<typename T> void view(const std::vector<std::vector<T> >& vv){ for(const auto& v : vv){ view(v); } }
+
+
+
 namespace
 {
 // for debug
@@ -114,6 +122,8 @@ bool PathShifter::generate(
   type == SHIFT_TYPE::SPLINE ? applySplineShifter(shifted_path, offset_back)
                              : applyLinearShifter(shifted_path);
 
+  const bool is_driving_forward = true;
+  motion_utils::insertOrientation(shifted_path->path.points, is_driving_forward);
   // DEBUG
   RCLCPP_DEBUG_STREAM(
     logger_, "PathShifter::generate end. shift_points_.size = " << shift_points_.size());

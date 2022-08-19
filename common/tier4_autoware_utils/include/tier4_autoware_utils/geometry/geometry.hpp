@@ -231,6 +231,16 @@ inline void setPose(
   p.pose = pose;
 }
 
+
+template <class T>
+inline void setOrientation(
+const geometry_msgs::msg::Quaternion & orientation, T & p){  
+  auto pose = getPose(p);
+  pose.orientation = orientation;
+  setPose(pose, p);
+}
+
+
 template <class T>
 void setLongitudinalVelocity([[maybe_unused]] const double velocity, [[maybe_unused]] T & p)
 {
