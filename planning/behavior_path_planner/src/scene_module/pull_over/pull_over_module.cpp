@@ -539,16 +539,7 @@ BehaviorModuleOutput PullOverModule::plan()
 
   // set hazard and turn signal
   if (status_.has_decided_path) {
-    const auto hazard_info = getHazardInfo();
-    const auto turn_info = getTurnInfo();
-
-    if (hazard_info.first.command == HazardLightsCommand::ENABLE) {
-      output.turn_signal_info.hazard_signal.command = hazard_info.first.command;
-      // output.turn_signal_info.signal_distance = hazard_info.second;
-    } else {
-      output.turn_signal_info.turn_signal.command = turn_info.first.command;
-      // output.turn_signal_info.signal_distance = turn_info.second;
-    }
+    output.turn_signal_info = calcTurnSignalInfo();
   }
 
   const auto distance_to_path_change = calcDistanceToPathChange();
@@ -810,27 +801,58 @@ bool PullOverModule::hasFinishedPullOver()
 
 TurnSignalInfo PullOverModule::calcTurnSignalInfo() const
 {
-  TurnSignalInfo turn_signal{};  // output
-
   const auto & current_pose = planner_data_->self_pose->pose;
+  const double dist_threshold = planner_data_->parameters.ego_nearest_dist_threshold;
+  const double yaw_threshold = planner_data_->parameters.ego_nearest_yaw_threshold;
   const auto & start_pose = status_.pull_over_path.start_pose;
   const auto & end_pose = status_.pull_over_path.end_pose;
 
-  // calc TurnIndicatorsCommand
+  const size_t current_seg_idx = findEgoSegmentIndex(status_.path.points);
+
+  // calc HazardLightsCommand
+  HazardLightsCommand hazard_lights_command{};
   {
-    const double distance_to_end =
-      calcSignedArcLength(status_.full_path.points, current_pose.position, end_pose.position);
+    const size_t goal_seg_idx = motion_utils::findFirstNearestSegmentIndexWithSoftConstraints(
+      status_.path.points, modified_goal_pose_, dist_threshold, yaw_threshold);
+    const double distance_to_goal = calcSignedArcLength(
+      status_.path.points, current_pose.position, current_seg_idx, modified_goal_pose_.position,
+      goal_seg_idx);
+
+    const bool is_near_goal = distance_to_goal < parameters_.hazard_on_threshold_distance;
+    const double velocity = std::abs(planner_data_->self_odometry->twist.twist.linear.x);
+    const bool is_stopped = velocity < parameters_.hazard_on_threshold_velocity;
+    const bool is_backward_driving =
+      status_.planner->getPlannerType() == PullOverPlannerType::ARC_BACKWARD;
+    if ((is_near_goal && is_stopped) || is_backward_driving) {
+      hazard_lights_command.command = HazardLightsCommand::ENABLE;
+    }
+  }
+
+  // calc TurnIndicatorsCommand
+  TurnIndicatorsCommand turn_indicators_command{};
+  {
+    const size_t end_seg_idx = motion_utils::findFirstNearestSegmentIndexWithSoftConstraints(
+      status_.path.points, current_pose, dist_threshold, yaw_threshold);
+    const double distance_to_end = calcSignedArcLength(
+      status_.path.points, current_pose.position, current_seg_idx, end_pose.position, end_seg_idx);
+
     const bool is_before_end_pose = distance_to_end >= 0.0;
-    turn_signal.turn_signal.command =
+    turn_indicators_command.command =
       is_before_end_pose ? TurnIndicatorsCommand::ENABLE_LEFT : TurnIndicatorsCommand::NO_COMMAND;
   }
 
-  // calc desired/required start/end point
+  // calc TurnSignalInfo
+  TurnSignalInfo turn_signal{};
   {
+    turn_signal.hazard_signal = hazard_lights_command;
+    turn_signal.turn_signal = turn_indicators_command;
+    const size_t start_seg_idx = motion_utils::findFirstNearestSegmentIndexWithSoftConstraints(
+      status_.path.points, start_pose, dist_threshold, yaw_threshold);
     // ego decelerates so that current pose is the point `turn_light_on_threshold_time` seconds
     // before starting pull_over
-    const double distance_to_start =
-      calcSignedArcLength(status_.full_path.points, current_pose.position, start_pose.position);
+    const double distance_to_start = calcSignedArcLength(
+      status_.path.points, current_pose.position, current_seg_idx, start_pose.position,
+      start_seg_idx);
     const bool is_before_start_pose = distance_to_start >= 0.0;
     turn_signal.desired_start_point =
       is_before_start_pose ? current_pose.position : start_pose.position;
