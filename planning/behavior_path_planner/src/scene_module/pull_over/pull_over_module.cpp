@@ -542,16 +542,7 @@ BehaviorModuleOutput PullOverModule::plan()
 
   // set hazard and turn signal
   if (status_.has_decided_path) {
-    const auto hazard_info = getHazardInfo();
-    const auto turn_info = getTurnInfo();
-
-    if (hazard_info.first.command == HazardLightsCommand::ENABLE) {
-      output.turn_signal_info.hazard_signal.command = hazard_info.first.command;
-      // output.turn_signal_info.signal_distance = hazard_info.second;
-    } else {
-      output.turn_signal_info.turn_signal.command = turn_info.first.command;
-      // output.turn_signal_info.signal_distance = turn_info.second;
-    }
+    output.turn_signal_info = calcTurnSignalInfo();
   }
 
   const auto distance_to_path_change = calcDistanceToPathChange();
@@ -810,50 +801,69 @@ bool PullOverModule::hasFinishedPullOver()
   return car_is_on_goal && isStopped();
 }
 
-std::pair<HazardLightsCommand, double> PullOverModule::getHazardInfo() const
+TurnSignalInfo PullOverModule::calcTurnSignalInfo() const
 {
-  HazardLightsCommand hazard_signal{};
+  const auto & current_pose = planner_data_->self_pose->pose;
+  const double dist_threshold = planner_data_->parameters.ego_nearest_dist_threshold;
+  const double yaw_threshold = planner_data_->parameters.ego_nearest_yaw_threshold;
+  const auto & start_pose = status_.pull_over_path.start_pose;
+  const auto & end_pose = status_.pull_over_path.end_pose;
 
-  const auto arc_position_goal_pose =
-    lanelet::utils::getArcCoordinates(status_.pull_over_lanes, modified_goal_pose_);
-  const auto arc_position_current_pose =
-    lanelet::utils::getArcCoordinates(status_.pull_over_lanes, planner_data_->self_pose->pose);
-  const double distance_to_goal = arc_position_goal_pose.length - arc_position_current_pose.length;
+  const size_t current_seg_idx = findEgoSegmentIndex(status_.path.points);
 
-  const double velocity = std::abs(planner_data_->self_odometry->twist.twist.linear.x);
-  if (
-    (distance_to_goal < parameters_.hazard_on_threshold_distance &&
-     velocity < parameters_.hazard_on_threshold_velocity) ||
-    status_.planner->getPlannerType() == PullOverPlannerType::ARC_BACKWARD) {
-    hazard_signal.command = HazardLightsCommand::ENABLE;
-    const double distance_from_front_to_goal =
-      distance_to_goal - planner_data_->parameters.base_link2front;
-    return std::make_pair(hazard_signal, distance_from_front_to_goal);
+  // calc HazardLightsCommand
+  HazardLightsCommand hazard_lights_command{};
+  {
+    const size_t goal_seg_idx = motion_utils::findFirstNearestSegmentIndexWithSoftConstraints(
+      status_.path.points, modified_goal_pose_, dist_threshold, yaw_threshold);
+    const double distance_to_goal = calcSignedArcLength(
+      status_.path.points, current_pose.position, current_seg_idx, modified_goal_pose_.position,
+      goal_seg_idx);
+
+    const bool is_near_goal = distance_to_goal < parameters_.hazard_on_threshold_distance;
+    const double velocity = std::abs(planner_data_->self_odometry->twist.twist.linear.x);
+    const bool is_stopped = velocity < parameters_.hazard_on_threshold_velocity;
+    const bool is_backward_driving =
+      status_.planner->getPlannerType() == PullOverPlannerType::ARC_BACKWARD;
+    if ((is_near_goal && is_stopped) || is_backward_driving) {
+      hazard_lights_command.command = HazardLightsCommand::ENABLE;
+    }
   }
 
-  return std::make_pair(hazard_signal, std::numeric_limits<double>::max());
-}
+  // calc TurnIndicatorsCommand
+  TurnIndicatorsCommand turn_indicators_command{};
+  {
+    const size_t end_seg_idx = motion_utils::findFirstNearestSegmentIndexWithSoftConstraints(
+      status_.path.points, current_pose, dist_threshold, yaw_threshold);
+    const double distance_to_end = calcSignedArcLength(
+      status_.path.points, current_pose.position, current_seg_idx, end_pose.position, end_seg_idx);
 
-std::pair<TurnIndicatorsCommand, double> PullOverModule::getTurnInfo() const
-{
-  std::pair<TurnIndicatorsCommand, double> turn_info{};
+    const bool is_before_end_pose = distance_to_end >= 0.0;
+    turn_indicators_command.command =
+      is_before_end_pose ? TurnIndicatorsCommand::ENABLE_LEFT : TurnIndicatorsCommand::NO_COMMAND;
+  }
 
-  const double distance_from_vehicle_front = std::invoke([&]() {
-    const auto arc_position_current_pose =
-      lanelet::utils::getArcCoordinates(status_.current_lanes, planner_data_->self_pose->pose);
-    const auto arc_position_end_pose =
-      lanelet::utils::getArcCoordinates(status_.current_lanes, status_.pull_over_path.end_pose);
-    return arc_position_end_pose.length - arc_position_current_pose.length -
-           planner_data_->parameters.base_link2front;
-  });
+  // calc TurnSignalInfo
+  TurnSignalInfo turn_signal{};
+  {
+    turn_signal.hazard_signal = hazard_lights_command;
+    turn_signal.turn_signal = turn_indicators_command;
+    const size_t start_seg_idx = motion_utils::findFirstNearestSegmentIndexWithSoftConstraints(
+      status_.path.points, start_pose, dist_threshold, yaw_threshold);
+    // ego decelerates so that current pose is the point `turn_light_on_threshold_time` seconds
+    // before starting pull_over
+    const double distance_to_start = calcSignedArcLength(
+      status_.path.points, current_pose.position, current_seg_idx, start_pose.position,
+      start_seg_idx);
+    const bool is_before_start_pose = distance_to_start >= 0.0;
+    turn_signal.desired_start_point =
+      is_before_start_pose ? current_pose.position : start_pose.position;
+    turn_signal.desired_end_point = end_pose.position;
+    turn_signal.required_start_point = start_pose.position;
+    turn_signal.required_end_point = end_pose.position;
+  }
 
-  TurnIndicatorsCommand turn_signal{};
-  const bool is_before_parking_end = distance_from_vehicle_front >= 0.0;
-  turn_signal.command =
-    is_before_parking_end ? TurnIndicatorsCommand::ENABLE_LEFT : TurnIndicatorsCommand::NO_COMMAND;
-  turn_info.first = turn_signal;
-  turn_info.second = distance_from_vehicle_front;
-  return turn_info;
+  return turn_signal;
 }
 
 void PullOverModule::setDebugData()
