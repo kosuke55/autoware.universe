@@ -69,6 +69,7 @@ BehaviorPathPlannerNode::BehaviorPathPlannerNode(const rclcpp::NodeOptions & nod
     create_publisher<AvoidanceDebugMsgArray>("~/debug/avoidance_debug_message_array", 1);
   debug_lane_change_msg_array_publisher_ =
     create_publisher<LaneChangeDebugMsgArray>("~/debug/lane_change_debug_message_array", 1);
+  pub_debug_marker_ = create_publisher<MarkerArray>("~/debug/arrow", 20);
 
   if (planner_data_->parameters.visualize_drivable_area_for_shared_linestrings_lanelet) {
     debug_drivable_area_lanelets_publisher_ =
@@ -628,6 +629,10 @@ void BehaviorPathPlannerNode::run()
 
   if (!path->points.empty()) {
     path_publisher_->publish(*path);
+    MarkerArray arrow_marker{};
+    tier4_autoware_utils::appendMarkerArray(
+      marker_utils::createPathMarkerArray(*path, "path", 0, 1.0, 0.0, 0.0), &arrow_marker);
+    pub_debug_marker_->publish(arrow_marker);
   } else {
     RCLCPP_ERROR_THROTTLE(
       get_logger(), *get_clock(), 5000, "behavior path output is empty! Stop publish.");
@@ -734,7 +739,7 @@ PathWithLaneId::SharedPtr BehaviorPathPlannerNode::getPath(
   }
 
   const auto resampled_path =
-    util::resamplePathWithSpline(connected_path, planner_data_->parameters.path_interval);
+    util::resamplePathWithSpline(*path, planner_data_->parameters.path_interval, true);
   return std::make_shared<PathWithLaneId>(resampled_path);
 }
 
