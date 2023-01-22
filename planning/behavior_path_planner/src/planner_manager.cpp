@@ -41,11 +41,9 @@ static UUID generateUUID()
 }
 }  // namespace
 
-PlannerManager::PlannerManager(
-  rclcpp::Node & node, const bool enable_simultaneous_execution, const bool verbose)
+PlannerManager::PlannerManager(rclcpp::Node & node, const bool verbose)
 : logger_(node.get_logger().get_child("planner_manager")),
   clock_(*node.get_clock()),
-  enable_simultaneous_execution_{enable_simultaneous_execution},
   verbose_{verbose}
 {
 }
@@ -114,11 +112,6 @@ BehaviorModuleOutput PlannerManager::run(const std::shared_ptr<PlannerData> & da
 boost::optional<ModuleID> PlannerManager::getCandidateModuleID(
   const BehaviorModuleOutput & previous_module_output) const
 {
-  const auto module_running = !approved_modules_.empty();
-  if (!enable_simultaneous_execution_ && module_running) {
-    return {};
-  }
-
   std::vector<ModuleID> request_modules{};
 
   bool lc_running = false;
@@ -133,10 +126,30 @@ boost::optional<ModuleID> PlannerManager::getCandidateModuleID(
     }
   }
 
+  const auto block_simlutaneous_execution = [this]() {
+    for (const auto & m : approved_modules_) {
+      const auto & manager = m.first;
+      if (manager->isSimultaneousExecutable()) {
+        return true;
+      }
+    }
+    return false;
+  }();
+
   // pickup execution requested modules
   for (const auto & m : scene_manager_ptrs_) {
     // generate temporary uuid
     const auto uuid = generateUUID();
+
+    // already exist the modules that don't support simultaneous execution.
+    if (block_simlutaneous_execution) {
+      continue;
+    }
+
+    // the manager's module doesn't support simultaneous execution.
+    if (!approved_modules_.empty() && !m->isSimultaneousExecutable()) {
+      continue;
+    }
 
     if ((lc_running || avoid_running) && m->getModuleName() == "avoidance_by_lc") {
       continue;

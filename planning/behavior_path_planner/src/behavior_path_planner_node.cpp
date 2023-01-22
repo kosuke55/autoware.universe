@@ -134,12 +134,11 @@ BehaviorPathPlannerNode::BehaviorPathPlannerNode(const rclcpp::NodeOptions & nod
     mutex_pm_.lock();
 
     const auto & p = planner_data_->parameters;
-    planner_manager_ = std::make_shared<PlannerManager>(
-      *this, p.enable_simultaneous_execution_of_multiple_modules, p.verbose);
+    planner_manager_ = std::make_shared<PlannerManager>(*this, p.verbose);
 
     if (p.launch_pull_over) {
-      auto manager =
-        std::make_shared<PullOverModuleManager>(this, "pull_over", 1, p.priority_pull_over);
+      auto manager = std::make_shared<PullOverModuleManager>(
+        this, "pull_over", 1, p.priority_pull_over, p.enable_simultaneous_execution_pull_over);
       planner_manager_->registerSceneModuleManager(manager);
       path_candidate_publishers_.emplace(
         "pull_over", create_publisher<Path>(path_candidate_name_space + "pull_over", 1));
@@ -149,7 +148,8 @@ BehaviorPathPlannerNode::BehaviorPathPlannerNode(const rclcpp::NodeOptions & nod
 
     if (p.launch_avoidance_by_lc) {
       auto manager = std::make_shared<AvoidanceByLCModuleManager>(
-        this, "avoidance_by_lc", 1, p.priority_avoidance_by_lc);
+        this, "avoidance_by_lc", 1, p.priority_avoidance_by_lc,
+        p.enable_simultaneous_execution_avoidance_by_lc);
       planner_manager_->registerSceneModuleManager(manager);
       path_candidate_publishers_.emplace(
         "avoidance_by_lc",
@@ -160,8 +160,8 @@ BehaviorPathPlannerNode::BehaviorPathPlannerNode(const rclcpp::NodeOptions & nod
     }
 
     if (p.launch_avoidance) {
-      auto manager =
-        std::make_shared<AvoidanceModuleManager>(this, "avoidance", 1, p.priority_avoidance);
+      auto manager = std::make_shared<AvoidanceModuleManager>(
+        this, "avoidance", 1, p.priority_avoidance, p.enable_simultaneous_execution_avoidance);
       planner_manager_->registerSceneModuleManager(manager);
       path_candidate_publishers_.emplace(
         "avoidance", create_publisher<Path>(path_candidate_name_space + "avoidance", 1));
@@ -170,8 +170,9 @@ BehaviorPathPlannerNode::BehaviorPathPlannerNode(const rclcpp::NodeOptions & nod
     }
 
     if (p.launch_lane_change) {
-      auto manager =
-        std::make_shared<LaneChangeModuleManager>(this, "lane_change", 1, p.priority_lane_change);
+      auto manager = std::make_shared<LaneChangeModuleManager>(
+        this, "lane_change", 1, p.priority_lane_change,
+        p.enable_simultaneous_execution_lane_change);
       planner_manager_->registerSceneModuleManager(manager);
       path_candidate_publishers_.emplace(
         "lane_change", create_publisher<Path>(path_candidate_name_space + "lane_change", 1));
@@ -180,8 +181,8 @@ BehaviorPathPlannerNode::BehaviorPathPlannerNode(const rclcpp::NodeOptions & nod
     }
 
     if (p.launch_side_shift) {
-      auto manager =
-        std::make_shared<SideShiftModuleManager>(this, "side_shift", 1, p.priority_side_shift);
+      auto manager = std::make_shared<SideShiftModuleManager>(
+        this, "side_shift", 1, p.priority_side_shift, p.enable_simultaneous_execution_side_shift);
       planner_manager_->registerSceneModuleManager(manager);
       path_candidate_publishers_.emplace(
         "side_shift", create_publisher<Path>(path_candidate_name_space + "side_shift", 1));
@@ -190,8 +191,8 @@ BehaviorPathPlannerNode::BehaviorPathPlannerNode(const rclcpp::NodeOptions & nod
     }
 
     if (p.launch_pull_out) {
-      auto manager =
-        std::make_shared<PullOutModuleManager>(this, "pull_out", 1, p.priority_pull_out);
+      auto manager = std::make_shared<PullOutModuleManager>(
+        this, "pull_out", 1, p.priority_pull_out, p.enable_simultaneous_execution_pull_out);
       planner_manager_->registerSceneModuleManager(manager);
       path_candidate_publishers_.emplace(
         "pull_out", create_publisher<Path>(path_candidate_name_space + "pull_out", 1));
@@ -262,8 +263,19 @@ BehaviorPathPlannerParameters BehaviorPathPlannerNode::getCommonParam()
   p.priority_pull_out = declare_parameter<int>("priority_pull_out");
   p.priority_side_shift = declare_parameter<int>("priority_side_shift");
 
-  p.enable_simultaneous_execution_of_multiple_modules =
-    declare_parameter<bool>("enable_simultaneous_execution_of_multiple_modules");
+  p.enable_simultaneous_execution_avoidance_by_lc =
+    declare_parameter<bool>("enable_simultaneous_execution_avoidance_by_lc");
+  p.enable_simultaneous_execution_avoidance =
+    declare_parameter<bool>("enable_simultaneous_execution_avoidance");
+  p.enable_simultaneous_execution_lane_change =
+    declare_parameter<bool>("enable_simultaneous_execution_lane_change");
+  p.enable_simultaneous_execution_side_shift =
+    declare_parameter<bool>("enable_simultaneous_execution_side_shift");
+  p.enable_simultaneous_execution_pull_over =
+    declare_parameter<bool>("enable_simultaneous_execution_pull_over");
+  p.enable_simultaneous_execution_pull_out =
+    declare_parameter<bool>("enable_simultaneous_execution_pull_out");
+
   p.verbose = declare_parameter<bool>("verbose");
 
   p.shift_request_time_limit = declare_parameter<double>("shift_request_time_limit");

@@ -34,7 +34,7 @@ class LaneChangeModuleManager : public SceneModuleManagerInterface
 public:
   LaneChangeModuleManager(
     rclcpp::Node * node, const std::string & name, const size_t max_module_num,
-    const size_t priority);
+    const size_t priority, const bool enable_simultaneous_execution);
 
   std::shared_ptr<SceneModuleInterface> createNewSceneModuleInstance() override
   {

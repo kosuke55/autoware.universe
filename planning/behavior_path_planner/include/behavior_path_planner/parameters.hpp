@@ -33,6 +33,13 @@ struct BehaviorPathPlannerParameters
   size_t priority_pull_over;
   size_t priority_side_shift;
 
+  bool enable_simultaneous_execution_avoidance_by_lc{false};
+  bool enable_simultaneous_execution_avoidance{false};
+  bool enable_simultaneous_execution_lane_change{false};
+  bool enable_simultaneous_execution_side_shift{false};
+  bool enable_simultaneous_execution_pull_over{false};
+  bool enable_simultaneous_execution_pull_out{false};
+
   bool enable_simultaneous_execution_of_multiple_modules{false};
   bool verbose{false};
 

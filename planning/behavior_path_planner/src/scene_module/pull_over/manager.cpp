@@ -24,8 +24,9 @@ namespace behavior_path_planner
 {
 
 PullOverModuleManager::PullOverModuleManager(
-  rclcpp::Node * node, const std::string & name, const size_t max_module_num, const size_t priority)
-: SceneModuleManagerInterface(node, name, max_module_num, priority)
+  rclcpp::Node * node, const std::string & name, const size_t max_module_num, const size_t priority,
+  const bool enable_simultaneous_execution)
+: SceneModuleManagerInterface(node, name, max_module_num, priority, enable_simultaneous_execution)
 {
   rtc_interface_ = std::make_shared<RTCInterface>(node, name);
   getModuleParams(node);

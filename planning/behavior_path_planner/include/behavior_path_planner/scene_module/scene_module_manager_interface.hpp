@@ -37,13 +37,14 @@ class SceneModuleManagerInterface
 public:
   SceneModuleManagerInterface(
     rclcpp::Node * node, const std::string & name, const size_t max_module_num,
-    const size_t priority)
+    const size_t priority, const bool enable_simultaneous_execution)
   : node_(node),
     clock_(*node->get_clock()),
     logger_(node->get_logger().get_child(name)),
     name_(name),
     max_module_num_(max_module_num),
-    priority_(priority)
+    priority_(priority),
+    enable_simultaneous_execution_(enable_simultaneous_execution)
   {
     pub_debug_marker_ = node->create_publisher<MarkerArray>("~/debug/" + name, 20);
   }
@@ -189,6 +190,8 @@ public:
 
   bool canLaunchNewModule() const { return registered_modules_.size() < max_module_num_; }
 
+  bool isSimultaneousExecutable() const { return enable_simultaneous_execution_; }
+
   void setData(const std::shared_ptr<PlannerData> & planner_data) { planner_data_ = planner_data; }
 
   void reset()
@@ -270,6 +273,8 @@ private:
   size_t max_module_num_;
 
   size_t priority_;
+
+  bool enable_simultaneous_execution_{false};
 };
 
 }  // namespace behavior_path_planner

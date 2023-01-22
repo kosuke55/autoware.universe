@@ -54,7 +54,7 @@ struct SceneModuleStatus
 class PlannerManager
 {
 public:
-  PlannerManager(rclcpp::Node & node, const bool enable_simultaneous_execution, const bool verbose);
+  PlannerManager(rclcpp::Node & node, const bool verbose);
 
   BehaviorModuleOutput run(const std::shared_ptr<PlannerData> & data);
 
@@ -289,8 +289,6 @@ private:
   StopWatch<std::chrono::milliseconds> stop_watch_;
 
   double processing_time_{0.0};
-
-  bool enable_simultaneous_execution_{false};
 
   bool verbose_{false};
 };
