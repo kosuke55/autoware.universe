@@ -85,7 +85,7 @@ void SideShiftModule::onEntry()
   // write me... (Don't initialize variables, otherwise lateral offset gets zero on entry.)
   start_pose_reset_request_ = false;
   lateral_offset_change_request_ = true;
-  current_state_ = ModuleStatus::IDLE;
+  // current_state_ = ModuleStatus::IDLE;
 }
 
 void SideShiftModule::onExit()

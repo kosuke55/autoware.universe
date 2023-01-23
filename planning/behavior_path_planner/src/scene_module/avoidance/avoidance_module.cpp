@@ -3695,7 +3695,7 @@ void AvoidanceModule::onEntry()
 {
   DEBUG_PRINT("AVOIDANCE onEntry. wait approval!");
   initVariables();
-  current_state_ = ModuleStatus::IDLE;
+  // current_state_ = ModuleStatus::IDLE;
 }
 
 void AvoidanceModule::onExit()

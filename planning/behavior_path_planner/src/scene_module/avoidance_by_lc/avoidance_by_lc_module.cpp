@@ -95,7 +95,7 @@ BehaviorModuleOutput AvoidanceByLCModule::run()
 void AvoidanceByLCModule::onEntry()
 {
   RCLCPP_DEBUG(getLogger(), "LANE_CHANGE onEntry");
-  current_state_ = ModuleStatus::IDLE;
+  // current_state_ = ModuleStatus::IDLE;
   updateLaneChangeStatus();
   const auto current_pose = planner_data_->self_pose->pose;
   const auto arclength_start =

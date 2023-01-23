@@ -57,7 +57,7 @@ public:
 
     m->setData(planner_data_);
     m->setPreviousModuleOutput(previous_module_output);
-    m->onEntry();
+    // m->onEntry();
     m->updateData();
 
     return m->isExecutionRequested();

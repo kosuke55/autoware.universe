@@ -103,7 +103,7 @@ BehaviorModuleOutput PullOverModule::run()
 void PullOverModule::onEntry()
 {
   RCLCPP_DEBUG(getLogger(), "PULL_OVER onEntry");
-  current_state_ = ModuleStatus::IDLE;
+  // current_state_ = ModuleStatus::IDLE;
   // current_state_ = ModuleStatus::SUCCESS;
 
   // Initialize occupancy grid map

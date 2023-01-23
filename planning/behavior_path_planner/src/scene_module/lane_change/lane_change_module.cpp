@@ -80,7 +80,7 @@ BehaviorModuleOutput LaneChangeModule::run()
 void LaneChangeModule::onEntry()
 {
   RCLCPP_DEBUG(getLogger(), "LANE_CHANGE onEntry");
-  current_state_ = ModuleStatus::IDLE;
+  // current_state_ = ModuleStatus::IDLE;
   updateLaneChangeStatus();
   // Get arclength to start lane change
   const auto current_pose = planner_data_->self_pose->pose;

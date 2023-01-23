@@ -60,7 +60,7 @@ BehaviorModuleOutput PullOutModule::run()
 void PullOutModule::onEntry()
 {
   RCLCPP_DEBUG(getLogger(), "PULL_OUT onEntry");
-  current_state_ = ModuleStatus::IDLE;
+  // current_state_ = ModuleStatus::IDLE;
   updatePullOutStatus();
 
   // Get arclength to start lane change
