@@ -129,7 +129,7 @@ boost::optional<ModuleID> PlannerManager::getCandidateModuleID(
   const auto block_simlutaneous_execution = [this]() {
     for (const auto & m : approved_modules_) {
       const auto & manager = m.first;
-      if (manager->isSimultaneousExecutable()) {
+      if (!manager->isSimultaneousExecutable()) {
         return true;
       }
     }
