@@ -46,11 +46,13 @@ PlannerManager::PlannerManager(rclcpp::Node & node, const bool verbose)
   clock_(*node.get_clock()),
   verbose_{verbose}
 {
+  processing_time_.emplace("total_time", 0.0);
 }
 
 BehaviorModuleOutput PlannerManager::run(const std::shared_ptr<PlannerData> & data)
 {
-  stop_watch_.tic("processing_time");
+  resetProcessingTime();
+  stop_watch_.tic("total_time");
 
   if (!start_lanelet_) {
     updateStartLanelet(data);
@@ -76,7 +78,7 @@ BehaviorModuleOutput PlannerManager::run(const std::shared_ptr<PlannerData> & da
      */
     if (!candidate_module_id) {
       candidate_module_id_ = boost::none;
-      processing_time_ = stop_watch_.toc("processing_time", true);
+      processing_time_.at("total_time") = stop_watch_.toc("total_time", true);
       return approved_path_data;
     }
 
@@ -93,7 +95,7 @@ BehaviorModuleOutput PlannerManager::run(const std::shared_ptr<PlannerData> & da
      */
     if (isWaitingApproval(candidate_module_id.get())) {
       candidate_module_id_ = candidate_module_id.get();
-      processing_time_ = stop_watch_.toc("processing_time", true);
+      processing_time_.at("total_time") = stop_watch_.toc("total_time", true);
       return result;
     }
 
@@ -104,7 +106,7 @@ BehaviorModuleOutput PlannerManager::run(const std::shared_ptr<PlannerData> & da
     addApprovedModule(candidate_module_id.get());
   }
 
-  processing_time_ = stop_watch_.toc("processing_time", true);
+  processing_time_.at("total_time") = stop_watch_.toc("total_time", true);
 
   return {};
 }
@@ -138,20 +140,25 @@ boost::optional<ModuleID> PlannerManager::getCandidateModuleID(
 
   // pickup execution requested modules
   for (const auto & m : scene_manager_ptrs_) {
+    stop_watch_.tic(m->getModuleName());
+
     // generate temporary uuid
     const auto uuid = generateUUID();
 
     // already exist the modules that don't support simultaneous execution.
     if (block_simlutaneous_execution) {
+      processing_time_.at(m->getModuleName()) += stop_watch_.toc(m->getModuleName(), true);
       continue;
     }
 
     // the manager's module doesn't support simultaneous execution.
     if (!approved_modules_.empty() && !m->isSimultaneousExecutable()) {
+      processing_time_.at(m->getModuleName()) += stop_watch_.toc(m->getModuleName(), true);
       continue;
     }
 
     if ((lc_running || avoid_running) && m->getModuleName() == "avoidance_by_lc") {
+      processing_time_.at(m->getModuleName()) += stop_watch_.toc(m->getModuleName(), true);
       continue;
     }
 
@@ -160,6 +167,7 @@ boost::optional<ModuleID> PlannerManager::getCandidateModuleID(
      */
     if (!candidate_module_id_) {
       if (!m->canLaunchNewModule()) {
+        processing_time_.at(m->getModuleName()) += stop_watch_.toc(m->getModuleName(), true);
         continue;
       }
 
@@ -168,6 +176,7 @@ boost::optional<ModuleID> PlannerManager::getCandidateModuleID(
         request_modules.emplace_back(m, uuid);
       }
 
+      processing_time_.at(m->getModuleName()) += stop_watch_.toc(m->getModuleName(), true);
       continue;
     }
 
@@ -188,6 +197,7 @@ boost::optional<ModuleID> PlannerManager::getCandidateModuleID(
         deleteExpiredModules(candidate_module_id_.get());
       }
 
+      processing_time_.at(m->getModuleName()) += stop_watch_.toc(m->getModuleName(), true);
       continue;
     }
 
@@ -197,10 +207,12 @@ boost::optional<ModuleID> PlannerManager::getCandidateModuleID(
 
     // don't launch new module as candidate
     if (!m->canLaunchNewModule()) {
+      processing_time_.at(m->getModuleName()) += stop_watch_.toc(m->getModuleName(), true);
       continue;
     }
 
     if (!m->isExecutionRequested(previous_module_output)) {
+      processing_time_.at(m->getModuleName()) += stop_watch_.toc(m->getModuleName(), true);
       continue;
     }
 
@@ -257,10 +269,16 @@ BehaviorModuleOutput PlannerManager::update(const std::shared_ptr<PlannerData> &
   bool remove_after_module = false;
 
   for (auto itr = approved_modules_.begin(); itr != approved_modules_.end();) {
+    const auto & manager = itr->first;
+    const auto & name = manager->getModuleName();
+
+    stop_watch_.tic(name);
+
     // if one of the approved_modules_ is waiting approval, remove all approved module from the
     // waiting approval module.
     if (remove_after_module) {
       itr = approved_modules_.erase(itr);
+      processing_time_.at(name) += stop_watch_.toc(name, true);
       continue;
     }
 
@@ -271,9 +289,6 @@ BehaviorModuleOutput PlannerManager::update(const std::shared_ptr<PlannerData> &
     if (!isRunning(*itr)) {
       // option: remove expired module in the order in which they are activated.
       if (itr == approved_modules_.begin()) {
-        const auto & manager = itr->first;
-        const auto & name = manager->getModuleName();
-
         // update date on which lane the vhicle is driving
         if (name == "lane_change" || name == "avoidance_by_lc") {
           updateStartLanelet(data);
@@ -283,6 +298,7 @@ BehaviorModuleOutput PlannerManager::update(const std::shared_ptr<PlannerData> &
         deleteExpiredModules(*itr);
         itr = approved_modules_.erase(itr);
         output = result;
+        processing_time_.at(name) += stop_watch_.toc(name, true);
         continue;
       }
     }
@@ -293,9 +309,11 @@ BehaviorModuleOutput PlannerManager::update(const std::shared_ptr<PlannerData> &
       candidate_module_id_ = *itr;
       itr = approved_modules_.erase(itr);
       remove_after_module = true;
+      processing_time_.at(name) += stop_watch_.toc(name, true);
       continue;
     }
 
+    processing_time_.at(name) += stop_watch_.toc(name, true);
     output = result;
     itr++;
   }

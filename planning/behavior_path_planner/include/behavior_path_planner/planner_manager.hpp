@@ -27,6 +27,7 @@
 #include <algorithm>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -63,6 +64,7 @@ public:
   {
     RCLCPP_INFO(logger_, "register %s module", scene_module_manager_ptr->getModuleName().c_str());
     scene_manager_ptrs_.push_back(scene_module_manager_ptr);
+    processing_time_.emplace(scene_module_manager_ptr->getModuleName(), 0.0);
   }
 
   void updateModuleParams(const std::vector<rclcpp::Parameter> & parameters)
@@ -79,6 +81,7 @@ public:
     start_lanelet_ = boost::none;
     std::for_each(
       scene_manager_ptrs_.begin(), scene_manager_ptrs_.end(), [](const auto & m) { m->reset(); });
+    resetProcessingTime();
   }
 
   void print()
@@ -112,7 +115,12 @@ public:
     }
 
     string_stream << "\n" << std::fixed << std::setprecision(1);
-    string_stream << "processing time   : " << std::setw(6) << processing_time_ << " [ms]";
+    string_stream << "processing time   : ";
+    for (const auto & t : processing_time_) {
+      string_stream << std::right << "[" << std::setw(16) << std::left << t.first << ":"
+                    << std::setw(4) << std::right << t.second << "ms]\n"
+                    << std::setw(21);
+    }
 
     RCLCPP_INFO_STREAM(logger_, string_stream.str());
   }
@@ -264,6 +272,13 @@ private:
     RCLCPP_WARN(logger_, "update start lanelet. id:%ld", start_lanelet_.get().id());
   }
 
+  void resetProcessingTime()
+  {
+    for (auto & t : processing_time_) {
+      t.second = 0.0;
+    }
+  }
+
   BehaviorModuleOutput update(const std::shared_ptr<PlannerData> & data);
 
   BehaviorModuleOutput getReferencePath(const std::shared_ptr<PlannerData> & data) const;
@@ -286,9 +301,9 @@ private:
 
   rclcpp::Clock clock_;
 
-  StopWatch<std::chrono::milliseconds> stop_watch_;
+  mutable StopWatch<std::chrono::milliseconds> stop_watch_;
 
-  double processing_time_{0.0};
+  mutable std::unordered_map<std::string, double> processing_time_;
 
   bool verbose_{false};
 };
