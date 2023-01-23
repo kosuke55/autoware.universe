@@ -57,7 +57,7 @@ void PullOutModuleManager::getModuleParams(rclcpp::Node * node)
 
   p.th_arrived_distance = dp("th_arrived_distance", 1.0);
   p.th_stopped_velocity = dp("th_stopped_velocity", 0.01);
-  p.th_stopped_time = dp("th_stopped_time", 1.0);
+  p.th_stopped_time = dp("th_stopped_time", 2.0);
   p.collision_check_margin = dp("collision_check_margin", 1.0);
   p.pull_out_finish_judge_buffer = dp("pull_out_finish_judge_buffer", 1.0);
   // shift pull out
