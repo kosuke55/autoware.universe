@@ -1229,6 +1229,30 @@ bool RouteHandler::getPullOutStartLane(
   return false;
 }
 
+bool RouteHandler::getLeftShoulderLanelet(
+  const lanelet::ConstLanelet & lanelet, lanelet::ConstLanelet * left_lanelet) const
+{
+  for (const auto & shoulder_lanelet : shoulder_lanelets_) {
+    if (lanelet::geometry::leftOf(shoulder_lanelet, lanelet)) {
+      *left_lanelet = shoulder_lanelet;
+      return true;
+    }
+  }
+  return false;
+}
+
+bool RouteHandler::getRightShoulderLanelet(
+  const lanelet::ConstLanelet & lanelet, lanelet::ConstLanelet * right_lanelet) const 
+{
+  for (const auto & shoulder_lanelet : shoulder_lanelets_) {
+    if (lanelet::geometry::rightOf(shoulder_lanelet, lanelet)) {
+      *right_lanelet = shoulder_lanelet;
+      return true;
+    }
+  }
+  return false;
+}
+
 lanelet::ConstLanelets RouteHandler::getClosestLaneletSequence(const Pose & pose) const
 {
   lanelet::ConstLanelet lanelet;
@@ -1554,6 +1578,11 @@ lanelet::routing::RelationType RouteHandler::getRelation(
 }
 
 lanelet::ConstLanelets RouteHandler::getShoulderLanelets() const { return shoulder_lanelets_; }
+
+bool RouteHandler::isShoulderLanelet(const lanelet::ConstLanelet & lanelet) const
+{
+  return exists(shoulder_lanelets_, lanelet);
+}
 
 lanelet::ConstLanelets RouteHandler::getPreviousLaneletSequence(
   const lanelet::ConstLanelets & lanelet_sequence) const

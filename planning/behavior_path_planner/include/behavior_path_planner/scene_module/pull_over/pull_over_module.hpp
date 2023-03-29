@@ -154,6 +154,8 @@ private:
   // approximate distance from the start point to the end point of pull_over.
   // this is used as an assumed value to decelerate, etc., before generating the actual path.
   double approximate_pull_over_distance_ = 20.0;
+  //todo: make param
+  bool left_hand_traffic_ = true;
 
   bool incrementPathIndex();
   PathWithLaneId getCurrentPath() const;
@@ -179,6 +181,11 @@ private:
 
   bool checkCollision(const PathWithLaneId & path) const;
   bool hasEnoughDistance(const PullOverPath & pull_over_path) const;
+  bool isCrossingPossible(
+    const lanelet::ConstLanelet & start_lane, const lanelet::ConstLanelet & end_lane) const;
+  bool isCrossingPossible(
+    const Pose & start_pose, const Pose & end_pose, const lanelet::ConstLanelets lanes) const;
+  bool isCrossingPossible(const PullOverPath & pull_over_path) const;
 
   TurnSignalInfo calcTurnSignalInfo() const;
 

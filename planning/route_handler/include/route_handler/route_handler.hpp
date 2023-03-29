@@ -291,6 +291,7 @@ public:
   lanelet::routing::RelationType getRelation(
     const lanelet::ConstLanelet & prev_lane, const lanelet::ConstLanelet & next_lane) const;
   lanelet::ConstLanelets getShoulderLanelets() const;
+  bool isShoulderLanelet(const lanelet::ConstLanelet & lanelet) const;
 
   // for path
   PathWithLaneId getCenterLinePath(
@@ -311,6 +312,10 @@ public:
     const lanelet::ConstLanelets & lanelets, const Pose & pose, const double vehicle_width,
     lanelet::ConstLanelet * target_lanelet);
   double getLaneChangeableDistance(const Pose & current_pose, const Direction & direction) const;
+  bool getLeftShoulderLanelet(
+    const lanelet::ConstLanelet & lanelet, lanelet::ConstLanelet * left_lanelet) const;
+  bool getRightShoulderLanelet(
+    const lanelet::ConstLanelet & lanelet, lanelet::ConstLanelet * right_lanelet) const;
   lanelet::ConstPolygon3d getIntersectionAreaById(const lanelet::Id id) const;
 
 private:

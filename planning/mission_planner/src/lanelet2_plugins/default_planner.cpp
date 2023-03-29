@@ -201,10 +201,10 @@ PlannerPlugin::MarkerArray DefaultPlanner::visualize(const LaneletRoute & route)
   std_msgs::msg::ColorRGBA cl_end;
   std_msgs::msg::ColorRGBA cl_normal;
   std_msgs::msg::ColorRGBA cl_goal;
-  set_color(&cl_route, 0.2, 0.4, 0.2, 0.05);
+  set_color(&cl_route, 0.2, 0.4, 0.2, 0.3);
   set_color(&cl_goal, 0.2, 0.4, 0.4, 0.05);
   set_color(&cl_end, 0.2, 0.2, 0.4, 0.05);
-  set_color(&cl_normal, 0.2, 0.4, 0.2, 0.05);
+  set_color(&cl_normal, 0.2, 0.4, 0.2, 0.3);
   set_color(&cl_ll_borders, 1.0, 1.0, 1.0, 0.999);
 
   visualization_msgs::msg::MarkerArray route_marker_array;
@@ -307,6 +307,9 @@ bool DefaultPlanner::is_goal_valid(
   const auto logger = node_->get_logger();
 
   const auto goal_lanelet_pt = lanelet::utils::conversion::toLaneletPoint(goal.position);
+
+  // todo: if allow refine goal, always return true
+  return true;
 
   // check if goal is in shoulder lanelet
   lanelet::Lanelet closest_shoulder_lanelet;

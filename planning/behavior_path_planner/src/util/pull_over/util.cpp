@@ -57,17 +57,28 @@ PathWithLaneId combineReferencePath(const PathWithLaneId & path1, const PathWith
 
 lanelet::ConstLanelets getPullOverLanes(const RouteHandler & route_handler)
 {
-  lanelet::ConstLanelets pull_over_lanes;
-  lanelet::ConstLanelet target_shoulder_lane;
   const Pose goal_pose = route_handler.getGoalPose();
 
+  lanelet::ConstLanelet target_shoulder_lane;
   if (route_handler::RouteHandler::getPullOverTarget(
         route_handler.getShoulderLanelets(), goal_pose, &target_shoulder_lane)) {
-    constexpr double pull_over_lane_length = 200;
-    pull_over_lanes = route_handler.getShoulderLaneletSequence(
-      target_shoulder_lane, goal_pose, pull_over_lane_length, pull_over_lane_length);
+    // pull over on shoulder lane
+    return route_handler.getShoulderLaneletSequence(target_shoulder_lane, goal_pose);
   }
-  return pull_over_lanes;
+
+  // pull over on road lane
+  lanelet::ConstLanelet closest_lane;
+  route_handler.getClosestLaneletWithinRoute(goal_pose, &closest_lane);
+
+  // todo: with policies, support right lane
+  lanelet::ConstLanelet outermost_lane = route_handler.getMostLeftLanelet(closest_lane);
+
+  lanelet::ConstLanelet outermost_shoulder_lane;
+  if (route_handler.getLeftShoulderLanelet(outermost_lane, &outermost_shoulder_lane)) {
+    return route_handler.getShoulderLaneletSequence(outermost_shoulder_lane, goal_pose);
+  }
+
+  return route_handler.getLaneletSequence(outermost_lane);
 }
 
 PredictedObjects filterObjectsByLateralDistance(

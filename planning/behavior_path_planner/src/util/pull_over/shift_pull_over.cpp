@@ -46,7 +46,9 @@ boost::optional<PullOverPath> ShiftPullOver::plan(const Pose & goal_pose)
   const auto road_lanes = util::getExtendedCurrentLanes(planner_data_);
   const auto shoulder_lanes = pull_over_utils::getPullOverLanes(*route_handler);
   if (road_lanes.empty() || shoulder_lanes.empty()) {
-    return {};
+    // return {};
+  }
+  if(shoulder_lanes.empty()){
   }
 
   // find safe one from paths with different jerk
@@ -209,7 +211,8 @@ boost::optional<PullOverPath> ShiftPullOver::generatePullOverPath(
     parameters_.drivable_area_right_bound_offset);
   if (lane_departure_checker_.checkPathWillLeaveLane(
         util::transformToLanelets(expanded_lanes), pull_over_path.getParkingPath())) {
-    return {};
+    std::cerr << "hoge: shifted path will leave lanes" << std::endl;
+    // return {};
   }
 
   return pull_over_path;

@@ -78,8 +78,9 @@ GoalCandidates GoalSearcher::search(const Pose & original_goal_pose)
       continue;
     }
 
-    const auto distance_from_left_bound = util::getSignedDistanceFromShoulderLeftBoundary(
-      pull_over_lanes, vehicle_footprint_, center_pose);
+    // todo: suport right bound
+    const auto distance_from_left_bound =
+      util::getSignedDistanceFromBoundary(pull_over_lanes, vehicle_footprint_, center_pose, true);
     if (!distance_from_left_bound) continue;
 
     const double offset_from_center_line = distance_from_left_bound.value() + margin_from_boundary;
