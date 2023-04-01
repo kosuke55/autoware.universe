@@ -1159,10 +1159,9 @@ void PullOverModule::decelerateBeforeSearchStart(
   const auto min_decel_distance = calcFeasibleDecelDistance(pull_over_velocity);
   if (min_decel_distance) {
     const double distance_to_search_start = calcSignedArchLengthFromEgo(path, search_start_pose);
-    const double distance_to_decel = approximate_pull_over_distance_ + distance_to_search_start;
-    if (min_decel_distance < distance_to_decel) {
-      insertDecelPoint(current_pose.position, distance_to_decel, pull_over_velocity, path.points);
-    }
+    const double distance_to_decel =
+      std::max(*min_decel_distance, distance_to_search_start - approximate_pull_over_distance_);
+    insertDecelPoint(current_pose.position, distance_to_decel, pull_over_velocity, path.points);
   }
 }
 
