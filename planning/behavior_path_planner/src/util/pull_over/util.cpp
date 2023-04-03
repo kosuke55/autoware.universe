@@ -78,7 +78,8 @@ lanelet::ConstLanelets getPullOverLanes(const RouteHandler & route_handler)
     return route_handler.getShoulderLaneletSequence(outermost_shoulder_lane, goal_pose);
   }
 
-  return route_handler.getLaneletSequence(outermost_lane);
+  const bool dist = std::numeric_limits<double>::max();
+  return route_handler.getLaneletSequence(outermost_lane, dist, dist, false);
 }
 
 PredictedObjects filterObjectsByLateralDistance(

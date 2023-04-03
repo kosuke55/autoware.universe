@@ -435,10 +435,10 @@ lanelet::ConstLanelets RouteHandler::getLaneChangeableNeighbors(
 }
 
 lanelet::ConstLanelets RouteHandler::getLaneletSequenceAfter(
-  const lanelet::ConstLanelet & lanelet, const double min_length) const
+  const lanelet::ConstLanelet & lanelet, const double min_length, const bool only_route_lanes) const
 {
   lanelet::ConstLanelets lanelet_sequence_forward;
-  if (!exists(route_lanelets_, lanelet)) {
+  if (only_route_lanes && !exists(route_lanelets_, lanelet)) {
     return lanelet_sequence_forward;
   }
 
@@ -463,10 +463,10 @@ lanelet::ConstLanelets RouteHandler::getLaneletSequenceAfter(
 }
 
 lanelet::ConstLanelets RouteHandler::getLaneletSequenceUpTo(
-  const lanelet::ConstLanelet & lanelet, const double min_length) const
+  const lanelet::ConstLanelet & lanelet, const double min_length, const bool only_route_lanes) const
 {
   lanelet::ConstLanelets lanelet_sequence_backward;
-  if (!exists(route_lanelets_, lanelet)) {
+  if (only_route_lanes && !exists(route_lanelets_, lanelet)) {
     return lanelet_sequence_backward;
   }
 
@@ -520,7 +520,7 @@ lanelet::ConstLanelets RouteHandler::getLaneletSequenceUpTo(
 
 lanelet::ConstLanelets RouteHandler::getLaneletSequence(
   const lanelet::ConstLanelet & lanelet, const double backward_distance,
-  const double forward_distance) const
+  const double forward_distance, const bool only_route_lanes) const
 {
   Pose current_pose{};
   current_pose.orientation.w = 1;
@@ -529,16 +529,16 @@ lanelet::ConstLanelets RouteHandler::getLaneletSequence(
   }
 
   lanelet::ConstLanelets lanelet_sequence;
-  if (!exists(route_lanelets_, lanelet)) {
+  if (only_route_lanes && !exists(route_lanelets_, lanelet)) {
     return lanelet_sequence;
   }
 
   lanelet::ConstLanelets lanelet_sequence_forward =
-    getLaneletSequenceAfter(lanelet, forward_distance);
+    getLaneletSequenceAfter(lanelet, forward_distance, only_route_lanes);
   const lanelet::ConstLanelets lanelet_sequence_backward = std::invoke([&]() {
     const auto arc_coordinate = lanelet::utils::getArcCoordinates({lanelet}, current_pose);
     if (arc_coordinate.length < backward_distance) {
-      return getLaneletSequenceUpTo(lanelet, backward_distance);
+      return getLaneletSequenceUpTo(lanelet, backward_distance, only_route_lanes);
     }
     return lanelet::ConstLanelets{};
   });
@@ -560,19 +560,19 @@ lanelet::ConstLanelets RouteHandler::getLaneletSequence(
 
 lanelet::ConstLanelets RouteHandler::getLaneletSequence(
   const lanelet::ConstLanelet & lanelet, const Pose & current_pose, const double backward_distance,
-  const double forward_distance) const
+  const double forward_distance, const bool only_route_lanes) const
 {
   lanelet::ConstLanelets lanelet_sequence;
-  if (!exists(route_lanelets_, lanelet)) {
+  if (only_route_lanes && !exists(route_lanelets_, lanelet)) {
     return lanelet_sequence;
   }
 
   lanelet::ConstLanelets lanelet_sequence_forward =
-    getLaneletSequenceAfter(lanelet, forward_distance);
+    getLaneletSequenceAfter(lanelet, forward_distance, only_route_lanes);
   const lanelet::ConstLanelets lanelet_sequence_backward = std::invoke([&]() {
     const auto arc_coordinate = lanelet::utils::getArcCoordinates({lanelet}, current_pose);
     if (arc_coordinate.length < backward_distance) {
-      return getLaneletSequenceUpTo(lanelet, backward_distance);
+      return getLaneletSequenceUpTo(lanelet, backward_distance, only_route_lanes);
     }
     return lanelet::ConstLanelets{};
   });
@@ -608,7 +608,7 @@ bool RouteHandler::getLeftShoulderLanelet(
   const lanelet::ConstLanelet & lanelet, lanelet::ConstLanelet * left_lanelet) const
 {
   for (const auto & shoulder_lanelet : shoulder_lanelets_) {
-    if (lanelet::geometry::leftOf(lanelet, shoulder_lanelet)) {
+    if (lanelet::geometry::leftOf(shoulder_lanelet, lanelet)) {
       *left_lanelet = shoulder_lanelet;
       return true;
     }
@@ -620,7 +620,7 @@ bool RouteHandler::getRightShoulderLanelet(
   const lanelet::ConstLanelet & lanelet, lanelet::ConstLanelet * right_lanelet) const
 {
   for (const auto & shoulder_lanelet : shoulder_lanelets_) {
-    if (lanelet::geometry::rightOf(lanelet, shoulder_lanelet)) {
+    if (lanelet::geometry::rightOf(shoulder_lanelet, lanelet)) {
       *right_lanelet = shoulder_lanelet;
       return true;
     }

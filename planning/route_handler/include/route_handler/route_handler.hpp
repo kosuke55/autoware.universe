@@ -76,6 +76,7 @@ public:
   lanelet::ConstPolygon3d getExtraDrivableAreaById(const lanelet::Id id) const;
   Header getRouteHeader() const;
   UUID getRouteUuid() const;
+  lanelet::ConstLanelets getRouteLanelets() const;
 
   // for routing graph
   bool isMapMsgReady() const;
@@ -276,11 +277,13 @@ public:
   lanelet::ConstLanelets getLaneletsFromIds(const lanelet::Ids & ids) const;
   lanelet::ConstLanelets getLaneletSequence(
     const lanelet::ConstLanelet & lanelet, const Pose & current_pose,
-    const double backward_distance, const double forward_distance) const;
+    const double backward_distance, const double forward_distance,
+    const bool only_route_lanes=true) const;
   lanelet::ConstLanelets getLaneletSequence(
     const lanelet::ConstLanelet & lanelet,
     const double backward_distance = std::numeric_limits<double>::max(),
-    const double forward_distance = std::numeric_limits<double>::max()) const;
+    const double forward_distance = std::numeric_limits<double>::max(),
+    const bool only_route_lanes = true) const;
   lanelet::ConstLanelets getShoulderLaneletSequence(
     const lanelet::ConstLanelet & lanelet, const Pose & pose,
     const double backward_distance = std::numeric_limits<double>::max(),
@@ -361,13 +364,14 @@ private:
     const lanelet::ConstLanelet & lanelet, lanelet::ConstLanelet * right_lanelet) const;
   bool getLeftLaneletWithinRoute(
     const lanelet::ConstLanelet & lanelet, lanelet::ConstLanelet * left_lanelet) const;
-  lanelet::ConstLanelets getRouteLanelets() const;
   lanelet::ConstLanelets getLaneletSequenceUpTo(
     const lanelet::ConstLanelet & lanelet,
-    const double min_length = std::numeric_limits<double>::max()) const;
+    const double min_length = std::numeric_limits<double>::max(),
+    const bool only_route_lanes = true) const;
   lanelet::ConstLanelets getLaneletSequenceAfter(
     const lanelet::ConstLanelet & lanelet,
-    const double min_length = std::numeric_limits<double>::max()) const;
+    const double min_length = std::numeric_limits<double>::max(),
+    const bool only_route_lanes = true) const;
   bool getFollowingShoulderLanelet(
     const lanelet::ConstLanelet & lanelet, lanelet::ConstLanelet * following_lanelet) const;
   lanelet::ConstLanelets getShoulderLaneletSequenceAfter(

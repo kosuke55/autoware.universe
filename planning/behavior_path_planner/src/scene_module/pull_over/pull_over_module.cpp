@@ -334,9 +334,11 @@ bool PullOverModule::isExecutionRequested() const
   const Pose & current_pose = planner_data_->self_odometry->pose.pose;
   const Pose & goal_pose = planner_data_->route_handler->getGoalPose();
 
+  lanelet::ConstLanelet current_lane{}, goal_lane{};
   const lanelet::ConstLanelets current_lanes = util::getCurrentLanes(planner_data_);
-  lanelet::ConstLanelet current_lane{};
   lanelet::utils::query::getClosestLanelet(current_lanes, current_pose, &current_lane);
+  const lanelet::ConstLanelets route_lanes = planner_data_->route_handler->getRouteLanelets();
+  lanelet::utils::query::getClosestLanelet(route_lanes, goal_pose, &goal_lane);
 
   const double self_to_goal_arc_length =
     util::getSignedDistance(current_pose, goal_pose, current_lanes);
@@ -346,14 +348,25 @@ bool PullOverModule::isExecutionRequested() const
 
   const lanelet::ConstLanelets pull_over_lanes =
     pull_over_utils::getPullOverLanes(*(planner_data_->route_handler));
-  lanelet::ConstLanelet target_pull_over_lane{};
-  lanelet::utils::query::getClosestLanelet(pull_over_lanes, goal_pose, &target_pull_over_lane);
+  lanelet::ConstLanelet target_lane{};
+  lanelet::utils::query::getClosestLanelet(pull_over_lanes, goal_pose, &target_lane);
 
-  if (!isCrossingPossible(current_lane, target_pull_over_lane)) {
-    std::cerr << "PullOverModule::isExecutionRequested() : isCrossingPossible() is false"
-              << std::endl;
+  // check if goal pose in target lane
+  if (!lanelet::utils::isInLanelet(goal_pose, target_lane, 0.1)) {
     return false;
   }
+
+  // check if target lane is current or neighbor lane
+  if (!isCrossingPossible(current_lane, target_lane)) {
+    return false;
+  }
+
+  // if (!isCrossingPossible(goal_lane, target_lane)) {
+  //   std::cerr << "PullOverModule::isExecutionRequested() : isCrossingPossible() is false, goal "
+  //                "position is wrong"
+  //             << std::endl;
+  //   return false;
+  // }
 
   return true;
 }
@@ -574,7 +587,6 @@ BehaviorModuleOutput PullOverModule::plan()
 
       // check if path is valid and safe
       const bool has_enogh_distance = hasEnoughDistance(pull_over_path);
-      std::cerr << "has_enogh_distance: " << has_enogh_distance << std::endl;
       if (!has_enogh_distance || checkCollision(pull_over_path.getParkingPath())) {
         continue;
       }
@@ -1175,7 +1187,8 @@ bool PullOverModule::isCrossingPossible(
     end_lane_pose.position = lanelet::utils::conversion::toGeomMsgPt(end_lane.centerline().front());
     end_lane_sequence = route_handler->getShoulderLaneletSequence(end_lane, end_lane_pose);
   } else {
-    end_lane_sequence = route_handler->getLaneletSequence(end_lane);
+    const double dist = std::numeric_limits<double>::max();
+    end_lane_sequence = route_handler->getLaneletSequence(end_lane, dist, dist, false);
   }
 
   // Lambda function to get the neighboring lanelet based on left_hand_traffic
@@ -1204,6 +1217,8 @@ bool PullOverModule::isCrossingPossible(
     // Check if the current lane is in the end_lane_sequence
     auto end_it = std::find(end_lane_sequence.rbegin(), end_lane_sequence.rend(), current_lane);
     if (end_it != end_lane_sequence.rend()) {
+      std::cerr << "Found current lanelet in end_lane_sequence. current_lane: " << current_lane.id()
+                << " end_lane: " << end_lane.id() << std::endl;
       return true;
     }
 
@@ -1214,6 +1229,9 @@ bool PullOverModule::isCrossingPossible(
       end_it =
         std::find(end_lane_sequence.rbegin(), end_lane_sequence.rend(), neighboring_lane.get());
       if (end_it != end_lane_sequence.rend()) {
+        std::cerr << "Found neighboring_lane in end_lane_sequence. curreunt_lane: "
+                  << current_lane.id() << " neighboring_lane: "
+                  << neighboring_lane.get().id() << " end_lane: " << end_lane.id() << std::endl;
         return true;
       }
     }
