@@ -449,6 +449,10 @@ lanelet::ConstLanelets RouteHandler::getLaneletSequenceAfter(
     if (!getNextLaneletWithinRoute(current_lanelet, &next_lanelet)) {
       break;
     }
+    // loop check
+    if (lanelet.id() == next_lanelet.id()) {
+      break;
+    }
     lanelet_sequence_forward.push_back(next_lanelet);
     current_lanelet = next_lanelet;
     length +=
@@ -471,6 +475,12 @@ lanelet::ConstLanelets RouteHandler::getLaneletSequenceUpTo(
   while (rclcpp::ok() && length < min_length) {
     lanelet::ConstLanelets candidate_lanelets;
     if (!getPreviousLaneletsWithinRoute(current_lanelet, &candidate_lanelets)) {
+      break;
+    }
+    // loop check
+    if (std::any_of(
+          candidate_lanelets.begin(), candidate_lanelets.end(),
+          [lanelet](auto & prev_llt) { return lanelet.id() == prev_llt.id(); })) {
       break;
     }
 
@@ -588,6 +598,30 @@ bool RouteHandler::getFollowingShoulderLanelet(
   for (const auto & shoulder_lanelet : shoulder_lanelets_) {
     if (lanelet::geometry::follows(lanelet, shoulder_lanelet)) {
       *following_lanelet = shoulder_lanelet;
+      return true;
+    }
+  }
+  return false;
+}
+
+bool RouteHandler::getLeftShoulderLanelet(
+  const lanelet::ConstLanelet & lanelet, lanelet::ConstLanelet * left_lanelet) const
+{
+  for (const auto & shoulder_lanelet : shoulder_lanelets_) {
+    if (lanelet::geometry::leftOf(lanelet, shoulder_lanelet)) {
+      *left_lanelet = shoulder_lanelet;
+      return true;
+    }
+  }
+  return false;
+}
+
+bool RouteHandler::getRightShoulderLanelet(
+  const lanelet::ConstLanelet & lanelet, lanelet::ConstLanelet * right_lanelet) const
+{
+  for (const auto & shoulder_lanelet : shoulder_lanelets_) {
+    if (lanelet::geometry::rightOf(lanelet, shoulder_lanelet)) {
+      *right_lanelet = shoulder_lanelet;
       return true;
     }
   }
@@ -1229,30 +1263,6 @@ bool RouteHandler::getPullOutStartLane(
   return false;
 }
 
-bool RouteHandler::getLeftShoulderLanelet(
-  const lanelet::ConstLanelet & lanelet, lanelet::ConstLanelet * left_lanelet) const
-{
-  for (const auto & shoulder_lanelet : shoulder_lanelets_) {
-    if (lanelet::geometry::leftOf(shoulder_lanelet, lanelet)) {
-      *left_lanelet = shoulder_lanelet;
-      return true;
-    }
-  }
-  return false;
-}
-
-bool RouteHandler::getRightShoulderLanelet(
-  const lanelet::ConstLanelet & lanelet, lanelet::ConstLanelet * right_lanelet) const 
-{
-  for (const auto & shoulder_lanelet : shoulder_lanelets_) {
-    if (lanelet::geometry::rightOf(shoulder_lanelet, lanelet)) {
-      *right_lanelet = shoulder_lanelet;
-      return true;
-    }
-  }
-  return false;
-}
-
 lanelet::ConstLanelets RouteHandler::getClosestLaneletSequence(const Pose & pose) const
 {
   lanelet::ConstLanelet lanelet;
@@ -1581,7 +1591,7 @@ lanelet::ConstLanelets RouteHandler::getShoulderLanelets() const { return should
 
 bool RouteHandler::isShoulderLanelet(const lanelet::ConstLanelet & lanelet) const
 {
-  return exists(shoulder_lanelets_, lanelet);
+  return lanelet::utils::contains(shoulder_lanelets_, lanelet);
 }
 
 lanelet::ConstLanelets RouteHandler::getPreviousLaneletSequence(
