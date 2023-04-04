@@ -308,9 +308,6 @@ bool DefaultPlanner::is_goal_valid(
 
   const auto goal_lanelet_pt = lanelet::utils::conversion::toLaneletPoint(goal.position);
 
-  // todo: if allow refine goal, always return true
-  return true;
-
   // check if goal is in shoulder lanelet
   lanelet::Lanelet closest_shoulder_lanelet;
   if (lanelet::utils::query::getClosestLanelet(
