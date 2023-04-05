@@ -1622,14 +1622,16 @@ PathPointWithLaneId insertStopPoint(double length, PathWithLaneId * path)
   return stop_point;
 }
 
-
-double getSignedDistanceFromBoundary(const lanelet::ConstLanelets &lanelets, const Pose &pose, bool left_hand_traffic) {
+double getSignedDistanceFromBoundary(
+  const lanelet::ConstLanelets & lanelets, const Pose & pose, bool left_side)
+{
   lanelet::ConstLanelet closest_lanelet;
   lanelet::ArcCoordinates arc_coordinates;
   if (lanelet::utils::query::getClosestLanelet(lanelets, pose, &closest_lanelet)) {
     const auto lanelet_point = lanelet::utils::conversion::toLaneletPoint(pose.position);
-    const auto &boundary_line_2d = left_hand_traffic ? lanelet::utils::to2D(closest_lanelet.leftBound3d())
-                                                     : lanelet::utils::to2D(closest_lanelet.rightBound3d());
+    const auto & boundary_line_2d = left_side
+                                      ? lanelet::utils::to2D(closest_lanelet.leftBound3d())
+                                      : lanelet::utils::to2D(closest_lanelet.rightBound3d());
     arc_coordinates = lanelet::geometry::toArcCoordinates(
       boundary_line_2d, lanelet::utils::to2D(lanelet_point).basicPoint());
   } else {
@@ -1643,7 +1645,7 @@ double getSignedDistanceFromBoundary(const lanelet::ConstLanelets &lanelets, con
 
 std::optional<double> getSignedDistanceFromBoundary(
   const lanelet::ConstLanelets & lanelets, const LinearRing2d & footprint,
-  const Pose & vehicle_pose, const bool left_hand_traffic)
+  const Pose & vehicle_pose, const bool left_side)
 {
   double min_distance = std::numeric_limits<double>::max();
 
@@ -1659,7 +1661,7 @@ std::optional<double> getSignedDistanceFromBoundary(
     // calculate distance to the bound directly next to footprint points
     lanelet::ConstLanelet closest_lanelet{};
     if (lanelet::utils::query::getClosestLanelet(lanelets, vehicle_corner_pose, &closest_lanelet)) {
-      const auto & bound_line_2d = left_hand_traffic
+      const auto & bound_line_2d = left_side
                                      ? lanelet::utils::to2D(closest_lanelet.leftBound3d())
                                      : lanelet::utils::to2D(closest_lanelet.rightBound3d());
 
@@ -1988,38 +1990,6 @@ PathWithLaneId setDecelerationVelocity(
         static_cast<float>(distance_to_end / lane_change_prepare_duration));
     }
   }
-  return reference_path;
-}
-
-// TODO(murooka) remove calcSignedArcLength using findNearestSegmentIndex inside the
-// function
-PathWithLaneId setDecelerationVelocity(
-  const PathWithLaneId & input, const double target_velocity, const Pose target_pose,
-  const double buffer, const double deceleration_interval)
-{
-  auto reference_path = input;
-
-  for (auto & point : reference_path.points) {
-    const auto arclength_to_target = std::max(
-      0.0, motion_utils::calcSignedArcLength(
-             reference_path.points, point.point.pose.position, target_pose.position) +
-             buffer);
-    if (arclength_to_target > deceleration_interval) continue;
-    point.point.longitudinal_velocity_mps = std::min(
-      point.point.longitudinal_velocity_mps,
-      static_cast<float>(
-        (arclength_to_target / deceleration_interval) *
-          (point.point.longitudinal_velocity_mps - target_velocity) +
-        target_velocity));
-  }
-
-  const auto stop_point_length =
-    motion_utils::calcSignedArcLength(reference_path.points, 0, target_pose.position) + buffer;
-  constexpr double eps{0.01};
-  if (std::abs(target_velocity) < eps && stop_point_length > 0.0) {
-    const auto stop_point = util::insertStopPoint(stop_point_length, &reference_path);
-  }
-
   return reference_path;
 }
 

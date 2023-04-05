@@ -55,7 +55,7 @@ using freespace_planning_algorithms::PlannerCommonParam;
 using freespace_planning_algorithms::RRTStar;
 using freespace_planning_algorithms::RRTStarParam;
 
-enum PathType {
+enum class PathType {
   NONE = 0,
   SHIFT,
   ARC_FORWARD,
@@ -154,8 +154,6 @@ private:
   // approximate distance from the start point to the end point of pull_over.
   // this is used as an assumed value to decelerate, etc., before generating the actual path.
   double approximate_pull_over_distance_ = 20.0;
-  //todo: make param
-  bool left_hand_traffic_ = true;
 
   bool incrementPathIndex();
   PathWithLaneId getCurrentPath() const;

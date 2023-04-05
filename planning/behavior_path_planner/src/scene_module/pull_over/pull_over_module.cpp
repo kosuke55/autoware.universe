@@ -419,8 +419,9 @@ Pose PullOverModule::calcRefinedGoal(const Pose & goal_pose) const
     center_pose.orientation = tf2::toMsg(tf_quat);
   }
 
+  const bool left_side = parameters_->parking_policy == ParkingPolicy::LEFT_SIDE;
   const auto distance_from_left_bound = util::getSignedDistanceFromBoundary(
-    pull_over_lanes, vehicle_footprint_, center_pose, left_hand_traffic_);
+    pull_over_lanes, vehicle_footprint_, center_pose, left_side);
   if (!distance_from_left_bound) {
     RCLCPP_ERROR(getLogger(), "fail to calculate refined goal");
     return goal_pose;
@@ -1191,11 +1192,12 @@ bool PullOverModule::isCrossingPossible(
     end_lane_sequence = route_handler->getLaneletSequence(end_lane, dist, dist, false);
   }
 
-  // Lambda function to get the neighboring lanelet based on left_hand_traffic
+  // Lambda function to get the neighboring lanelet based on left_side
+  const bool left_side = parameters_->parking_policy == ParkingPolicy::LEFT_SIDE;
   auto getNeighboringLane =
     [&](const lanelet::ConstLanelet & lane) -> boost::optional<lanelet::ConstLanelet> {
     lanelet::ConstLanelet neighboring_lane{};
-    if (left_hand_traffic_) {
+    if (left_side) {
       if (route_handler->getLeftShoulderLanelet(lane, &neighboring_lane)) {
         return neighboring_lane;
       } else {
@@ -1217,8 +1219,6 @@ bool PullOverModule::isCrossingPossible(
     // Check if the current lane is in the end_lane_sequence
     auto end_it = std::find(end_lane_sequence.rbegin(), end_lane_sequence.rend(), current_lane);
     if (end_it != end_lane_sequence.rend()) {
-      std::cerr << "Found current lanelet in end_lane_sequence. current_lane: " << current_lane.id()
-                << " end_lane: " << end_lane.id() << std::endl;
       return true;
     }
 
@@ -1229,9 +1229,6 @@ bool PullOverModule::isCrossingPossible(
       end_it =
         std::find(end_lane_sequence.rbegin(), end_lane_sequence.rend(), neighboring_lane.get());
       if (end_it != end_lane_sequence.rend()) {
-        std::cerr << "Found neighboring_lane in end_lane_sequence. curreunt_lane: "
-                  << current_lane.id() << " neighboring_lane: "
-                  << neighboring_lane.get().id() << " end_lane: " << end_lane.id() << std::endl;
         return true;
       }
     }

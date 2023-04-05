@@ -399,10 +399,10 @@ PathPointWithLaneId insertStopPoint(double length, PathWithLaneId * path);
 
 double getSignedDistanceFromBoundary(
   const lanelet::ConstLanelets & shoulder_lanelets, const Pose & pose,
-  const bool left_hand_traffic);
+  const bool left_side);
 std::optional<double> getSignedDistanceFromBoundary(
   const lanelet::ConstLanelets & shoulder_lanelets, const LinearRing2d & footprint,
-  const Pose & vehicle_pose, const bool left_hand_traffic);
+  const Pose & vehicle_pose, const bool left_side);
 
 
 
@@ -431,10 +431,6 @@ PathWithLaneId setDecelerationVelocity(
   const RouteHandler & route_handler, const PathWithLaneId & input,
   const lanelet::ConstLanelets & lanelet_sequence, const double lane_change_prepare_duration,
   const double lane_change_buffer);
-
-PathWithLaneId setDecelerationVelocity(
-  const PathWithLaneId & input, const double target_velocity, const Pose target_pose,
-  const double buffer, const double deceleration_interval);
 
 // object label
 std::uint8_t getHighestProbLabel(const std::vector<ObjectClassification> & classification);

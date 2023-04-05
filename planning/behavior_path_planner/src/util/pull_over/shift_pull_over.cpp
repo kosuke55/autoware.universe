@@ -136,6 +136,8 @@ boost::optional<PullOverPath> ShiftPullOver::generatePullOverPath(
   ShiftedPath shifted_path{};
   const bool offset_back = true;  // offset front side from reference path
   if (!path_shifter.generate(&shifted_path, offset_back)) return {};
+  shifted_path.path = util::removeOverlappingPoints(shifted_path.path);
+  motion_utils::insertOrientation(shifted_path.path.points, true);
 
   // set same orientation, because the reference center line orientation is not same to the
   shifted_path.path.points.back().point.pose.orientation = shift_end_pose.orientation;

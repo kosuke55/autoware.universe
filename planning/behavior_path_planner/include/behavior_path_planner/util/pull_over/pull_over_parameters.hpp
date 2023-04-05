@@ -30,6 +30,11 @@ using freespace_planning_algorithms::AstarParam;
 using freespace_planning_algorithms::PlannerCommonParam;
 using freespace_planning_algorithms::RRTStarParam;
 
+enum class ParkingPolicy {
+  LEFT_SIDE = 0,
+  RIGHT_SIDE,
+};
+
 struct PullOverParameters
 {
   double minimum_request_length;
@@ -41,6 +46,7 @@ struct PullOverParameters
   double maximum_deceleration;
   double maximum_jerk;
   // goal research
+  ParkingPolicy parking_policy;
   std::string search_priority;  // "efficient_path" or "close_goal"
   bool enable_goal_research;
   double forward_goal_search_length;

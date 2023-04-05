@@ -852,6 +852,17 @@ PullOverParameters BehaviorPathPlannerNode::getPullOverParam()
                         << "Terminating the program...");
       exit(EXIT_FAILURE);
     }
+
+    const std::string parking_policy_name = declare_parameter<std::string>(ns + "parking_policy");
+    if (parking_policy_name == "left_side") {
+      p.parking_policy = ParkingPolicy::LEFT_SIDE;
+    } else if (parking_policy_name == "right_side") {
+      p.parking_policy = ParkingPolicy::RIGHT_SIDE;
+    } else {
+      RCLCPP_ERROR_STREAM(
+        get_logger(), "[pull_over] invalid parking_policy: " << parking_policy_name << std::endl);
+      exit(EXIT_FAILURE);
+    }
   }
 
   {
