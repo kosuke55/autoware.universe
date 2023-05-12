@@ -237,7 +237,7 @@ private:
   // output setter
   void setOutput(BehaviorModuleOutput & output);
   void setStopPath(BehaviorModuleOutput & output);
-  void setModifiedGoal(BehaviorModuleOutput & output) const;
+  void setModifiedGoal(BehaviorModuleOutput & output);
   void setTurnSignalInfo(BehaviorModuleOutput & output) const;
 
   // new turn signal

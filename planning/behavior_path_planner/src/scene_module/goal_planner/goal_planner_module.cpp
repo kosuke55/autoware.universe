@@ -430,6 +430,7 @@ bool GoalPlannerModule::planFreespacePath()
   const auto goal_candidates = goal_candidates_;
   mutex_.unlock();
 
+  RCLCPP_INFO(getLogger(), "start planning freespace path");
   for (const auto & goal_candidate : goal_candidates) {
     if (!goal_candidate.is_safe) {
       continue;
@@ -445,10 +446,13 @@ bool GoalPlannerModule::planFreespacePath()
     status_.current_path_idx = 0;
     status_.is_safe = true;
     modified_goal_pose_ = goal_candidate;
+    std::cerr << "update modified_goal_pose_->id: " << modified_goal_pose_->id << std::endl;
     last_path_update_time_ = std::make_unique<rclcpp::Time>(clock_->now());
     mutex_.unlock();
+    RCLCPP_INFO(getLogger(), "success planning freespace path");
     return true;
   }
+  RCLCPP_INFO(getLogger(), "fail planning freespace path");
   return false;
 }
 
@@ -650,18 +654,27 @@ void GoalPlannerModule::setDrivableAreaInfo(BehaviorModuleOutput & output) const
   }
 }
 
-void GoalPlannerModule::setModifiedGoal(BehaviorModuleOutput & output) const
+void GoalPlannerModule::setModifiedGoal(BehaviorModuleOutput & output)
 {
   // set the modified goal only when it is updated
   const auto & route_handler = planner_data_->route_handler;
+  if (prev_goal_id_) {
+    std::cerr << "prev_goal_id_: " << *prev_goal_id_
+              << "modified_goal_pose_->id: " << modified_goal_pose_->id << std::endl;
+  } else {
+    std::cerr << "modified_goal_pose_->id: " << modified_goal_pose_->id << std::endl;
+  }
   const bool has_changed_goal =
     modified_goal_pose_ && (!prev_goal_id_ || *prev_goal_id_ != modified_goal_pose_->id);
-  if (status_.is_safe && has_changed_goal) {
+  const bool is_freespace_path = status_.pull_over_path->type == PullOverPlannerType::FREESPACE;
+  if ((status_.is_safe || is_freespace_path) && has_changed_goal) {
     PoseWithUuidStamped modified_goal{};
     modified_goal.uuid = route_handler->getRouteUuid();
     modified_goal.pose = modified_goal_pose_->goal_pose;
     modified_goal.header = route_handler->getRouteHeader();
+    std::cerr << "set modified_goal" << std::endl;
     output.modified_goal = modified_goal;
+    // prev_goal_id_ = modified_goal_pose_->id;
   } else {
     output.modified_goal = {};
   }

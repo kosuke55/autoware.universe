@@ -1214,6 +1214,7 @@ void BehaviorPathPlannerNode::run()
 #endif
 
   if (output.modified_goal) {
+    std::cerr << "modified goal is published" << std::endl;
     PoseWithUuidStamped modified_goal = *(output.modified_goal);
     modified_goal.header.stamp = path->header.stamp;
     planner_data_->prev_modified_goal = modified_goal;

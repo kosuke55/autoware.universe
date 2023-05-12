@@ -338,6 +338,8 @@ bool CostmapGenerator::isActive()
     return false;
   }
 
+  return true;
+
   if (activate_by_scenario_) {
     if (scenario_) {
       const auto & s = scenario_->activating_scenarios;
