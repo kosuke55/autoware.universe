@@ -27,6 +27,14 @@
 
 namespace behavior_path_planner
 {
+
+#define debug(var)  do{std::cerr << __func__ << ": " << __LINE__ << ", " << #var << " : ";view(var);}while(0)
+template<typename T> void view(T e){std::cerr << e << std::endl;}
+template<typename T> void view(const std::vector<T>& v){for(const auto& e : v){ std::cerr << e << " "; } std::cerr << std::endl;}
+template<typename T> void view(const std::vector<std::vector<T> >& vv){ for(const auto& v : vv){ view(v); } }
+#define line() {std::cerr << "(" << __FILE__ <<  ") " << __func__ << ": " << __LINE__ << std::endl; }
+
+
 PlannerManager::PlannerManager(rclcpp::Node & node, const bool verbose)
 : logger_(node.get_logger().get_child("planner_manager")),
   clock_(*node.get_clock()),
@@ -88,6 +96,12 @@ BehaviorModuleOutput PlannerManager::run(const std::shared_ptr<PlannerData> & da
         processing_time_.at("total_time") = stop_watch_.toc("total_time", true);
         return approved_modules_output;
       }
+      line();
+      std::cerr << "request_modules: ";
+      for (const auto & m : request_modules) {
+        std::cerr << m->name() << ", ";
+      }
+      std::cerr << std::endl;
 
       /**
        * STEP4: if there is module that should be launched, execute the module
@@ -321,6 +335,12 @@ std::pair<SceneModulePtr, BehaviorModuleOutput> PlannerManager::runRequestModule
   auto sorted_request_modules = request_modules;
   sortByPriority(sorted_request_modules);
 
+  std::cerr <<"sorted_request_modules: ";
+  for (const auto & m : sorted_request_modules) {
+    std::cerr << m->name() << ", ";
+  }
+  std::cerr << std::endl;
+
   /**
    * remove non-executable modules.
    */
@@ -412,6 +432,12 @@ std::pair<SceneModulePtr, BehaviorModuleOutput> PlannerManager::runRequestModule
     return SceneModulePtr();
   }();
 
+  std::cerr <<"executable_modules: ";
+  for (const auto & m : executable_modules) {
+    std::cerr << m->name() << ", ";
+  }
+  std::cerr << std::endl;
+
   /**
    * register candidate modules.
    */
@@ -478,6 +504,7 @@ BehaviorModuleOutput PlannerManager::runApprovedModules(const std::shared_ptr<Pl
   }
 
   if (approved_module_ptrs_.empty()) {
+    line();
     return results.at("root");
   }
 
@@ -487,8 +514,10 @@ BehaviorModuleOutput PlannerManager::runApprovedModules(const std::shared_ptr<Pl
   const auto output_module_name = approved_module_ptrs_.back()->name();
   const auto approved_modules_output = [&output_module_name, &results]() {
     if (results.count(output_module_name) == 0) {
+      line();
       return results.at("root");
     }
+    line();
     return results.at(output_module_name);
   }();
 
@@ -503,6 +532,7 @@ BehaviorModuleOutput PlannerManager::runApprovedModules(const std::shared_ptr<Pl
    * there is no succeeded module. return.
    */
   if (success_itr == approved_module_ptrs_.end()) {
+    line();
     return approved_modules_output;
   }
 
@@ -521,7 +551,7 @@ BehaviorModuleOutput PlannerManager::runApprovedModules(const std::shared_ptr<Pl
 
     approved_module_ptrs_.erase(success_itr, approved_module_ptrs_.end());
     clearNotRunningCandidateModules();
-
+    line();
     return approved_modules_output;
   }
 
@@ -539,10 +569,10 @@ BehaviorModuleOutput PlannerManager::runApprovedModules(const std::shared_ptr<Pl
     clearNotRunningCandidateModules();
 
     root_lanelet_ = updateRootLanelet(data);
-
+    line();
     return approved_modules_output;
   }
-
+  line();
   return approved_modules_output;
 }
 

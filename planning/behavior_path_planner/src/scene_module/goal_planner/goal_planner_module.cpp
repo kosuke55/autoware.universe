@@ -47,6 +47,14 @@ using tier4_autoware_utils::inverseTransformPose;
 
 namespace behavior_path_planner
 {
+
+#define debug(var)  do{std::cerr << __func__ << ": " << __LINE__ << ", " << #var << " : ";view(var);}while(0)
+template<typename T> void view(T e){std::cerr << e << std::endl;}
+template<typename T> void view(const std::vector<T>& v){for(const auto& e : v){ std::cerr << e << " "; } std::cerr << std::endl;}
+template<typename T> void view(const std::vector<std::vector<T> >& vv){ for(const auto& v : vv){ view(v); } }
+#define line() {std::cerr << "(" << __FILE__ <<  ") " << __func__ << ": " << __LINE__ << std::endl; }
+
+
 #ifdef USE_OLD_ARCHITECTURE
 GoalPlannerModule::GoalPlannerModule(
   const std::string & name, rclcpp::Node & node,
@@ -523,6 +531,7 @@ void GoalPlannerModule::generateGoalCandidates()
 
 BehaviorModuleOutput GoalPlannerModule::plan()
 {
+  line();
   generateGoalCandidates();
 
   if (allow_goal_modification_) {
@@ -620,6 +629,7 @@ void GoalPlannerModule::setLanes()
 void GoalPlannerModule::setOutput(BehaviorModuleOutput & output)
 {
   if (status_.is_safe) {
+    line();
     // clear stop pose when the path is safe and activated
     if (isActivated()) {
       status_.stop_pose.reset();
@@ -633,6 +643,7 @@ void GoalPlannerModule::setOutput(BehaviorModuleOutput & output)
     output.path = std::make_shared<PathWithLaneId>(current_path);
     output.reference_path = getPreviousModuleOutput().reference_path;
   } else {
+    line();
     // not safe: use stop_path
     setStopPath(output);
   }
@@ -655,6 +666,7 @@ void GoalPlannerModule::setOutput(BehaviorModuleOutput & output)
 void GoalPlannerModule::setStopPath(BehaviorModuleOutput & output)
 {
   if (status_.prev_is_safe || status_.prev_stop_path == nullptr) {
+    line();
     // safe -> not_safe or no prev_stop_path: generate new stop_path
     output.path = std::make_shared<PathWithLaneId>(generateStopPath());
     output.reference_path = getPreviousModuleOutput().reference_path;
@@ -670,6 +682,7 @@ void GoalPlannerModule::setStopPath(BehaviorModuleOutput & output)
     RCLCPP_WARN_THROTTLE(
       getLogger(), *clock_, 5000, "Not found safe pull_over path, generate stop path");
   } else {
+    line();
     // not_safe -> not_safe: use previous stop path
     output.path = status_.prev_stop_path;
     output.reference_path = getPreviousModuleOutput().reference_path;
@@ -785,6 +798,7 @@ void GoalPlannerModule::decideVelocity()
 
 BehaviorModuleOutput GoalPlannerModule::planWithGoalModification()
 {
+  line();
   constexpr double path_update_duration = 1.0;
 
   resetPathCandidate();
@@ -845,6 +859,7 @@ BehaviorModuleOutput GoalPlannerModule::planWithGoalModification()
 
 BehaviorModuleOutput GoalPlannerModule::planWaitingApproval()
 {
+  line();
   if (allow_goal_modification_) {
     return planWaitingApprovalWithGoalModification();
   } else {
@@ -859,6 +874,8 @@ BehaviorModuleOutput GoalPlannerModule::planWaitingApproval()
 
 BehaviorModuleOutput GoalPlannerModule::planWaitingApprovalWithGoalModification()
 {
+  line();
+  
   waitApproval();
 
   updateOccupancyGrid();

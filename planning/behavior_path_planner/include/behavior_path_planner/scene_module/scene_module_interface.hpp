@@ -188,7 +188,7 @@ public:
 #ifdef USE_OLD_ARCHITECTURE
     current_state_ = ModuleStatus::RUNNING;
 #endif
-
+    std::cerr << "hoge run " << name_ << std::endl;
     updateData();
 
     if (!isWaitingApproval()) {
