@@ -1067,6 +1067,8 @@ StartPlannerParameters BehaviorPathPlannerNode::getStartPlannerParam()
   p.th_moving_object_velocity = declare_parameter<double>(ns + "th_moving_object_velocity");
   // shift pull out
   p.enable_shift_pull_out = declare_parameter<bool>(ns + "enable_shift_pull_out");
+  p.check_shift_path_lane_departure =
+    declare_parameter<bool>(ns + "check_shift_path_lane_departure");
   p.minimum_shift_pull_out_distance =
     declare_parameter<double>(ns + "minimum_shift_pull_out_distance");
   p.lateral_acceleration_sampling_num =

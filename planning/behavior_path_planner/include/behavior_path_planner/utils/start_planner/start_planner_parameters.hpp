@@ -46,6 +46,7 @@ struct StartPlannerParameters
   double th_moving_object_velocity;
   // shift pull out
   bool enable_shift_pull_out;
+  bool check_shift_path_lane_departure;
   double minimum_shift_pull_out_distance;
   int lateral_acceleration_sampling_num;
   double lateral_jerk;
