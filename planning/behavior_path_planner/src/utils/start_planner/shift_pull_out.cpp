@@ -156,6 +156,16 @@ std::vector<PullOutPath> ShiftPullOut::calcPullOutPaths(
   const double s_end =
     goal_is_behind ? s_forward_length : std::min(arc_position_goal.length, s_forward_length);
 
+  std::cerr << "goal_is_behind: " << goal_is_behind << ", s_start: " << s_start << ", s_end: " << s_end
+            << std::endl;
+
+  // print road_lanes ids
+  std::cerr << "road_lanes: ";
+  for (const auto & lane : road_lanes) {
+    std::cerr << lane.id() << ", ";
+  }
+  std::cerr << std::endl;
+
   constexpr double RESAMPLE_INTERVAL = 1.0;
   PathWithLaneId road_lane_reference_path = utils::resamplePathWithSpline(
     route_handler.getCenterLinePath(road_lanes, s_start, s_end), RESAMPLE_INTERVAL);
