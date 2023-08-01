@@ -141,6 +141,7 @@
         # avoidance distance parameters
         longitudinal:
           prepare_time: 2.0                             # [s]
+          remain_buffer_distance: 30.0                  # [m]
           min_prepare_distance: 1.0                     # [m]
           min_avoidance_distance: 10.0                  # [m]
           min_nominal_avoidance_speed: 7.0              # [m/s]

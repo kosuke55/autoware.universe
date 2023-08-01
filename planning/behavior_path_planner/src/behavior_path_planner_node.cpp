@@ -639,6 +639,7 @@ AvoidanceParameters BehaviorPathPlannerNode::getAvoidanceParam()
     p.prepare_time = declare_parameter<double>(ns + "prepare_time");
     p.min_prepare_distance = declare_parameter<double>(ns + "min_prepare_distance");
     p.min_avoidance_distance = declare_parameter<double>(ns + "min_avoidance_distance");
+    p.remain_buffer_distance = declare_parameter<double>(ns + "remain_buffer_distance");
     p.min_nominal_avoidance_speed = declare_parameter<double>(ns + "min_nominal_avoidance_speed");
     p.min_sharp_avoidance_speed = declare_parameter<double>(ns + "min_sharp_avoidance_speed");
     p.min_slow_down_speed = declare_parameter<double>(ns + "min_slow_down_speed");
