@@ -368,7 +368,8 @@ std::vector<PathWithLaneId> GeometricParallelParking::planOneTrial(
 {
   clearPaths();
 
-  const auto common_params = planner_data_->parameters;
+  const auto & common_params = planner_data_->parameters;
+  const auto & route_handler = planner_data_->route_handler;
 
   const Pose arc_end_pose = calcOffsetPose(goal_pose, end_pose_offset, 0, 0);
   const double self_yaw = tf2::getYaw(start_pose.orientation);
@@ -435,21 +436,54 @@ std::vector<PathWithLaneId> GeometricParallelParking::planOneTrial(
   PathWithLaneId path_turn_left = generateArcPath(
     Cl, R_E_l, -M_PI_2, normalizeRadian(-M_PI_2 + theta_l), arc_path_interval, is_forward,
     is_forward);
-  path_turn_left.header = planner_data_->route_handler->getRouteHeader();
+  path_turn_left.header = route_handler->getRouteHeader();
 
   PathWithLaneId path_turn_right = generateArcPath(
     Cr, R_E_r, normalizeRadian(psi + M_PI_2 + theta_l), M_PI_2, arc_path_interval, !is_forward,
     is_forward);
-  path_turn_right.header = planner_data_->route_handler->getRouteHeader();
+  path_turn_right.header = route_handler->getRouteHeader();
 
-  auto setLaneIds = [lanes](PathPointWithLaneId & p) {
+  std::vector<lanelet::Id> path_lane_ids;
+  for (const auto & p : path_turn_left) {
     for (const auto & lane : lanes) {
-      p.lane_ids.push_back(lane.id());
+      if (lanelet::utils::isInLanelet(p.point.pose, lane)) {
+        path_lane_ids(lane.id());
+      }
     }
-  };
-  auto setLaneIdsToPath = [setLaneIds](PathWithLaneId & path) {
+  }
+  for (const auto & p : path_turn_right) {
+    for (const auto & lane : lanes) {
+      if (lanelet::utils::isInLanelet(p.point.pose, lane)) {
+        path_lane_ids(lane.id());
+      }
+    }
+  }
+
+  // auto setLaneIds = [lanes, route_handler](PathPointWithLaneId & p) {
+  //   for (const auto & lane : lanes) {
+  //     if (lanelet::utils::isInLanelet(p.point.pose, lane)) {
+  //       p.lane_ids.push_back(lane.id());
+  //       if (route_handler->isShoulderLanelet(lane)) {
+  //         // todo: support left lanelet
+  //         const auto right_lanelet = route_handler->getRightLanelet(lane);
+  //         if (right_lanelet) {
+  //           p.lane_ids.push_back(right_lanelet->id());
+  //         }
+  //       }
+  //     }
+  //   }
+  // };
+  // auto setLaneIdsToPath = [setLaneIds](PathWithLaneId & path) {
+  //   for (auto & p : path.points) {
+  //     setLaneIds(p);
+  //   }
+  // };
+
+  const auto setLaneIdsToPath[&](PathWithLaneId & path)
+  {
     for (auto & p : path.points) {
-      setLaneIds(p);
+      // set path_lane_ids to point
+      p.lane_ids = path_lane_ids;
     }
   };
   setLaneIdsToPath(path_turn_left);
