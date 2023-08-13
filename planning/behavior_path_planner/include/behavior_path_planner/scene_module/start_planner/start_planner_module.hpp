@@ -19,6 +19,7 @@
 #include "behavior_path_planner/utils/geometric_parallel_parking/geometric_parallel_parking.hpp"
 #include "behavior_path_planner/utils/path_shifter/path_shifter.hpp"
 #include "behavior_path_planner/utils/start_planner/geometric_pull_out.hpp"
+#include "behavior_path_planner/utils/start_planner/freespace_pull_out.hpp"
 #include "behavior_path_planner/utils/start_planner/pull_out_path.hpp"
 #include "behavior_path_planner/utils/start_planner/shift_pull_out.hpp"
 #include "behavior_path_planner/utils/start_planner/start_planner_parameters.hpp"
@@ -128,6 +129,12 @@ private:
   std::unique_ptr<rclcpp::Time> last_pull_out_start_update_time_;
   std::unique_ptr<Pose> last_approved_pose_;
 
+  // generate freespace pull out paths in a separate thread
+  std::unique_ptr<PullOutPlannerBase> freespace_planner_;
+  rclcpp::TimerBase::SharedPtr freespace_planner_timer_;
+  rclcpp::CallbackGroup::SharedPtr freespace_planner_timer_cb_group_;
+  std::mutex mutex_;
+
   std::shared_ptr<PullOutPlannerBase> getCurrentPlanner() const;
   PathWithLaneId getFullPath() const;
   std::vector<Pose> searchPullOutStartPoses();
@@ -152,13 +159,19 @@ private:
   bool hasFinishedPullOut() const;
   void checkBackFinished();
   bool isStopped();
+  bool isStuck();
   bool hasFinishedCurrentPath();
+  void setDrivableAreaInfo(BehaviorModuleOutput & output) const;
 
   // check if the goal is located behind the ego in the same route segment.
   bool IsGoalBehindOfEgoInSameRouteSegment() const;
 
   // generate BehaviorPathOutput with stopping path and update status
   BehaviorModuleOutput generateStopOutput();
+
+  // freespace planner
+  void onFreespacePlannerTimer();
+  bool planFreespacePath();
 
   void setDebugData() const;
 };
