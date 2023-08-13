@@ -302,7 +302,7 @@ std::shared_ptr<PullOutPlannerBase> StartPlannerModule::getCurrentPlanner() cons
   return nullptr;
 }
 
-PathWithLaneId StartPlannerModule::getFullPath() const
+PathWithLaneId StartPlannerModule::getFullPath(const PullOutStatus & status) const
 {
   const auto pull_out_planner = getCurrentPlanner();
   if (pull_out_planner == nullptr) {
@@ -311,18 +311,18 @@ PathWithLaneId StartPlannerModule::getFullPath() const
 
   // combine partial pull out path
   PathWithLaneId pull_out_path;
-  for (const auto & partial_path : status_.pull_out_path.partial_paths) {
+  for (const auto & partial_path : status.pull_out_path.partial_paths) {
     pull_out_path.points.insert(
       pull_out_path.points.end(), partial_path.points.begin(), partial_path.points.end());
   }
 
-  if (status_.back_finished) {
+  if (status.back_finished) {
     // not need backward path or finish it
     return pull_out_path;
   }
 
   // concat back_path and pull_out_path and
-  auto full_path = status_.backward_path;
+  auto full_path = status.backward_path;
   full_path.points.insert(
     full_path.points.end(), pull_out_path.points.begin(), pull_out_path.points.end());
   return full_path;
@@ -431,12 +431,12 @@ void StartPlannerModule::incrementPathIndex()
     std::min(status_.current_path_idx + 1, status_.pull_out_path.partial_paths.size() - 1);
 }
 
-PathWithLaneId StartPlannerModule::getCurrentPath() const
+PathWithLaneId StartPlannerModule::getCurrentPath(const PullOutStatus & status) const
 {
-  if (status_.pull_out_path.partial_paths.size() <= status_.current_path_idx) {
+  if (status.pull_out_path.partial_paths.size() <= status.current_path_idx) {
     return PathWithLaneId{};
   }
-  return status_.pull_out_path.partial_paths.at(status_.current_path_idx);
+  return status.pull_out_path.partial_paths.at(status.current_path_idx);
 }
 
 void StartPlannerModule::planWithPriority(

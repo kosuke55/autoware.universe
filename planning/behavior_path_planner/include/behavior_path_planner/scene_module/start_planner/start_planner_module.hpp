@@ -135,8 +135,8 @@ private:
   rclcpp::CallbackGroup::SharedPtr freespace_planner_timer_cb_group_;
   std::mutex mutex_;
 
-  std::shared_ptr<PullOutPlannerBase> getCurrentPlanner() const;
-  PathWithLaneId getFullPath() const;
+  std::shared_ptr<PullOutPlannerBase> getCurrentPlanner(const & PullOutStatus status) const;
+  PathWithLaneId getFullPath(const & PullOutStatus status) const;
   std::vector<Pose> searchPullOutStartPoses();
 
   std::shared_ptr<LaneDepartureChecker> lane_departure_checker_;
