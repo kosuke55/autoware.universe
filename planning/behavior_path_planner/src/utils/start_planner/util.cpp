@@ -16,6 +16,8 @@
 
 #include "behavior_path_planner/utils/create_vehicle_footprint.hpp"
 #include "behavior_path_planner/utils/path_shifter/path_shifter.hpp"
+#include "behavior_path_planner/utils/path_safety_checker/path_safety_checker_parameters.hpp"
+
 #include "behavior_path_planner/utils/path_utils.hpp"
 #include "behavior_path_planner/utils/utils.hpp"
 
@@ -37,6 +39,7 @@
 
 namespace behavior_path_planner::start_planner_utils
 {
+using behavior_path_planner::utils::path_safety_checker::EgoPredictedPathParams;
 PathWithLaneId combineReferencePath(const PathWithLaneId path1, const PathWithLaneId path2)
 {
   PathWithLaneId path;
@@ -138,6 +141,14 @@ std::pair<double, bool> calcEndArcLength(
 
   // path end is goal
   return {s_goal, true};
+}
+
+void updateEgoPredictedPathParams(
+  const std::shared_ptr<EgoPredictedPathParams> & params,
+  const std::pair<double, double> & terminal_velocity_and_accel)
+{
+  params->target_velocity = terminal_velocity_and_accel.first;
+  params->acceleration = terminal_velocity_and_accel.second;
 }
 
 }  // namespace behavior_path_planner::start_planner_utils

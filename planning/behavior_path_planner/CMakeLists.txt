@@ -26,6 +26,9 @@ set(common_src
   src/utils/utils.cpp
   src/utils/path_utils.cpp
   src/utils/safety_check.cpp
+  src/utils/path_safety_checker/safety_check.cpp
+  src/utils/path_safety_checker/objects_filtering.cpp
+  src/utils/start_goal_planner_common/utils.cpp
   src/utils/avoidance/utils.cpp
   src/utils/lane_change/utils.cpp
   src/utils/side_shift/util.cpp
