@@ -126,6 +126,10 @@ MarkerArray createObjectsMarkerArray(
   const PredictedObjects & objects, std::string && ns, const int64_t & lane_id, const float & r,
   const float & g, const float & b);
 
+MarkerArray createPredictedPathMarkerArray(
+  const PredictedPath & ego_predicted_path, const vehicle_info_util::VehicleInfo & vehicle_info,
+  std::string && ns, const int32_t & id, const float & r, const float & g, const float & b);
+
 }  // namespace marker_utils
 
 #endif  // BEHAVIOR_PATH_PLANNER__MARKER_UTIL__DEBUG_UTILITIES_HPP_

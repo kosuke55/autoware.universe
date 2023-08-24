@@ -1054,6 +1054,20 @@ bool StartPlannerModule::isSafePath() const
     behavior_path_planner::utils::path_safety_checker::createPredictedPath(
       ego_predicted_path_params_, pull_out_path.points, current_pose, current_velocity,
       ego_seg_idx);
+  {
+    using marker_utils::createPredictedPathMarkerArray;
+    const auto life_time = rclcpp::Duration::from_seconds(1.5);
+    auto add = [&](MarkerArray added) {
+      for (auto & marker : added.markers) {
+        marker.lifetime = life_time;
+      }
+      tier4_autoware_utils::appendMarkerArray(added, &debug_marker_);
+    };
+    const auto & ego_predicted_path_marker = utils::path_safety_checker::convertToPredictedPath(
+      ego_predicted_path, ego_predicted_path_params_->time_resolution);
+    add(createPredictedPathMarkerArray(
+      ego_predicted_path_marker, vehicle_info_, "ego_predicted_path", 0, 0.0, 0.5, 0.9));
+  }
 
   const auto & filtered_objects = utils::path_safety_checker::filterObjects(
     dynamic_object, route_handler, current_lanes, current_pose.position, objects_filtering_params_);
@@ -1216,6 +1230,7 @@ void StartPlannerModule::setDebugData() const
   add(createPoseMarkerArray(status_.pull_out_path.start_pose, "start_pose", 0, 0.3, 0.9, 0.3));
   add(createPoseMarkerArray(status_.pull_out_path.end_pose, "end_pose", 0, 0.9, 0.9, 0.3));
   add(createPathMarkerArray(getFullPath(), "full_path", 0, 0.0, 0.5, 0.9));
+
   if (start_planner_data_.filtered_objects.objects.size() > 0) {
     add(createObjectsMarkerArray(
       start_planner_data_.filtered_objects, "filtered_objects", 0, 0.0, 0.5, 0.9));
