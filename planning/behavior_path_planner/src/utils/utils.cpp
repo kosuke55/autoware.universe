@@ -2406,51 +2406,65 @@ double getSignedDistanceFromBoundary(
 }
 
 std::optional<double> getSignedDistanceFromBoundary(
-  const lanelet::ConstLanelets & lanelets, const LinearRing2d & footprint,
-  const Pose & vehicle_pose, const bool left_side)
+  const lanelet::ConstLanelets & lanelets, const double vehicle_width, const double base_link2front,
+  const double base_link2rear, const Pose & vehicle_pose, const bool left_side)
 {
-  double min_distance = std::numeric_limits<double>::max();
+  std::vector<Point> vehicle_corner_points;
+  if (left_side) {
+    Point front_left, rear_left;
+    rear_left.x = -base_link2rear;
+    rear_left.y = vehicle_width / 2;
+    front_left.x = base_link2front;
+    front_left.y = vehicle_width / 2;
+    vehicle_corner_points.push_back(tier4_autoware_utils::transformPoint(rear_left, vehicle_pose));
+    vehicle_corner_points.push_back(tier4_autoware_utils::transformPoint(front_left, vehicle_pose));
+  } else {
+    Point front_right, rear_right;
+    rear_right.x = -base_link2rear;
+    rear_right.y = -vehicle_width / 2;
+    front_right.x = base_link2front;
+    front_right.y = -vehicle_width / 2;
+    vehicle_corner_points.push_back(tier4_autoware_utils::transformPoint(rear_right, vehicle_pose));
+    vehicle_corner_points.push_back(
+      tier4_autoware_utils::transformPoint(front_right, vehicle_pose));
+  }
 
-  const auto transformed_footprint =
-    transformVector(footprint, tier4_autoware_utils::pose2transform(vehicle_pose));
+  const double sign = left_side ? -1.0 : 1.0;
+  double distance = sign * std::numeric_limits<double>::max();
   bool found_neighbor_bound = false;
-  for (const auto & vehicle_corner_point : transformed_footprint) {
-    // convert point of footprint to pose
+  for (const auto & vehicle_corner_point : vehicle_corner_points) {
     Pose vehicle_corner_pose{};
-    vehicle_corner_pose.position = tier4_autoware_utils::toMsg(vehicle_corner_point.to_3d());
+    vehicle_corner_pose.position = vehicle_corner_point;
     vehicle_corner_pose.orientation = vehicle_pose.orientation;
 
     // calculate distance to the bound directly next to footprint points
     lanelet::ConstLanelet closest_lanelet{};
-    if (lanelet::utils::query::getClosestLanelet(lanelets, vehicle_corner_pose, &closest_lanelet)) {
-      const auto & bound_line_2d = left_side ? lanelet::utils::to2D(closest_lanelet.leftBound3d())
-                                             : lanelet::utils::to2D(closest_lanelet.rightBound3d());
+    if (!lanelet::utils::query::getClosestLanelet(
+          lanelets, vehicle_corner_pose, &closest_lanelet)) {
+      return {};
+    }
+    const auto & bound_line_2d = left_side ? lanelet::utils::to2D(closest_lanelet.leftBound3d())
+                                           : lanelet::utils::to2D(closest_lanelet.rightBound3d());
 
-      for (size_t i = 1; i < bound_line_2d.size(); ++i) {
-        const Point p_front = lanelet::utils::conversion::toGeomMsgPt(bound_line_2d[i - 1]);
-        const Point p_back = lanelet::utils::conversion::toGeomMsgPt(bound_line_2d[i]);
+    for (size_t i = 1; i < bound_line_2d.size(); i++) {
+      const Point p1 = lanelet::utils::conversion::toGeomMsgPt(bound_line_2d[i - 1]);
+      const Point p2 = lanelet::utils::conversion::toGeomMsgPt(bound_line_2d[i]);
 
-        const Point inverse_p_front =
-          tier4_autoware_utils::inverseTransformPoint(p_front, vehicle_corner_pose);
-        const Point inverse_p_back =
-          tier4_autoware_utils::inverseTransformPoint(p_back, vehicle_corner_pose);
+      const Point inverse_p1 = tier4_autoware_utils::inverseTransformPoint(p1, vehicle_corner_pose);
+      const Point inverse_p2 = tier4_autoware_utils::inverseTransformPoint(p2, vehicle_corner_pose);
 
-        const double dy_front = inverse_p_front.y;
-        const double dy_back = inverse_p_back.y;
-        const double dx_front = inverse_p_front.x;
-        const double dx_back = inverse_p_back.x;
-        // is in segment
-        if (dx_front < 0 && dx_back > 0) {
-          const double lateral_distance_from_pose_to_segment =
-            (dy_front * dx_back + dy_back * -dx_front) / (dx_back - dx_front);
+      const double dx_p1 = inverse_p1.x;
+      const double dx_p2 = inverse_p2.x;
+      const double dy_p1 = inverse_p1.y;
+      const double dy_p2 = inverse_p2.y;
 
-          if (std::abs(lateral_distance_from_pose_to_segment) < std::abs(min_distance)) {
-            min_distance = lateral_distance_from_pose_to_segment;
-          }
-
-          found_neighbor_bound = true;
-          break;
-        }
+      // is in segment
+      if (dx_p1 < 0 && dx_p2 > 0) {
+        const double current_distance = sign * (dy_p1 * dx_p2 + dy_p2 * -dx_p1) / (dx_p2 - dx_p1);
+        distance =
+          left_side ? std::max(distance, current_distance) : std::min(distance, current_distance);
+        found_neighbor_bound = true;
+        break;
       }
     }
   }
@@ -2462,8 +2476,7 @@ std::optional<double> getSignedDistanceFromBoundary(
     return {};
   }
 
-  // min_distance is the distance from corner_pose to bound, so reverse this value
-  return -min_distance;
+  return distance;
 }
 
 double getArcLengthToTargetLanelet(

@@ -359,6 +359,10 @@ double GoalPlannerModule::calcModuleRequestLength() const
 
 Pose GoalPlannerModule::calcRefinedGoal(const Pose & goal_pose) const
 {
+  const double veicle_width = planner_data_->parameters.vehicle_width;
+  const double base_link2front = planner_data_->parameters.base_link2front;
+  const double base_link2rear = planner_data_->parameters.base_link2rear;
+
   const lanelet::ConstLanelets pull_over_lanes =
     goal_planner_utils::getPullOverLanes(*(planner_data_->route_handler), left_side_parking_);
 
@@ -391,7 +395,8 @@ Pose GoalPlannerModule::calcRefinedGoal(const Pose & goal_pose) const
   }
 
   const auto distance_from_left_bound = utils::getSignedDistanceFromBoundary(
-    pull_over_lanes, vehicle_footprint_, center_pose, left_side_parking_);
+    pull_over_lanes, veicle_width, base_link2front, base_link2rear, center_pose,
+    left_side_parking_);
   if (!distance_from_left_bound) {
     RCLCPP_ERROR(getLogger(), "fail to calculate refined goal");
     return goal_pose;
