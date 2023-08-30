@@ -281,10 +281,6 @@ bool GoalPlannerModule::isExecutionRequested() const
   const Pose & current_pose = planner_data_->self_odometry->pose.pose;
   const Pose & goal_pose = route_handler->getGoalPose();
 
-  // if goal is shoulder lane, allow goal modification
-  allow_goal_modification_ =
-    route_handler->isAllowedGoalModification() || checkOriginalGoalIsInShoulder();
-
   // check if goal_pose is in current_lanes.
   lanelet::ConstLanelet current_lane{};
   const lanelet::ConstLanelets current_lanes = utils::getCurrentLanes(planner_data_);
@@ -314,6 +310,13 @@ bool GoalPlannerModule::isExecutionRequested() const
     return false;
   }
 
+  // if goal modification is not allowed
+  // 1) goal_pose is in current_lanes, plan path to the original fixed goal
+  // 2) goal_pose is NOT in current_lanes, do not execute goal_planner
+  if (!goal_planner_utils::isAllowedGoalModification(route_handler, left_side_parking_)) {
+    return goal_is_in_current_lanes;
+  }
+
   // if goal arc coordinates can be calculated, check if goal is in request_length
   const double self_to_goal_arc_length =
     utils::getSignedDistance(current_pose, goal_pose, current_lanes);
@@ -324,13 +327,6 @@ bool GoalPlannerModule::isExecutionRequested() const
   if (self_to_goal_arc_length < 0.0 || self_to_goal_arc_length > request_length) {
     // if current position is far from goal or behind goal, do not execute goal_planner
     return false;
-  }
-
-  // if goal modification is not allowed
-  // 1) goal_pose is in current_lanes, plan path to the original fixed goal
-  // 2) goal_pose is NOT in current_lanes, do not execute goal_planner
-  if (!goal_planner_utils::isAllowedGoalModification(route_handler, left_side_parking_)) {
-    return goal_is_in_current_lanes;
   }
 
   // if (A) or (B) is met execute pull over

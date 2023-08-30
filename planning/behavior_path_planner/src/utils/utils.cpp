@@ -32,6 +32,15 @@
 #include <string>
 #include <vector>
 
+// for writing the svg file
+#include <fstream>
+#include <iostream>
+// for the geometry types
+#include <tier4_autoware_utils/geometry/geometry.hpp>
+// for the svg mapper
+#include <boost/geometry/io/svg/svg_mapper.hpp>
+#include <boost/geometry/io/svg/write.hpp>
+
 namespace
 {
 double calcInterpolatedZ(
@@ -2159,6 +2168,212 @@ std::optional<double> getSignedDistanceFromBoundary(
 
   // min_distance is the distance from corner_pose to bound, so reverse this value
   return -min_distance;
+}
+
+std::optional<double> getSignedDistanceFromBoundary(
+  const lanelet::ConstLanelets & lanelets, const double vehicle_width, const double base_link2front,
+  const double base_link2rear, const Pose & vehicle_pose_, const bool left_side)
+{
+  Pose vehicle_pose = vehicle_pose_;
+  const double yaw = tf2::getYaw(vehicle_pose.orientation);
+  std::cerr << "yaw: " << yaw << std::endl;
+  vehicle_pose.orientation = tier4_autoware_utils::createQuaternionFromYaw(yaw);
+
+  // Declare a stream and an SVG mapper
+  std::ofstream svg("/home/kosuke55/goal_search2.svg");  // /!\ CHANGE PATH
+  boost::geometry::svg_mapper<tier4_autoware_utils::Point2d> mapper(svg, 800, 800);
+
+  std::vector<Point> vehicle_corner_points;
+  if (left_side) {
+    Point front_left, rear_left;
+    rear_left.x = -base_link2rear;
+    rear_left.y = vehicle_width / 2;
+    front_left.x = base_link2front;
+    front_left.y = vehicle_width / 2;
+    vehicle_corner_points.push_back(tier4_autoware_utils::transformPoint(rear_left, vehicle_pose));
+    vehicle_corner_points.push_back(tier4_autoware_utils::transformPoint(front_left, vehicle_pose));
+  } else {
+    Point front_right, rear_right;
+    rear_right.x = -base_link2rear;
+    rear_right.y = -vehicle_width / 2;
+    front_right.x = base_link2front;
+    front_right.y = -vehicle_width / 2;
+    vehicle_corner_points.push_back(tier4_autoware_utils::transformPoint(rear_right, vehicle_pose));
+    vehicle_corner_points.push_back(
+      tier4_autoware_utils::transformPoint(front_right, vehicle_pose));
+  }
+
+  const auto combined_lane = lanelet::utils::combineLaneletsShape(lanelets);
+
+  const auto & tmp_lane = combined_lane.polygon2d();
+  mapper.add(tmp_lane);
+
+  LineString2d line;
+
+  for (const auto & p : vehicle_corner_points) {
+    boost::geometry::append(line, Point2d(p.x, p.y));
+  }
+
+  mapper.add(line);
+
+  mapper.map(tmp_lane, "fill-opacity:0.3;fill:red;stroke:red;stroke-width:2");
+  mapper.map(line, "fill-opacity:0.3;fill:red;stroke:green;stroke-width:2");
+
+  {
+    const Point2d v_p(vehicle_pose.position.x, vehicle_pose.position.y);
+    const Pose offset_pose = tier4_autoware_utils::calcOffsetPose(vehicle_pose, 1.0, 0.0, 0.0);
+    const Point2d v_p2(offset_pose.position.x, offset_pose.position.y);
+    mapper.add(v_p);
+    mapper.add(v_p2);
+    mapper.map(v_p, "fill-opacity:0.3;fill:green;stroke:green;stroke-width:1.0");
+    mapper.map(v_p2, "fill-opacity:0.3;fill:black;stroke:black;stroke-width:0.5");
+  }
+
+  // leftサイドで最大化。rightは最小化
+  const double sign = left_side ? -1.0 : 1.0;
+  double distance = sign * std::numeric_limits<double>::max();
+
+  bool found_neighbor_bound = false;
+
+  size_t count = 0;
+
+  for (const auto & vehicle_corner_point : vehicle_corner_points) {
+    // convert point of footprint to pose
+    Pose vehicle_corner_pose{};
+    vehicle_corner_pose.position = vehicle_corner_point;
+    vehicle_corner_pose.orientation = vehicle_pose.orientation;
+
+    // debug
+    {
+      const Point2d vehicle_corner_point2d(
+        vehicle_corner_pose.position.x, vehicle_corner_pose.position.y);
+      mapper.add(vehicle_corner_point2d);
+      if (count == 0) {
+        mapper.map(
+          vehicle_corner_point2d, "fill-opacity:0.3;fill:green;stroke:green;stroke-width:2");
+      } else {
+        mapper.map(
+          vehicle_corner_point2d, "fill-opacity:0.3;fill:black;stroke:black;stroke-width:2");
+      }
+    }
+
+    // calculate distance to the bound directly next to footprint points
+    lanelet::ConstLanelet closest_lanelet{};
+    if (lanelet::utils::query::getClosestLanelet(lanelets, vehicle_corner_pose, &closest_lanelet)) {
+      const auto & bound_line_2d = left_side ? lanelet::utils::to2D(closest_lanelet.leftBound3d())
+                                             : lanelet::utils::to2D(closest_lanelet.rightBound3d());
+      mapper.add(bound_line_2d);
+      mapper.map(bound_line_2d, "fill-opacity:0.3;fill:red;stroke:blue;stroke-width:2");
+
+      for (size_t i = 1; i < bound_line_2d.size(); i++) {
+        const Point p1 = lanelet::utils::conversion::toGeomMsgPt(bound_line_2d[i - 1]);
+        const Point p2 = lanelet::utils::conversion::toGeomMsgPt(bound_line_2d[i]);
+
+        const Point inverse_p1 =
+          tier4_autoware_utils::inverseTransformPoint(p1, vehicle_corner_pose);
+        const Point inverse_p2 =
+          tier4_autoware_utils::inverseTransformPoint(p2, vehicle_corner_pose);
+
+        // debug
+        Pose p1_;
+        p1_.position = p1;
+        p1_.orientation = vehicle_pose.orientation;
+        Pose p2_;
+        p2_.position = p2;
+        p2_.orientation = vehicle_pose.orientation;
+        const Point inverse_p1_ = tier4_autoware_utils::inverseTransformPose(p1_, vehicle_corner_pose).position;
+        const Point inverse_p2_ = tier4_autoware_utils::inverseTransformPose(p2_, vehicle_corner_pose).position;
+        //
+
+        const double dx_p1 = inverse_p1.x;
+        const double dx_p2 = inverse_p2.x;
+
+        const double dy_p1 = inverse_p1.y;
+        const double dy_p2 = inverse_p2.y;
+
+        // print vehicle_corner_pose
+        std::cerr << "(x, y, z) = " << vehicle_corner_pose.position.x << ", "
+                  << vehicle_corner_pose.position.y << ", " << vehicle_corner_pose.position.z
+                  << ", (q.w, q.x, q.y, q.z) = " << vehicle_corner_pose.orientation.w << ", "
+                  << vehicle_corner_pose.orientation.x << ", " << vehicle_corner_pose.orientation.y
+                  << ", " << vehicle_corner_pose.orientation.z << std::endl;
+
+
+            std::cerr << count << ": lane: " << closest_lanelet.id() << " " << i << "/"
+                      << bound_line_2d.size() << " "
+                      << ", dx_p1: " << dx_p1 << ", dx_p2: " << dx_p2 << ", dy_p1: " << dy_p1
+                      << ", dy_p2: " << dy_p2 << std::endl;
+        if(std::abs(dx_p1 - inverse_p1_.x) > 0.0001){
+          std::cerr << "dx_p1 is not equal" << std::endl;
+        }
+        if(std::abs(dx_p2 - inverse_p2_.x) > 0.0001){
+          std::cerr << "dx_p2 is not equal" << std::endl;
+        }
+                      
+        
+
+            const Point2d debug_p1(p1.x, p1.y);
+            const Point2d debug_p2(p2.x, p2.y);
+            mapper.add(debug_p1);
+            mapper.add(debug_p2);
+            mapper.map(debug_p1, "fill-opacity:0.3;fill:black;stroke:black;stroke-width:0.5");
+            // mapper.map(debug_p2, "fill-opacity:0.3;fill:black;stroke:black;stroke-width:0.5");
+
+        // is in segment
+        if (dx_p1 < 0 && dx_p2 > 0) {
+          const double current_distance = sign * (dy_p1 * dx_p2 + dy_p2 * -dx_p1) / (dx_p2 - dx_p1);
+          if (left_side) {
+
+            if (count == 0) {
+              mapper.map(debug_p1, "fill-opacity:0.3;fill:blue;stroke:blue;stroke-width:2");
+              mapper.map(debug_p2, "fill-opacity:0.3;fill:yellow;stroke:yellow;stroke-width:2");
+            } else {
+              mapper.map(debug_p1, "fill-opacity:0.3;fill:purple;stroke:purple;stroke-width:2");
+              mapper.map(debug_p2, "fill-opacity:0.3;fill:yellow;stroke:yellow;stroke-width:2");
+            }
+
+            std::cerr << "found!! "<< count << ": lane: " << closest_lanelet.id() << " " << i << "/"
+                      << bound_line_2d.size() << " "
+                      << ", dx_p1: " << dx_p1 << ", dx_p2: " << dx_p2 << ", dy_p1: " << dy_p1
+                      << ", dy_p2: " << dy_p2 << ", distance: " << distance
+                      << "current: " << current_distance << std::endl;
+            distance = std::max(distance, current_distance);
+              //debug
+
+              {
+                const auto p = tier4_autoware_utils::calcOffsetPose(vehicle_corner_pose, dx_p1, dy_p1, 0.0);
+                const Point2d p2d(p.position.x, p.position.y);
+                mapper.add(p2d);
+                mapper.map(p2d, "fill-opacity:1.0;fill:red;stroke:red;stroke-width:2");
+              }
+
+              //
+            
+          } else {
+            distance = std::min(distance, current_distance);
+          }
+
+          // if (sign * lateral_distance_from_pose_to_segment < sign * min_distance) {
+          //   min_distance = sign * lateral_distance_from_pose_to_segment;
+          // }
+          found_neighbor_bound = true;
+          break;
+        }
+      }
+    }
+    count++;  
+  }
+
+  if (!found_neighbor_bound) {
+    RCLCPP_ERROR_STREAM(
+      rclcpp::get_logger("behavior_path_planner").get_child("utils"),
+      "neighbor shoulder bound to footprint is not found.");
+    return {};
+  }
+
+  // min_distance is the distance from corner_pose to bound, so reverse this value
+  // return -min_distance;
+  return distance;
 }
 
 double getArcLengthToTargetLanelet(

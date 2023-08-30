@@ -322,6 +322,10 @@ std::optional<double> getSignedDistanceFromBoundary(
   const lanelet::ConstLanelets & shoulder_lanelets, const LinearRing2d & footprint,
   const Pose & vehicle_pose, const bool left_side);
 
+std::optional<double> getSignedDistanceFromBoundary(
+  const lanelet::ConstLanelets & lanelets, const double vehicle_width, const double base_link2front,
+  const double base_link2rear, const Pose & vehicle_pose, const bool left_side);
+
 // misc
 
 std::vector<Polygon2d> getTargetLaneletPolygons(

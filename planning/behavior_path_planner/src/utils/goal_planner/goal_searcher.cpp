@@ -18,6 +18,15 @@
 #include "behavior_path_planner/utils/path_utils.hpp"
 #include "lanelet2_extension/utility/utilities.hpp"
 
+// for writing the svg file
+#include <iostream>
+#include <fstream>
+// for the geometry types
+#include <tier4_autoware_utils/geometry/geometry.hpp>
+// for the svg mapper
+#include <boost/geometry/io/svg/svg_mapper.hpp>
+#include <boost/geometry/io/svg/write.hpp>
+
 #include <boost/optional.hpp>
 
 #include <memory>
@@ -25,6 +34,14 @@
 
 namespace behavior_path_planner
 {
+
+#define debug(var)  do{std::cerr << __func__ << ": " << __LINE__ << ", " << #var << " : ";view(var);}while(0)
+template<typename T> void view(T e){std::cerr << e << std::endl;}
+template<typename T> void view(const std::vector<T>& v){for(const auto& e : v){ std::cerr << e << " "; } std::cerr << std::endl;}
+template<typename T> void view(const std::vector<std::vector<T> >& vv){ for(const auto& v : vv){ view(v); } }
+#define line() {std::cerr << "(" << __FILE__ <<  ") " << __func__ << ": " << __LINE__ << std::endl; }
+
+
 using lane_departure_checker::LaneDepartureChecker;
 using lanelet::autoware::NoStoppingArea;
 using tier4_autoware_utils::calcOffsetPose;
@@ -42,6 +59,13 @@ GoalSearcher::GoalSearcher(
 
 GoalCandidates GoalSearcher::search(const Pose & original_goal_pose)
 {
+
+      // Declare a stream and an SVG mapper
+    std::ofstream svg("/home/kosuke55/goal_search.svg");  // /!\ CHANGE PATH
+    boost::geometry::svg_mapper<tier4_autoware_utils::Point2d> mapper(svg, 800, 800);
+    
+    
+
   GoalCandidates goal_candidates{};
 
   const auto & route_handler = planner_data_->route_handler;
@@ -56,6 +80,12 @@ GoalCandidates GoalSearcher::search(const Pose & original_goal_pose)
     goal_planner_utils::getPullOverLanes(*route_handler, left_side_parking_);
   auto lanes = utils::getExtendedCurrentLanes(planner_data_);
   lanes.insert(lanes.end(), pull_over_lanes.begin(), pull_over_lanes.end());
+
+for(const auto &lane: pull_over_lanes){
+   const auto & tmp_lane = lane.polygon2d();
+    mapper.add(tmp_lane);
+  mapper.map(tmp_lane, "fill-opacity:0.3;fill:red;stroke:red;stroke-width:2");
+  }
 
   const auto goal_arc_coords =
     lanelet::utils::getArcCoordinates(pull_over_lanes, original_goal_pose);
@@ -73,6 +103,13 @@ GoalCandidates GoalSearcher::search(const Pose & original_goal_pose)
   for (const auto & p : center_line_path.points) {
     const Pose & center_pose = p.point.pose;
 
+    const Point2d debug_p(center_pose.position.x, center_pose.position.y);
+    std::cerr << "debug_p: " << debug_p.x() << ", " << debug_p.y() << std::endl;
+    mapper.add(debug_p);
+    mapper.map(debug_p, "fill-opacity:0.5;fill:rgb(153,204,0);stroke:rgb(153,204,0);stroke-width:2", 5);
+    
+
+
     // ignore goal_pose near lane start
     const double distance_from_lane_start =
       lanelet::utils::getArcCoordinates(pull_over_lanes, center_pose).length;
@@ -80,13 +117,22 @@ GoalCandidates GoalSearcher::search(const Pose & original_goal_pose)
       continue;
     }
 
-    const auto distance_from_left_bound = utils::getSignedDistanceFromBoundary(
-      pull_over_lanes, vehicle_footprint_, center_pose, left_side_parking_);
-    if (!distance_from_left_bound) continue;
+    const auto distance_from_bound = utils::getSignedDistanceFromBoundary(
+      pull_over_lanes, planner_data_->parameters.vehicle_width,
+      planner_data_->parameters.base_link2front, planner_data_->parameters.base_link2rear,
+      center_pose, left_side_parking_);
+    if (!distance_from_bound) continue;
 
-    const double sign = left_side_parking_ ? 1.0 : -1.0;
+    // const double sign = left_side_parking_ ? 1.0 : -1.0;
+    // const double offset_from_center_line =
+    //   sign * (std::abs(distance_from_bound.value()) - margin_from_boundary);
+
+    const double sign = left_side_parking_ ? -1.0 : 1.0;
+    debug(distance_from_bound.value());
     const double offset_from_center_line =
-      sign * (std::abs(distance_from_left_bound.value()) - margin_from_boundary);
+      sign * (distance_from_bound.value() + margin_from_boundary);
+    debug(offset_from_center_line);
+
     const Pose original_search_pose = calcOffsetPose(center_pose, 0, offset_from_center_line, 0);
     const double longitudinal_distance_from_original_goal =
       std::abs(motion_utils::calcSignedArcLength(
@@ -97,7 +143,7 @@ GoalCandidates GoalSearcher::search(const Pose & original_goal_pose)
     double lateral_offset = 0.0;
     for (double dy = 0; dy <= max_lateral_offset; dy += lateral_offset_interval) {
       lateral_offset = dy;
-      search_pose = calcOffsetPose(original_search_pose, 0, -sign * dy, 0);
+      search_pose = calcOffsetPose(original_search_pose, 0, sign * dy, 0);
 
       const auto transformed_vehicle_footprint =
         transformVector(vehicle_footprint_, tier4_autoware_utils::pose2transform(search_pose));
@@ -107,7 +153,7 @@ GoalCandidates GoalSearcher::search(const Pose & original_goal_pose)
       }
 
       if (LaneDepartureChecker::isOutOfLane(lanes, transformed_vehicle_footprint)) {
-        continue;
+        // continue;
       }
 
       GoalCandidate goal_candidate{};
@@ -119,6 +165,7 @@ GoalCandidates GoalSearcher::search(const Pose & original_goal_pose)
       goal_candidate.distance_from_original_goal = longitudinal_distance_from_original_goal;
       goal_candidates.push_back(goal_candidate);
     }
+    // break;
   }
   createAreaPolygons(original_search_poses);
 
