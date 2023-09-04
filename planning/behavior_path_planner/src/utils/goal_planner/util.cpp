@@ -193,13 +193,12 @@ bool checkOriginalGoalIsInShoulder(
 {
   const Pose & goal_pose = route_handler->getGoalPose();
 
-  const lanelet::ConstLanelets pull_over_lanes =
-    goal_planner_utils::getPullOverLanes(*(route_handler), left_side_parking);
-  lanelet::ConstLanelet target_lane{};
-  lanelet::utils::query::getClosestLanelet(pull_over_lanes, goal_pose, &target_lane);
+  lanelet::ConstLanelet closest_shoulder_lane{};
+  if (lanelet::utils::query::getClosestLanelet(shoulder_lanes, goal_pose, &closest_shoulder_lane)) {
+    return lanelet::utils::isInLanelet(goal_pose, closest_shoulder_lane, 0.1);
+  }
 
-  return route_handler->isShoulderLanelet(target_lane) &&
-         lanelet::utils::isInLanelet(goal_pose, target_lane, 0.1);
+  return false;
 }
 
 }  // namespace goal_planner_utils
