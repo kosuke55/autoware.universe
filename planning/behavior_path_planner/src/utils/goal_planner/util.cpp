@@ -181,17 +181,15 @@ MarkerArray createGoalCandidatesMarkerArray(
   return marker_array;
 }
 
-bool isAllowedGoalModification(
-  const std::shared_ptr<RouteHandler> & route_handler, const bool left_side_parking)
+bool isAllowedGoalModification(const std::shared_ptr<RouteHandler> & route_handler)
 {
-  return route_handler->isAllowedGoalModification() ||
-         checkOriginalGoalIsInShoulder(route_handler, left_side_parking);
+  return route_handler->isAllowedGoalModification() || checkOriginalGoalIsInShoulder(route_handler);
 }
 
-bool checkOriginalGoalIsInShoulder(
-  const std::shared_ptr<RouteHandler> & route_handler, const bool left_side_parking)
+bool checkOriginalGoalIsInShoulder(const std::shared_ptr<RouteHandler> & route_handler)
 {
   const Pose & goal_pose = route_handler->getGoalPose();
+  const auto shoulder_lanes = route_handler->getShoulderLanelets();
 
   lanelet::ConstLanelet closest_shoulder_lane{};
   if (lanelet::utils::query::getClosestLanelet(shoulder_lanes, goal_pose, &closest_shoulder_lane)) {

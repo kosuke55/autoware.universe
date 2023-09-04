@@ -18,8 +18,8 @@
 #include "behavior_path_planner/utils/goal_planner/util.hpp"
 #include "behavior_path_planner/utils/path_shifter/path_shifter.hpp"
 #include "behavior_path_planner/utils/path_utils.hpp"
-#include "behavior_path_planner/utils/utils.hpp"
 #include "behavior_path_planner/utils/safety_check.hpp"
+#include "behavior_path_planner/utils/utils.hpp"
 
 #include <lanelet2_extension/utility/message_conversion.hpp>
 #include <lanelet2_extension/utility/utilities.hpp>
@@ -316,10 +316,9 @@ bool GoalPlannerModule::isExecutionRequested() const
   // if goal arc coordinates can be calculated, check if goal is in request_length
   const double self_to_goal_arc_length =
     utils::getSignedDistance(current_pose, goal_pose, current_lanes);
-  const double request_length =
-    goal_planner_utils::isAllowedGoalModification(route_handler, left_side_parking_)
-      ? calcModuleRequestLength()
-      : parameters_->minimum_request_length;
+  const double request_length = goal_planner_utils::isAllowedGoalModification(route_handler)
+                                  ? calcModuleRequestLength()
+                                  : parameters_->minimum_request_length;
   if (self_to_goal_arc_length < 0.0 || self_to_goal_arc_length > request_length) {
     // if current position is far from goal or behind goal, do not execute goal_planner
     return false;
@@ -328,7 +327,7 @@ bool GoalPlannerModule::isExecutionRequested() const
   // if goal modification is not allowed
   // 1) goal_pose is in current_lanes, plan path to the original fixed goal
   // 2) goal_pose is NOT in current_lanes, do not execute goal_planner
-  if (!goal_planner_utils::isAllowedGoalModification(route_handler, left_side_parking_)) {
+  if (!goal_planner_utils::isAllowedGoalModification(route_handler)) {
     return goal_is_in_current_lanes;
   }
 
@@ -422,8 +421,7 @@ ModuleStatus GoalPlannerModule::updateState()
 {
   // finish module only when the goal is fixed
   if (
-    !goal_planner_utils::isAllowedGoalModification(
-      planner_data_->route_handler, left_side_parking_) &&
+    !goal_planner_utils::isAllowedGoalModification(planner_data_->route_handler) &&
     hasFinishedGoalPlanner()) {
     return ModuleStatus::SUCCESS;
   }
@@ -531,7 +529,7 @@ void GoalPlannerModule::generateGoalCandidates()
   // calculate goal candidates
   const Pose goal_pose = route_handler->getOriginalGoalPose();
   refined_goal_pose_ = calcRefinedGoal(goal_pose);
-  if (goal_planner_utils::isAllowedGoalModification(route_handler, left_side_parking_)) {
+  if (goal_planner_utils::isAllowedGoalModification(route_handler)) {
     goal_searcher_->setPlannerData(planner_data_);
     goal_candidates_ = goal_searcher_->search(refined_goal_pose_);
   } else {
@@ -546,8 +544,7 @@ BehaviorModuleOutput GoalPlannerModule::plan()
 {
   generateGoalCandidates();
 
-  if (goal_planner_utils::isAllowedGoalModification(
-        planner_data_->route_handler, left_side_parking_)) {
+  if (goal_planner_utils::isAllowedGoalModification(planner_data_->route_handler)) {
     return planWithGoalModification();
   } else {
     fixed_goal_planner_->setPreviousModuleOutput(getPreviousModuleOutput());
@@ -863,8 +860,7 @@ BehaviorModuleOutput GoalPlannerModule::planWithGoalModification()
 
 BehaviorModuleOutput GoalPlannerModule::planWaitingApproval()
 {
-  if (goal_planner_utils::isAllowedGoalModification(
-        planner_data_->route_handler, left_side_parking_)) {
+  if (goal_planner_utils::isAllowedGoalModification(planner_data_->route_handler)) {
     return planWaitingApprovalWithGoalModification();
   } else {
     fixed_goal_planner_->setPreviousModuleOutput(getPreviousModuleOutput());
@@ -1470,9 +1466,7 @@ void GoalPlannerModule::setDebugData()
     }
     tier4_autoware_utils::appendMarkerArray(added, &debug_marker_);
   };
-
-  if (goal_planner_utils::isAllowedGoalModification(
-        planner_data_->route_handler, left_side_parking_)) {
+  if (goal_planner_utils::isAllowedGoalModification(planner_data_->route_handler)) {
     // Visualize pull over areas
     const auto color = status_.has_decided_path ? createMarkerColor(1.0, 1.0, 0.0, 0.999)  // yellow
                                                 : createMarkerColor(0.0, 1.0, 0.0, 0.999);  // green
