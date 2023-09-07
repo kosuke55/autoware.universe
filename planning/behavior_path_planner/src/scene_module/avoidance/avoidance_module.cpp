@@ -1002,9 +1002,9 @@ AvoidLineArray AvoidanceModule::calcRawShiftLinesFromObjects(
       al_avoid.id = getOriginalShiftLineUniqueId();
       al_avoid.object = o;
 
-      if (is_valid_shift_line(al_avoid)) {
-        avoid_lines.push_back(al_avoid);
-      }
+      // if (is_valid_shift_line(al_avoid)) {
+      //   avoid_lines.push_back(al_avoid);
+      // }
     }
 
     AvoidLine al_return;
@@ -1025,9 +1025,17 @@ AvoidLineArray AvoidanceModule::calcRawShiftLinesFromObjects(
       al_return.id = getOriginalShiftLineUniqueId();
       al_return.object = o;
 
-      if (is_valid_shift_line(al_return)) {
-        avoid_lines.push_back(al_return);
-      }
+      // if (is_valid_shift_line(al_return)) {
+      //   avoid_lines.push_back(al_return);
+      // }
+    }
+
+    if (is_valid_shift_line(al_avoid) && is_valid_shift_line(al_return)) {
+      avoid_lines.push_back(al_avoid);
+      avoid_lines.push_back(al_return);
+    } else {
+      o.reason = "InvalidShiftLine";
+      continue;
     }
 
     DEBUG_PRINT(
