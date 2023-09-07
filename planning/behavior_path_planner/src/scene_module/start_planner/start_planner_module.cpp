@@ -248,7 +248,7 @@ BehaviorModuleOutput StartPlannerModule::plan()
   }
 
   PathWithLaneId path;
-  if (status_.back_finished) {
+  if (!status_.need_backward_driving) {
     if (hasFinishedCurrentPath()) {
       RCLCPP_INFO(getLogger(), "Increment path index");
       incrementPathIndex();
@@ -297,7 +297,7 @@ BehaviorModuleOutput StartPlannerModule::plan()
   //   }
   // }
 
-  if (status_.back_finished) {
+  if (!status_.need_backward_driving) {
     const double start_distance = motion_utils::calcSignedArcLength(
       path.points, planner_data_->self_odometry->pose.pose.position,
       status_.pull_out_path.start_pose.position);
@@ -340,7 +340,7 @@ PathWithLaneId StartPlannerModule::getFullPath() const
       pull_out_path.points.end(), partial_path.points.begin(), partial_path.points.end());
   }
 
-  if (status_.back_finished) {
+  if (!status_.need_backward_driving) {
     // not need backward path or finish it
     return pull_out_path;
   }
@@ -383,7 +383,7 @@ BehaviorModuleOutput StartPlannerModule::planWaitingApproval()
     planner_data_, backward_path_length, std::numeric_limits<double>::max(),
     /*forward_only_in_route*/ true);
 
-  auto stop_path = status_.back_finished ? getCurrentPath() : status_.backward_path;
+  auto stop_path = status_.need_backward_driving ? status_.backward_path: getCurrentPath();
   const auto drivable_lanes = generateDrivableLanes(stop_path);
   const auto & dp = planner_data_->drivable_area_expansion_parameters;
   const auto expanded_lanes = utils::expandLanelets(
@@ -410,7 +410,7 @@ BehaviorModuleOutput StartPlannerModule::planWaitingApproval()
     return SteeringFactor::STRAIGHT;
   });
 
-  if (status_.back_finished) {
+  if (!status_.need_backward_driving) {
     const double start_distance = motion_utils::calcSignedArcLength(
       stop_path.points, planner_data_->self_odometry->pose.pose.position,
       status_.pull_out_path.start_pose.position);
@@ -468,22 +468,25 @@ void StartPlannerModule::planWithPriority(
     const auto & pull_out_start_pose = start_pose_candidates.at(i);
 
     // Set back_finished to true if the current start pose is same to refined_start_pose
-    status_.back_finished =
-      tier4_autoware_utils::calcDistance2d(pull_out_start_pose, refined_start_pose) < 0.01;
+    const bool need_backward_driving =
+      tier4_autoware_utils::calcDistance2d(pull_out_start_pose, refined_start_pose) > 0.01;
 
     planner->setPlannerData(planner_data_);
     const auto pull_out_path = planner->plan(pull_out_start_pose, goal_pose);
     // not found safe path
     if (!pull_out_path) {
+      const std::lock_guard<std::mutex> lock(mutex_);
+      status_.need_backward_driving = false;
       return false;
     }
     // use current path if back is not needed
-    if (status_.back_finished) {
+    if (!need_backward_driving) {
       const std::lock_guard<std::mutex> lock(mutex_);
       status_.is_safe_static_objects = true;
       status_.pull_out_path = *pull_out_path;
       status_.pull_out_start_pose = pull_out_start_pose;
       status_.planner_type = planner->getPlannerType();
+      status_.need_backward_driving = false;
       return true;
     }
 
@@ -495,6 +498,7 @@ void StartPlannerModule::planWithPriority(
     const auto pull_out_path_next = planner->plan(pull_out_start_pose_next, goal_pose);
     // not found safe path
     if (!pull_out_path_next) {
+      status_.need_backward_driving = false;
       return false;
     }
 
@@ -505,6 +509,7 @@ void StartPlannerModule::planWithPriority(
       status_.pull_out_path = *pull_out_path_next;
       status_.pull_out_start_pose = pull_out_start_pose_next;
       status_.planner_type = planner->getPlannerType();
+      status_.need_backward_driving = true;
     }
     return true;
   };
@@ -688,7 +693,7 @@ void StartPlannerModule::updatePullOutStatus()
     start_pose_candidates, *refined_start_pose, goal_pose, parameters_->search_priority);
 
   checkBackFinished();
-  if (!status_.back_finished) {
+  if (status_.need_backward_driving) {
     status_.backward_path = start_planner_utils::getBackwardPath(
       *route_handler, status_.pull_out_lanes, current_pose, status_.pull_out_start_pose,
       parameters_->backward_velocity);
@@ -780,7 +785,7 @@ bool StartPlannerModule::isOverlappedWithLane(
 
 bool StartPlannerModule::hasFinishedPullOut() const
 {
-  if (!status_.back_finished || !status_.is_safe_static_objects) {
+  if (status_.need_backward_driving || !status_.is_safe_static_objects) {
     return false;
   }
 
@@ -823,9 +828,9 @@ void StartPlannerModule::checkBackFinished()
   const double ego_vel = utils::l2Norm(planner_data_->self_odometry->twist.twist.linear);
   const bool is_stopped = ego_vel < parameters_->th_stopped_velocity;
 
-  if (!status_.back_finished && is_near && is_stopped) {
+  if (status_.need_backward_driving && is_near && is_stopped) {
     RCLCPP_INFO(getLogger(), "back finished");
-    status_.back_finished = true;
+    status_.need_backward_driving = false;
 
     // request start_planner approval
     waitApproval();
@@ -898,7 +903,7 @@ TurnSignalInfo StartPlannerModule::calcTurnSignalInfo() const
   const Pose & end_pose = status_.pull_out_path.end_pose;
 
   // turn on hazard light when backward driving
-  if (!status_.back_finished) {
+  if (status_.need_backward_driving) {
     turn_signal.hazard_signal.command = HazardLightsCommand::ENABLE;
     const auto back_start_pose = isWaitingApproval() ? current_pose : *last_approved_pose_;
     turn_signal.desired_start_point = back_start_pose;
@@ -1114,7 +1119,7 @@ BehaviorModuleOutput StartPlannerModule::generateStopOutput()
 
   {
     const std::lock_guard<std::mutex> lock(mutex_);
-    status_.back_finished = true;
+    status_.need_backward_driving = false;
     status_.planner_type = PlannerType::STOP;
     status_.pull_out_path.partial_paths.clear();
     status_.pull_out_path.partial_paths.push_back(stop_path);
@@ -1167,7 +1172,7 @@ bool StartPlannerModule::planFreespacePath()
     status_.pull_out_start_pose = current_pose;
     status_.planner_type = freespace_planner_->getPlannerType();
     status_.is_safe_static_objects = true;
-    status_.back_finished = true;
+    status_.need_backward_driving = false;
     return true;
   }
 
@@ -1234,7 +1239,7 @@ void StartPlannerModule::setDebugData() const
       header.frame_id, header.stamp, "planner_type", 0,
       visualization_msgs::msg::Marker::TEXT_VIEW_FACING, createMarkerScale(0.0, 0.0, 1.0), color);
     marker.pose = status_.pull_out_start_pose;
-    if (!status_.back_finished) {
+    if (status_.need_backward_driving) {
       marker.text = "BACK -> ";
     }
     marker.text += magic_enum::enum_name(status_.planner_type);

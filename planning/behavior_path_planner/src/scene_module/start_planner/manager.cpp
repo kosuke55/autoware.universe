@@ -48,7 +48,7 @@ bool StartPlannerModuleManager::isSimultaneousExecutableAsApprovedModule() const
 {
   const auto checker = [this](const auto & module) {
     // Currently simultaneous execution with other modules is not supported while backward driving
-    if (!module->isBackFinished()) {
+    if (!module->needBackwardDriving()) {
       return false;
     }
 
@@ -67,7 +67,7 @@ bool StartPlannerModuleManager::isSimultaneousExecutableAsCandidateModule() cons
 {
   const auto checker = [this](const auto & module) {
     // Currently simultaneous execution with other modules is not supported while backward driving
-    if (!module->isBackFinished()) {
+    if (!module->needBackwardDriving()) {
       return false;
     }
 

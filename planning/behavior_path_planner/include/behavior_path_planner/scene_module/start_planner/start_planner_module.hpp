@@ -63,7 +63,7 @@ struct PullOutStatus
   lanelet::ConstLanelets pull_out_lanes{};
   bool is_safe_static_objects{false};   // current path is safe against static objects
   bool is_safe_dynamic_objects{false};  // current path is safe against dynamic objects
-  bool back_finished{false};  // if backward driving is not required, this is also set to true
+  bool need_backward_driving{false};  // if backward driving is not required, this is also set to true
                               // todo: rename to clear variable name.
   Pose pull_out_start_pose{};
 
@@ -119,7 +119,7 @@ public:
   }
 
   // Condition to disable simultaneous execution
-  bool isBackFinished() const { return status_.back_finished; }
+  bool needBackwardDriving() const { return status_.need_backward_driving; }
   bool isFreespacePlanning() const { return status_.planner_type == PlannerType::FREESPACE; }
 
 private:
