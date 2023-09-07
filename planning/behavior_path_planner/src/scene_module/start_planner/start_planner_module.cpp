@@ -176,7 +176,7 @@ bool StartPlannerModule::isExecutionRequested() const
 
 bool StartPlannerModule::isExecutionReady() const
 {
-  if (status_.pull_out_path.partial_paths.empty()) {
+  if (getCurrentPath().points.empty()) {
     return true;
   }
 
