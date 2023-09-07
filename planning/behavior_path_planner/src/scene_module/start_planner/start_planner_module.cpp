@@ -451,6 +451,9 @@ void StartPlannerModule::incrementPathIndex()
 
 PathWithLaneId StartPlannerModule::getCurrentPath() const
 {
+  if (status_.pull_out_path.partial_paths.size() <= status_.current_path_idx) {
+    return PathWithLaneId{};
+  }
   return status_.pull_out_path.partial_paths.at(status_.current_path_idx);
 }
 
