@@ -900,6 +900,8 @@ GoalPlannerParameters BehaviorPathPlannerNode::getGoalPlannerParam()
     p.use_object_recognition = declare_parameter<bool>(ns + "use_object_recognition");
     p.object_recognition_collision_check_margin =
       declare_parameter<double>(ns + "object_recognition_collision_check_margin");
+    p.object_recognition_collision_check_max_extra_stopping_margin = declare_parameter<double>(
+      ns + "object_recognition_collision_check_max_extra_stopping_margin");
   }
 
   // pull over general params
