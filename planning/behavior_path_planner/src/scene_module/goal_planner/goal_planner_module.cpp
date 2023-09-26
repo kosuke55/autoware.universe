@@ -22,6 +22,7 @@
 #include "behavior_path_planner/utils/start_goal_planner_common/utils.hpp"
 #include "behavior_path_planner/utils/utils.hpp"
 #include "tier4_autoware_utils/math/unit_conversion.hpp"
+#include "tier4_autoware_utils/system/backtrace.hpp"
 
 #include <lanelet2_extension/utility/message_conversion.hpp>
 #include <lanelet2_extension/utility/query.hpp>
@@ -218,10 +219,17 @@ void GoalPlannerModule::onFreespaceParkingTimer()
     return;
   }
 
+  if(!freespace_planner_){
+    std::cerr << "freespace_planner_ is nullptr" << std::endl;
+    return;
+  }
+
   const bool is_new_costmap =
     (clock_->now() - planner_data_->costmap->header.stamp).seconds() < 1.0;
   constexpr double path_update_duration = 1.0;
   if (isStuck() && is_new_costmap && needPathUpdate(path_update_duration)) {
+    std::cerr << "current_state_:" <<  magic_enum::enum_name(current_state_) << std::endl;
+    std::cerr << "planFreespacePath" << std::endl;
     planFreespacePath();
   }
 }
@@ -1183,19 +1191,23 @@ bool GoalPlannerModule::isStuck()
 {
   constexpr double stuck_time = 5.0;
   if (!isStopped(odometry_buffer_stuck_, stuck_time)) {
+    std::cerr << "Not stopped" << std::endl;
     return false;
   }
 
   // not found safe path
   if (!status_.is_safe_static_objects) {
+    std::cerr << "not is_safe_static_objects" << std::endl;
     return true;
   }
 
   // any path has never been found
   if (!status_.pull_over_path) {
+    std::cerr << "not pull_over_path" << std::endl;
     return false;
   }
-
+  const bool is_collision = checkCollision(getCurrentPath());
+  std::cerr << "is_collision: " << is_collision << std::endl;
   return checkCollision(getCurrentPath());
 }
 

@@ -55,15 +55,22 @@ struct AstarNode
   double gc = 0;                         // actual cost
   double hc = 0;                         // heuristic cost
   bool is_back;                          // true if the current direction of the vehicle is back
-  AstarNode * parent = nullptr;          // parent node
+  std::weak_ptr<AstarNode> parent;       // parent node
 
   double cost() const { return gc + hc; }
 };
 
 struct NodeComparison
 {
-  bool operator()(const AstarNode * lhs, const AstarNode * rhs)
+  bool operator()(const std::shared_ptr<AstarNode> & lhs, const std::shared_ptr<AstarNode> & rhs)
   {
+    if (!lhs) {
+      std::cerr << "lhs is nullptr" << std::endl;
+    }
+    if (!rhs) {
+      std::cerr << "rhs is nullptr" << std::endl;
+    }
+
     return lhs->cost() > rhs->cost();
   }
 };
@@ -146,9 +153,11 @@ private:
   bool isGoal(const AstarNode & node) const;
   geometry_msgs::msg::Pose node2pose(const AstarNode & node) const;
 
-  AstarNode * getNodeRef(const IndexXYT & index)
+  std::shared_ptr<AstarNode> getNodeRef(const IndexXYT & index)
   {
-    return &(graph_.emplace(getKey(index), AstarNode()).first->second);
+    const auto node = std::make_shared<AstarNode>();
+    const auto [it, inserted] = graph_.emplace(getKey(index), node);
+    return it->second;
   }
 
   // Algorithm specific param
@@ -156,12 +165,13 @@ private:
 
   // hybrid astar variables
   TransitionTable transition_table_;
-  std::unordered_map<uint, AstarNode> graph_;
 
-  std::priority_queue<AstarNode *, std::vector<AstarNode *>, NodeComparison> openlist_;
-
+  std::unordered_map<uint, std::shared_ptr<AstarNode>> graph_;
+  std::priority_queue<
+    std::shared_ptr<AstarNode>, std::vector<std::shared_ptr<AstarNode>>, NodeComparison>
+    openlist_;
   // goal node, which may helpful in testing and debugging
-  AstarNode * goal_node_;
+  std::shared_ptr<AstarNode> goal_node_;
 
   // distance metric option (removed when the reeds_shepp gets stable)
   bool use_reeds_shepp_;

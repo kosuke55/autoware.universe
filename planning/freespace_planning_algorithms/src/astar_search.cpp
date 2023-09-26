@@ -40,9 +40,9 @@ double calcReedsSheppDistance(
   return rs_space.distance(pose0, pose1);
 }
 
-void setYaw(geometry_msgs::msg::Quaternion * orientation, const double yaw)
+void setYaw(geometry_msgs::msg::Quaternion & orientation, const double yaw)
 {
-  *orientation = tier4_autoware_utils::createQuaternionFromYaw(yaw);
+  orientation = tier4_autoware_utils::createQuaternionFromYaw(yaw);
 }
 
 geometry_msgs::msg::Pose calcRelativePose(
@@ -157,9 +157,10 @@ void AstarSearch::clearNodes()
 {
   // clearing openlist is necessary because otherwise remaining elements of openlist
   // point to deleted node.
-  openlist_ = std::priority_queue<AstarNode *, std::vector<AstarNode *>, NodeComparison>();
+  openlist_ = std::priority_queue<
+    std::shared_ptr<AstarNode>, std::vector<std::shared_ptr<AstarNode>>, NodeComparison>();
 
-  graph_ = std::unordered_map<uint, AstarNode>();
+  graph_ = std::unordered_map<uint, std::shared_ptr<AstarNode>>();
 }
 
 bool AstarSearch::setStartNode()
@@ -171,7 +172,7 @@ bool AstarSearch::setStartNode()
   }
 
   // Set start node
-  AstarNode * start_node = getNodeRef(index);
+  std::shared_ptr<AstarNode> start_node = getNodeRef(index);
   start_node->x = start_pose_.position.x;
   start_node->y = start_pose_.position.y;
   start_node->theta = 2.0 * M_PI / planner_common_param_.theta_size * index.theta;
@@ -179,7 +180,7 @@ bool AstarSearch::setStartNode()
   start_node->hc = estimateCost(start_pose_);
   start_node->is_back = false;
   start_node->status = NodeStatus::Open;
-  start_node->parent = nullptr;
+  start_node->parent.reset();
 
   // Push start node to openlist
   openlist_.push(start_node);
@@ -220,6 +221,20 @@ bool AstarSearch::search()
   const rclcpp::Time begin = rclcpp::Clock(RCL_ROS_TIME).now();
 
   // Start A* search
+
+  // check nullptr in openlist_
+  // {
+  //   const auto &underlyingContainer = *reinterpret_cast<const std::vector<std::shared_ptr<AstarNode>>*>(&openlist_);
+  //   size_t count = 0;
+    
+
+  // for(auto node : underlyingContainer){
+  //   if(!node){
+  //     std::cerr << "node is null: " << count++ << std::endl;
+  //   }
+  // }
+  // }
+
   while (!openlist_.empty()) {
     // Check time and terminate if the search reaches the time limit
     const rclcpp::Time now = rclcpp::Clock(RCL_ROS_TIME).now();
@@ -229,9 +244,15 @@ bool AstarSearch::search()
     }
 
     // Expand minimum cost node
-    AstarNode * current_node = openlist_.top();
+    std::shared_ptr<AstarNode> current_node = openlist_.top();
+    // std::cerr << "openlist_.size(): " << openlist_.size() << " graph_.size(): " << graph_.size() << std::endl;
+    if(!current_node){
+      std::cerr << "current_node is null" << std::endl;
+    }
     openlist_.pop();
+
     current_node->status = NodeStatus::Closed;
+
 
     if (isGoal(*current_node)) {
       goal_node_ = current_node;
@@ -252,7 +273,7 @@ bool AstarSearch::search()
       geometry_msgs::msg::Pose next_pose;
       next_pose.position.x = current_node->x + transition.shift_x;
       next_pose.position.y = current_node->y + transition.shift_y;
-      setYaw(&next_pose.orientation, current_node->theta + transition.shift_theta);
+      setYaw(next_pose.orientation, current_node->theta + transition.shift_theta);
       const auto next_index = pose2index(costmap_, next_pose, planner_common_param_.theta_size);
 
       if (detectCollision(next_index)) {
@@ -260,7 +281,10 @@ bool AstarSearch::search()
       }
 
       // Compare cost
-      AstarNode * next_node = getNodeRef(next_index);
+      std::shared_ptr<AstarNode> next_node = getNodeRef(next_index);
+      if(!next_node){
+        std::cerr << "next_node is null" << std::endl;
+      }
       if (next_node->status == NodeStatus::None) {
         next_node->status = NodeStatus::Open;
         next_node->x = next_pose.position.x;
@@ -290,7 +314,7 @@ void AstarSearch::setPath(const AstarNode & goal_node)
   waypoints_.waypoints.clear();
 
   // From the goal node to the start node
-  const AstarNode * node = &goal_node;
+  std::shared_ptr<AstarNode> node = std::make_shared<AstarNode>(goal_node);
 
   while (node != nullptr) {
     geometry_msgs::msg::PoseStamped pose;
@@ -304,7 +328,7 @@ void AstarSearch::setPath(const AstarNode & goal_node)
     waypoints_.waypoints.push_back(pw);
 
     // To the next node
-    node = node->parent;
+    node = node->parent.lock();
   }
 
   // Reverse the vector to be start to goal order
