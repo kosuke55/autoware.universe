@@ -50,6 +50,18 @@ using tier4_autoware_utils::inverseTransformPose;
 
 namespace behavior_path_planner
 {
+Transaction::Transaction(PullOverStatus & status) : status_(status)
+{
+  status_.mutex_.lock();
+  status_.is_in_transaction_ = true;
+}
+
+Transaction::~Transaction()
+{
+  status_.mutex_.unlock();
+  status_.is_in_transaction_ = false;
+}
+
 GoalPlannerModule::GoalPlannerModule(
   const std::string & name, rclcpp::Node & node,
   const std::shared_ptr<GoalPlannerParameters> & parameters,

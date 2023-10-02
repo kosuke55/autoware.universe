@@ -74,40 +74,24 @@ enum class PathType {
   FREESPACE,
 };
 
+class PullOverStatus;  // Forward declaration for Transaction
 // class that locks the PullOverStatus when multiple values are being updated from
 // an external source.
 class Transaction
 {
 public:
-  explicit Transaction(std::mutex & mutex) : mutex_(mutex)
-  {
-    if (!in_transaction_) {
-      mutex_.lock();
-      in_transaction_ = true;
-    }
-  }
-
-  ~Transaction()
-  {
-    if (in_transaction_) {
-      mutex_.unlock();
-      in_transaction_ = false;
-    }
-  }
-
-  static bool inTransaction() { return in_transaction_; }
+  explicit Transaction(PullOverStatus & status);
+  ~Transaction();
 
 private:
-  std::mutex & mutex_;
-  static thread_local bool in_transaction_;
+  PullOverStatus & status_;
 };
-thread_local bool Transaction::in_transaction_ = false;
 
 #define DEFINE_SETTER_GETTER(TYPE, NAME)              \
 public:                                               \
   void set_##NAME(const TYPE & value)                 \
   {                                                   \
-    if (!Transaction::inTransaction()) {              \
+    if (!is_in_transaction_) {                        \
       const std::lock_guard<std::mutex> lock(mutex_); \
       NAME##_ = value;                                \
     } else {                                          \
@@ -117,7 +101,7 @@ public:                                               \
                                                       \
   TYPE get_##NAME() const                             \
   {                                                   \
-    if (!Transaction::inTransaction()) {              \
+    if (!is_in_transaction_) {                        \
       const std::lock_guard<std::mutex> lock(mutex_); \
       return NAME##_;                                 \
     }                                                 \
@@ -150,7 +134,8 @@ public:
     is_ready_ = false;
   }
 
-  Transaction startTransaction() { return Transaction(mutex_); }
+  // lock all data members
+  Transaction startTransaction() { return Transaction(*this); }
 
   DEFINE_SETTER_GETTER(std::shared_ptr<PullOverPath>, pull_over_path)
   DEFINE_SETTER_GETTER(std::shared_ptr<PullOverPath>, lane_parking_pull_over_path)
@@ -219,10 +204,24 @@ private:
   std::vector<PullOverPath> pull_over_path_candidates_;
   std::optional<Pose> closest_start_pose_;
 
+  friend class Transaction;
   mutable std::mutex mutex_;
+  bool is_in_transaction_{false};
 };
 
 #undef DEFINE_SETTER_GETTER
+
+// Transaction::Transaction(PullOverStatus & status) : status_(status)
+// {
+//   status_.mutex_.lock();
+//   status_.is_in_transaction_ = true;
+// }
+
+// Transaction::~Transaction()
+// {
+//   status_.mutex_.unlock();
+//   status_.is_in_transaction_ = false;
+// }
 
 struct FreespacePlannerDebugData
 {
