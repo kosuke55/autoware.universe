@@ -56,8 +56,7 @@ GoalPlannerModule::GoalPlannerModule(
   const std::unordered_map<std::string, std::shared_ptr<RTCInterface> > & rtc_interface_ptr_map)
 : SceneModuleInterface{name, node, rtc_interface_ptr_map},
   parameters_{parameters},
-  vehicle_info_{vehicle_info_util::VehicleInfoUtil(node).getVehicleInfo()},
-  status_{mutex_}
+  vehicle_info_{vehicle_info_util::VehicleInfoUtil(node).getVehicleInfo()}
 {
   LaneDepartureChecker lane_departure_checker{};
   lane_departure_checker.setVehicleInfo(vehicle_info_);
@@ -187,11 +186,9 @@ void GoalPlannerModule::onTimer()
   }
 
   // set member variables
-  {
-    const std::lock_guard<std::recursive_mutex> lock(mutex_);
-    status_.set_pull_over_path_candidates(path_candidates);
-    status_.set_closest_start_pose(closest_start_pose);
-  }
+  const auto transaction = status_.startTransaction();
+  status_.set_pull_over_path_candidates(path_candidates);
+  status_.set_closest_start_pose(closest_start_pose);
 }
 
 void GoalPlannerModule::onFreespaceParkingTimer()
@@ -448,7 +445,7 @@ bool GoalPlannerModule::planFreespacePath()
   status_.set_goal_candidates(goal_candidates);
 
   {
-    const std::lock_guard<std::recursive_mutex> lock(mutex_);
+    const std::lock_guard<std::mutex> lock(mutex_);
     debug_data_.freespace_planner.num_goal_candidates = goal_candidates.size();
     debug_data_.freespace_planner.is_planning = true;
   }
@@ -456,7 +453,7 @@ bool GoalPlannerModule::planFreespacePath()
   for (size_t i = 0; i < goal_candidates.size(); i++) {
     const auto goal_candidate = goal_candidates.at(i);
     {
-      const std::lock_guard<std::recursive_mutex> lock(mutex_);
+      const std::lock_guard<std::mutex> lock(mutex_);
       debug_data_.freespace_planner.current_goal_idx = i;
     }
 
@@ -471,19 +468,20 @@ bool GoalPlannerModule::planFreespacePath()
     }
 
     {
-      const std::lock_guard<std::recursive_mutex> lock(mutex_);
+      const auto transaction = status_.startTransaction();
       status_.set_pull_over_path(std::make_shared<PullOverPath>(*freespace_path));
       status_.set_current_path_idx(0);
       status_.set_is_safe_static_objects(true);
       status_.set_modified_goal_pose(goal_candidate);
       status_.set_last_path_update_time(std::make_shared<rclcpp::Time>(clock_->now()));
+      const std::lock_guard<std::mutex> lock(mutex_);
       debug_data_.freespace_planner.is_planning = false;
     }
 
     return true;
   }
 
-  const std::lock_guard<std::recursive_mutex> lock(mutex_);
+  const std::lock_guard<std::mutex> lock(mutex_);
   debug_data_.freespace_planner.is_planning = false;
   return false;
 }
@@ -513,7 +511,7 @@ void GoalPlannerModule::returnToLaneParking()
   }
 
   {
-    const std::lock_guard<std::recursive_mutex> lock(mutex_);
+    const auto transaction = status_.startTransaction();
     status_.set_is_safe_static_objects(true);
     status_.set_has_decided_path(false);
     status_.set_pull_over_path(status_.get_lane_parking_pull_over_path());
@@ -607,7 +605,7 @@ void GoalPlannerModule::selectSafePullOverPath()
   std::vector<PullOverPath> pull_over_path_candidates{};
   GoalCandidates goal_candidates{};
   {
-    const std::lock_guard<std::recursive_mutex> lock(mutex_);
+    const auto transaction = status_.startTransaction();
     goal_searcher_->setPlannerData(planner_data_);
     goal_candidates = status_.get_goal_candidates();
     goal_searcher_->update(goal_candidates);
@@ -638,7 +636,7 @@ void GoalPlannerModule::selectSafePullOverPath()
 
     // found safe pull over path
     {
-      const std::lock_guard<std::recursive_mutex> lock(mutex_);
+      const auto transaction = status_.startTransaction();
       status_.set_is_safe_static_objects(true);
       status_.set_pull_over_path(std::make_shared<PullOverPath>(pull_over_path));
       status_.set_current_path_idx(0);
@@ -679,7 +677,7 @@ void GoalPlannerModule::selectSafePullOverPath()
 
 void GoalPlannerModule::setLanes()
 {
-  const std::lock_guard<std::recursive_mutex> lock(mutex_);
+  const auto transaction = status_.startTransaction();
   status_.set_current_lanes(utils::getExtendedCurrentLanes(
     planner_data_, parameters_->backward_goal_search_length,
     parameters_->forward_goal_search_length,
@@ -729,7 +727,7 @@ void GoalPlannerModule::setOutput(BehaviorModuleOutput & output)
 
   // for the next loop setOutput().
   // this is used to determine whether to generate a new stop path or keep the current stop path.
-  const std::lock_guard<std::recursive_mutex> lock(mutex_);
+  const auto transaction = status_.startTransaction();
   status_.set_prev_is_safe(status_.get_is_safe_static_objects());
   status_.set_prev_is_safe_dynamic_objects(
     parameters_->safety_check_params.enable_safety_check ? isSafePath() : true);
@@ -740,7 +738,7 @@ void GoalPlannerModule::setStopPath(BehaviorModuleOutput & output)
   if (status_.get_prev_is_safe() || !status_.get_prev_stop_path()) {
     // safe -> not_safe or no prev_stop_path: generate new stop_path
     output.path = std::make_shared<PathWithLaneId>(generateStopPath());
-    const std::lock_guard<std::recursive_mutex> lock(mutex_);
+    const auto transaction = status_.startTransaction();
     status_.set_prev_stop_path(output.path);
     // set stop path as pull over path
     auto stop_pull_over_path = std::make_shared<PullOverPath>();
@@ -908,7 +906,7 @@ BehaviorModuleOutput GoalPlannerModule::planWithGoalModification()
   if (status_.get_has_decided_path()) {
     if (isActivated() && isWaitingApproval()) {
       {
-        const std::lock_guard<std::recursive_mutex> lock(mutex_);
+        const auto transaction = status_.startTransaction();
         status_.set_last_approved_time(std::make_shared<rclcpp::Time>(clock_->now()));
         status_.set_last_approved_pose(
           std::make_shared<Pose>(planner_data_->self_odometry->pose.pose));
@@ -1221,13 +1219,13 @@ bool GoalPlannerModule::isStopped(
 
 bool GoalPlannerModule::isStopped()
 {
-  const std::lock_guard<std::recursive_mutex> lock(mutex_);
+  const std::lock_guard<std::mutex> lock(mutex_);
   return isStopped(odometry_buffer_stopped_, parameters_->th_stopped_time);
 }
 
 bool GoalPlannerModule::isStuck()
 {
-  const std::lock_guard<std::recursive_mutex> lock(mutex_);
+  const std::lock_guard<std::mutex> lock(mutex_);
   constexpr double stuck_time = 5.0;
   if (!isStopped(odometry_buffer_stuck_, stuck_time)) {
     return false;
