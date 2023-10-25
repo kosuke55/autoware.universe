@@ -112,6 +112,12 @@ class PerceptionReplayer(PerceptionReplayerCommon):
                 self.prev_traffic_signals_msg.stamp = timestamp
                 self.traffic_signals_pub.publish(self.prev_traffic_signals_msg)
 
+        # ego odm
+        ego_odom = self.find_ego_odom_by_timestamp(self.bag_timestamp)
+        if ego_odom:
+            ego_odom.header.stamp = timestamp
+            self.recorded_ego_odom_pub.publish(ego_odom)
+
     def onPushed(self, event):
         if self.widget.button.isChecked():
             self.is_pause = True

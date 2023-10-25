@@ -75,6 +75,9 @@ class PerceptionReplayerCommon(Node):
         self.recorded_ego_pub = self.create_publisher(
             Odometry, "/perception_reproducer/rosbag_ego_odom", 1
         )
+        self.recorded_ego_odom_pub = self.create_publisher(
+            Odometry, "/localization/kinematic_state", 1
+        )
 
         # load rosbag
         print("Stared loading rosbag")
