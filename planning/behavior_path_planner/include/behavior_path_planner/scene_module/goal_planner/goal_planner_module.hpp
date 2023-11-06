@@ -97,9 +97,11 @@ public:
     require_increment_ = true;
     prev_stop_path_ = nullptr;
     prev_stop_path_after_approval_ = nullptr;
+
     current_lanes_.clear();
     pull_over_lanes_.clear();
     lanes_.clear();
+    
     has_decided_path_ = false;
     is_safe_static_objects_ = false;
     is_safe_dynamic_objects_ = false;

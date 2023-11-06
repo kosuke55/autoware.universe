@@ -54,7 +54,7 @@ namespace behavior_path_planner
 GoalPlannerModule::GoalPlannerModule(
   const std::string & name, rclcpp::Node & node,
   const std::shared_ptr<GoalPlannerParameters> & parameters,
-  const std::unordered_map<std::string, std::shared_ptr<RTCInterface> > & rtc_interface_ptr_map)
+  const std::unordered_map<std::string, std::shared_ptr<RTCInterface>> & rtc_interface_ptr_map)
 : SceneModuleInterface{name, node, rtc_interface_ptr_map},
   parameters_{parameters},
   vehicle_info_{vehicle_info_util::VehicleInfoUtil(node).getVehicleInfo()},
@@ -613,23 +613,27 @@ std::vector<PullOverPath> GoalPlannerModule::sortPullOverPathCandidatesByGoalPri
   return sorted_pull_over_path_candidates;
 }
 
-void GoalPlannerModule::selectSafePullOverPath()
+std::pair<std::vector<PullOverPath>, GoalCandidates>
+GoalPlannerModule::updatePathAndGaolCandidates()
 {
-  // select safe lane pull over path from candidates
+  const std::lock_guard<std::recursive_mutex> lock(mutex_);
+
   std::vector<PullOverPath> pull_over_path_candidates{};
   GoalCandidates goal_candidates{};
-  {
-    const std::lock_guard<std::recursive_mutex> lock(mutex_);
-    goal_searcher_->setPlannerData(planner_data_);
-    goal_candidates = thread_safe_data_.get_goal_candidates();
-    goal_searcher_->update(goal_candidates);
-    thread_safe_data_.set_goal_candidates(goal_candidates);
-    thread_safe_data_.set_pull_over_path_candidates(sortPullOverPathCandidatesByGoalPriority(
-      thread_safe_data_.get_pull_over_path_candidates(), thread_safe_data_.get_goal_candidates()));
-    pull_over_path_candidates = thread_safe_data_.get_pull_over_path_candidates();
-    thread_safe_data_.clearPullOverPath();
-  }
+  goal_searcher_->setPlannerData(planner_data_);
+  goal_candidates = thread_safe_data_.get_goal_candidates();
+  goal_searcher_->update(goal_candidates);
+  thread_safe_data_.set_goal_candidates(goal_candidates);
+  thread_safe_data_.set_pull_over_path_candidates(sortPullOverPathCandidatesByGoalPriority(
+    thread_safe_data_.get_pull_over_path_candidates(), thread_safe_data_.get_goal_candidates()));
+  pull_over_path_candidates = thread_safe_data_.get_pull_over_path_candidates();
 
+  return std::make_pair(pull_over_path_candidates, goal_candidates);
+}
+
+std::optional<std::pair<PullOverPath, GoalCandidate>> GoalPlannerModule::selectSafePullOverPath(
+  const std::vector<PullOverPath> & pull_over_path_candidates, const GoalCandidates & goal_candidates)
+{
   for (const auto & pull_over_path : pull_over_path_candidates) {
     // check if goal is safe
     const auto goal_candidate_it = std::find_if(
@@ -649,12 +653,6 @@ void GoalPlannerModule::selectSafePullOverPath()
     }
 
     // found safe pull over path
-    {
-      const std::lock_guard<std::recursive_mutex> lock(mutex_);
-      thread_safe_data_.set_pull_over_path(pull_over_path);
-      thread_safe_data_.set_modified_goal_pose(*goal_candidate_it);
-      status_.set_lane_parking_pull_over_path(thread_safe_data_.get_pull_over_path());
-    }
     break;
   }
 
@@ -664,11 +662,10 @@ void GoalPlannerModule::selectSafePullOverPath()
 
   // decelerate before the search area start
   const auto search_start_offset_pose = calcLongitudinalOffsetPose(
-    thread_safe_data_.get_pull_over_path()->getFullPath().points,
-    status_.get_refined_goal_pose().position,
+    pull_over_path->getFullPath().points, status_.get_refined_goal_pose().position,
     -parameters_->backward_goal_search_length - planner_data_->parameters.base_link2front -
       approximate_pull_over_distance_);
-  auto & first_path = thread_safe_data_.get_pull_over_path()->partial_paths.front();
+  auto & first_path = pull_over_path->partial_paths.front();
   if (search_start_offset_pose) {
     decelerateBeforeSearchStart(*search_start_offset_pose, first_path);
   } else {
@@ -940,6 +937,8 @@ BehaviorModuleOutput GoalPlannerModule::planWithGoalModification()
     // if the final path is not decided and enough time has passed since last path update,
     // select safe path from lane parking pull over path candidates
     // and set it to thread_safe_data_.get_pull_over_path()
+
+    thread_safe_data_.clearPullOverPath();
     selectSafePullOverPath();
   }
   // else: stop path is generated and set by setOutput()
@@ -973,6 +972,9 @@ BehaviorModuleOutput GoalPlannerModule::planWithGoalModification()
   }
 
   setStopReason(StopReason::GOAL_PLANNER, thread_safe_data_.get_pull_over_path()->getFullPath());
+
+
+  status_.set_lane_parking_pull_over_path(pull_over_path);
 
   return output;
 }
