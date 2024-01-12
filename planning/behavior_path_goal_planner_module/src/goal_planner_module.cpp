@@ -499,8 +499,14 @@ double GoalPlannerModule::calcModuleRequestLength() const
     return parameters_->pull_over_minimum_request_length;
   }
 
-  const double minimum_request_length =
-    *min_stop_distance + parameters_->backward_goal_search_length + approximate_pull_over_distance_;
+  // If the min_stop_distance is exactly the same value, it may not be possible to stop completely
+  // due to changes in speed or actual deceleration. Also, when the same function is called in a
+  // subsequent process, if the vehicle is moving forward slightly or its speed is changing, it may
+  // not be able to maintain this distance. For this reason, multiply the distance for buffer.
+  constexpr double scale_factor_for_buffer = 1.2;
+  const double minimum_request_length = *min_stop_distance * scale_factor_for_buffer +
+                                        parameters_->backward_goal_search_length +
+                                        approximate_pull_over_distance_;
 
   return std::max(minimum_request_length, parameters_->pull_over_minimum_request_length);
 }
