@@ -55,14 +55,6 @@ bool isReferencePath(
   const PathWithLaneId & reference_path, const PathWithLaneId & target_path,
   const double lateral_deviation_thresh);
 
-PathWithLaneId extendPath(
-  const PathWithLaneId & prev_module_path, const PathWithLaneId & reference_path,
-  const double extend_length);
-PathWithLaneId extendPath(
-  const PathWithLaneId & prev_module_path, const PathWithLaneId & reference_path,
-  const Pose & extend_pose);
-std::optional<PathWithLaneId> cropPath(const PathWithLaneId & path, const Pose & end_pose);
-
 // debug
 MarkerArray createPullOverAreaMarkerArray(
   const tier4_autoware_utils::MultiPolygon2d area_polygons, const std_msgs::msg::Header & header,
