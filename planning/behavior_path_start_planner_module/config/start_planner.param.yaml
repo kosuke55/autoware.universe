@@ -124,6 +124,7 @@
         safety_check_params:
           # safety check configuration
           enable_safety_check: true
+          safety_check_finishing_distance_from_ceter: 1.0
           # collision check parameters
           check_all_predicted_path: true
           publish_debug_marker: false

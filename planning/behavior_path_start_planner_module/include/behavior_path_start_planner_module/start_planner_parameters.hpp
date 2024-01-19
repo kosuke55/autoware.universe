@@ -90,6 +90,7 @@ struct StartPlannerParameters
   double hysteresis_factor_expand_rate{0.0};
 
   // path safety checker
+  double safety_check_finishing_distance_from_ceter{0.0};
   utils::path_safety_checker::EgoPredictedPathParams ego_predicted_path_params{};
   utils::path_safety_checker::ObjectsFilteringParams objects_filtering_params{};
   utils::path_safety_checker::SafetyCheckParams safety_check_params{};

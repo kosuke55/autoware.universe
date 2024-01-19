@@ -209,7 +209,8 @@ bool StartPlannerModule::receivedNewRoute() const
 
 bool StartPlannerModule::requiresDynamicObjectsCollisionDetection() const
 {
-  return parameters_->safety_check_params.enable_safety_check && status_.driving_forward;
+  return parameters_->safety_check_params.enable_safety_check && status_.driving_forward &&
+         !iswithinRangeFromRoadCenter(parameters_->safety_check_finishing_distance_from_ceter);
 }
 
 bool StartPlannerModule::noMovingObjectsAround() const
@@ -268,12 +269,16 @@ bool StartPlannerModule::isModuleRunning() const
 
 bool StartPlannerModule::isCurrentPoseOnMiddleOfTheRoad() const
 {
+  return iswithinRangeFromRoadCenter(parameters_->th_distance_to_middle_of_the_road);
+}
+
+bool StartPlannerModule::iswithinRangeFromRoadCenter(const double range) const
   const Pose & current_pose = planner_data_->self_odometry->pose.pose;
   const lanelet::ConstLanelets current_lanes = utils::getCurrentLanes(planner_data_);
   const double lateral_distance_to_center_lane =
     lanelet::utils::getArcCoordinates(current_lanes, current_pose).distance;
 
-  return std::abs(lateral_distance_to_center_lane) < parameters_->th_distance_to_middle_of_the_road;
+  return std::abs(lateral_distance_to_center_lane) < range;
 }
 
 bool StartPlannerModule::isCloseToOriginalStartPose() const
