@@ -1,0 +1,119 @@
+// Copyright 2024 Tier IV, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "perception_evaluator/perception_evaluator_node.hpp"
+
+#include "boost/lexical_cast.hpp"
+
+#include <fstream>
+#include <iostream>
+#include <map>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace perception_diagnostics
+{
+PerceptionEvaluatorNode::PerceptionEvaluatorNode(const rclcpp::NodeOptions & node_options)
+: Node("perception_evaluator", node_options)
+{
+  using std::placeholders::_1;
+
+  objects_sub_ = create_subscription<PredictedObjects>(
+    "~/input/objects", 1, std::bind(&PerceptionEvaluatorNode::onObjects, this, _1));
+
+  tf_buffer_ = std::make_unique<tf2_ros::Buffer>(this->get_clock());
+  transform_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+
+  // Parameters
+  output_file_str_ = declare_parameter<std::string>("output_file");
+  ego_frame_str_ = declare_parameter<std::string>("ego_frame");
+
+  // List of metrics to calculate and publish
+  metrics_pub_ = create_publisher<DiagnosticArray>("~/metrics", 1);
+  for (const std::string & selected_metric :
+       declare_parameter<std::vector<std::string>>("selected_metrics")) {
+    const Metric metric = str_to_metric.at(selected_metric);
+    metrics_.push_back(metric);
+  }
+}
+
+PerceptionEvaluatorNode::~PerceptionEvaluatorNode()
+{
+  if (!output_file_str_.empty()) {
+    // column width is the maximum size we might print + 1 for the space between columns
+    // Write data using format
+    std::ofstream f(output_file_str_);
+    f << std::fixed << std::left;
+    // header
+    f << "#Stamp(ns)";
+    for (Metric metric : metrics_) {
+      f << " " << metric_descriptions.at(metric);
+      f << " . .";  // extra "columns" to align columns headers
+    }
+    f << std::endl;
+    f << "#.";
+    for (Metric metric : metrics_) {
+      (void)metric;
+      f << " min max mean";
+    }
+    f << std::endl;
+    // data
+    for (size_t i = 0; i < stamps_.size(); ++i) {
+      f << stamps_[i].nanoseconds();
+      for (Metric metric : metrics_) {
+        const auto & stat = metric_stats_[static_cast<size_t>(metric)][i];
+        f << " " << stat;
+      }
+      f << std::endl;
+    }
+    f.close();
+  }
+}
+
+DiagnosticStatus PerceptionEvaluatorNode::generateDiagnosticStatus(
+  const Metric & metric, const Stat<double> & metric_stat) const
+{
+  DiagnosticStatus status;
+  status.level = status.OK;
+  status.name = metric_to_str.at(metric);
+  diagnostic_msgs::msg::KeyValue key_value;
+  key_value.key = "min";
+  key_value.value = boost::lexical_cast<decltype(key_value.value)>(metric_stat.min());
+  status.values.push_back(key_value);
+  key_value.key = "max";
+  key_value.value = boost::lexical_cast<decltype(key_value.value)>(metric_stat.max());
+  status.values.push_back(key_value);
+  key_value.key = "mean";
+  key_value.value = boost::lexical_cast<decltype(key_value.value)>(metric_stat.mean());
+  status.values.push_back(key_value);
+  return status;
+}
+
+void PerceptionEvaluatorNode::onObjects(const PredictedObjects::ConstSharedPtr objects_msg)
+{
+  metrics_calculator_.setPredictedObjects(*objects_msg);
+  for (Metric metric : metrics_) {
+    const auto metric_stat = metrics_calculator_.calculate(Metric(metric), *objects_msg);
+    if (!metric_stat.has_value()) {
+      continue;
+    }
+  }
+}
+
+}  // namespace perception_diagnostics
+
+#include "rclcpp_components/register_node_macro.hpp"
+RCLCPP_COMPONENTS_REGISTER_NODE(perception_diagnostics::PerceptionEvaluatorNode)
