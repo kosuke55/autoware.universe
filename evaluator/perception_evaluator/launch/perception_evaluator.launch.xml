@@ -1,19 +1,11 @@
 <launch>
-  <arg name="input/odometry" default="/localization/kinematic_state"/>
-  <arg name="input/trajectory" default="/perception/scenario_perception/trajectory"/>
-  <arg name="input/reference_trajectory" default="/perception/scenario_perception/lane_driving/motion_perception/obstacle_avoidance_planner/trajectory"/>
   <arg name="input/objects" default="/perception/object_recognition/objects"/>
-  <arg name="input/modified_goal" default="/perception/scenario_perception/modified_goal"/>
 
   <!-- perception evaluator -->
   <group>
     <node name="perception_evaluator" exec="perception_evaluator" pkg="perception_evaluator">
       <param from="$(find-pkg-share perception_evaluator)/param/perception_evaluator.defaults.yaml"/>
-      <remap from="~/input/odometry" to="$(var input/odometry)"/>
-      <remap from="~/input/trajectory" to="$(var input/trajectory)"/>
-      <remap from="~/input/reference_trajectory" to="$(var input/reference_trajectory)"/>
       <remap from="~/input/objects" to="$(var input/objects)"/>
-      <remap from="~/input/modified_goal" to="$(var input/modified_goal)"/>
       <remap from="~/metrics" to="/diagnostic/perception_evaluator/metrics"/>
     </node>
   </group>

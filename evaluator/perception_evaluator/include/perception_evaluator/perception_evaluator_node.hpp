@@ -67,6 +67,11 @@ private:
   std::string output_file_str_;
   std::string ego_frame_str_;
 
+  // Timer
+  rclcpp::TimerBase::SharedPtr timer_;
+  void initTimer(double period_s);
+  void onTimer();
+
   // Calculator
   MetricsCalculator metrics_calculator_;
   // Metrics

@@ -16,6 +16,8 @@
 
 #include "boost/lexical_cast.hpp"
 
+#include <glog/logging.h>
+
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -24,12 +26,42 @@
 #include <utility>
 #include <vector>
 
+// clang-format off
+namespace {
+std::vector<std::string> split(const std::string &s, char delimiter) {
+  std::vector<std::string> tokens; std::string token; int p = 0;
+  for (char c : s) {
+    if (c == '(') p++; else if (c == ')') p--;
+    if (c == delimiter && p == 0) { tokens.push_back(token); token.clear(); } else token += c;
+  }
+  if (!token.empty()) tokens.push_back(token);
+  return tokens;
+}
+
+template <typename T> void view(const std::string &n, T e) { std::cerr << n << ": " << e << ", "; }
+template <typename T> void view(const std::string &n, const std::vector<T> &v) { std::cerr << n << ":"; for (const auto &e : v) std::cerr << " " << e; std::cerr << ", "; }
+template <typename First, typename... Rest> void view_multi(const std::vector<std::string> &n, First f, Rest... r) { view(n[0], f); if constexpr (sizeof...(r) > 0) view_multi(std::vector<std::string>(n.begin() + 1, n.end()), r...); }
+
+template <typename... Args> void debug_helper(const char *f, int l, const char *n, Args... a) {
+  std::cerr << f << ": " << l << ", "; auto nl = split(n, ',');
+  for (auto &nn : nl) { nn.erase(nn.begin(), std::find_if(nn.begin(), nn.end(), [](int ch) { return !std::isspace(ch); })); nn.erase(std::find_if(nn.rbegin(), nn.rend(), [](int ch) { return !std::isspace(ch); }).base(), nn.end()); }
+  view_multi(nl, a...); std::cerr << std::endl;
+}
+
+#define debug(...) debug_helper(__func__, __LINE__, #__VA_ARGS__, __VA_ARGS__)
+#define line() { std::cerr << "(" << __FILE__ << ") " << __func__ << ": " << __LINE__ << std::endl; }
+} // namespace
+// clang-format on
+
 namespace perception_diagnostics
 {
 PerceptionEvaluatorNode::PerceptionEvaluatorNode(const rclcpp::NodeOptions & node_options)
 : Node("perception_evaluator", node_options)
 {
   using std::placeholders::_1;
+
+  google::InitGoogleLogging("map_based_prediction_node");
+  google::InstallFailureSignalHandler();
 
   objects_sub_ = create_subscription<PredictedObjects>(
     "~/input/objects", 1, std::bind(&PerceptionEvaluatorNode::onObjects, this, _1));
@@ -48,6 +80,9 @@ PerceptionEvaluatorNode::PerceptionEvaluatorNode(const rclcpp::NodeOptions & nod
     const Metric metric = str_to_metric.at(selected_metric);
     metrics_.push_back(metric);
   }
+
+  // Timer
+  initTimer(/*period_s=*/0.1);
 }
 
 PerceptionEvaluatorNode::~PerceptionEvaluatorNode()
@@ -83,6 +118,44 @@ PerceptionEvaluatorNode::~PerceptionEvaluatorNode()
   }
 }
 
+void PerceptionEvaluatorNode::initTimer(double period_s)
+{
+  const auto period_ns =
+    std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<double>(period_s));
+  timer_ = rclcpp::create_timer(
+    this, get_clock(), period_ns, std::bind(&PerceptionEvaluatorNode::onTimer, this));
+}
+
+void PerceptionEvaluatorNode::onTimer()
+{
+  line();
+
+  DiagnosticArray metrics_msg;
+  for (Metric metric : metrics_) {
+    line();
+    const auto metric_stat = metrics_calculator_.calculate(Metric(metric));
+    if (!metric_stat.has_value()) {
+      line();
+      continue;
+    }
+    line();
+    metric_stats_[static_cast<size_t>(metric)].push_back(*metric_stat);
+    if (metric_stat->count() > 0) {
+      line();
+      metrics_msg.status.push_back(generateDiagnosticStatus(metric, *metric_stat));
+    }
+    line();
+  }
+  if (!metrics_msg.status.empty()) {
+    line();
+    metrics_msg.header.stamp = now();
+    line();
+    metrics_pub_->publish(metrics_msg);
+    line();
+  }
+  line();
+}
+
 DiagnosticStatus PerceptionEvaluatorNode::generateDiagnosticStatus(
   const Metric & metric, const Stat<double> & metric_stat) const
 {
@@ -105,14 +178,7 @@ DiagnosticStatus PerceptionEvaluatorNode::generateDiagnosticStatus(
 void PerceptionEvaluatorNode::onObjects(const PredictedObjects::ConstSharedPtr objects_msg)
 {
   metrics_calculator_.setPredictedObjects(*objects_msg);
-  for (Metric metric : metrics_) {
-    const auto metric_stat = metrics_calculator_.calculate(Metric(metric), *objects_msg);
-    if (!metric_stat.has_value()) {
-      continue;
-    }
-  }
 }
-
 }  // namespace perception_diagnostics
 
 #include "rclcpp_components/register_node_macro.hpp"

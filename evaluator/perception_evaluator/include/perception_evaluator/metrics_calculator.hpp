@@ -19,9 +19,12 @@
 #include "perception_evaluator/parameters.hpp"
 #include "perception_evaluator/stat.hpp"
 
+#include <rclcpp/time.hpp>
+
 #include "autoware_auto_perception_msgs/msg/predicted_objects.hpp"
 #include "geometry_msgs/msg/pose.hpp"
 
+#include <map>
 #include <optional>
 
 namespace perception_diagnostics
@@ -42,18 +45,22 @@ public:
    * @param [in] metric Metric enum value
    * @return string describing the requested metric
    */
-  std::optional<Stat<double>> calculate(
-    const Metric metric, const PredictedObjects & objects) const;
+  std::optional<Stat<double>> calculate(const Metric metric) const;
 
   /**
    * @brief set the dynamic objects used to calculate obstacle metrics
-   * @param [in] traj input previous trajectory
+   * @param [in] objects predicted objects
    */
   void setPredictedObjects(const PredictedObjects & objects);
 
 private:
-  PredictedObjects dynamic_objects_;
-  std::vector<PredictedObjects> dynamic_objects_history_;
+  std::map<rclcpp::Time, PredictedObjects> stamp_and_objects_map_;
+  size_t history_length_{300};
+
+  std::vector<Pose> averageFilterPath(
+    const std::vector<Pose> & path, const size_t window_size) const;
+
+  std::vector<Pose> generateHistoryPath() const;
 };  // class MetricsCalculator
 
 }  // namespace perception_diagnostics

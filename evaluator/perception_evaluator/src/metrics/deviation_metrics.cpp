@@ -20,6 +20,32 @@
 #include <motion_utils/trajectory/trajectory.hpp>
 #include <tier4_autoware_utils/geometry/geometry.hpp>
 
+// clang-format off
+namespace {
+std::vector<std::string> split(const std::string &s, char delimiter) {
+  std::vector<std::string> tokens; std::string token; int p = 0;
+  for (char c : s) {
+    if (c == '(') p++; else if (c == ')') p--;
+    if (c == delimiter && p == 0) { tokens.push_back(token); token.clear(); } else token += c;
+  }
+  if (!token.empty()) tokens.push_back(token);
+  return tokens;
+}
+
+template <typename T> void view(const std::string &n, T e) { std::cerr << n << ": " << e << ", "; }
+template <typename T> void view(const std::string &n, const std::vector<T> &v) { std::cerr << n << ":"; for (const auto &e : v) std::cerr << " " << e; std::cerr << ", "; }
+template <typename First, typename... Rest> void view_multi(const std::vector<std::string> &n, First f, Rest... r) { view(n[0], f); if constexpr (sizeof...(r) > 0) view_multi(std::vector<std::string>(n.begin() + 1, n.end()), r...); }
+
+template <typename... Args> void debug_helper(const char *f, int l, const char *n, Args... a) {
+  std::cerr << f << ": " << l << ", "; auto nl = split(n, ',');
+  for (auto &nn : nl) { nn.erase(nn.begin(), std::find_if(nn.begin(), nn.end(), [](int ch) { return !std::isspace(ch); })); nn.erase(std::find_if(nn.rbegin(), nn.rend(), [](int ch) { return !std::isspace(ch); }).base(), nn.end()); }
+  view_multi(nl, a...); std::cerr << std::endl;
+}
+
+#define debug(...) debug_helper(__func__, __LINE__, #__VA_ARGS__, __VA_ARGS__)
+#define line() { std::cerr << "(" << __FILE__ << ") " << __func__ << ": " << __LINE__ << std::endl; }
+} // namespace
+// clang-format on
 
 namespace perception_diagnostics
 {
@@ -28,46 +54,58 @@ namespace metrics
 
 Stat<double> calcLateralDeviation(const std::vector<Pose> & ref_path, const Pose & target_pose)
 {
+  line();
   Stat<double> stat{};
 
   if (ref_path.empty()) {
+    line();
     return stat;
   }
+  line();
 
   const size_t nearest_index = motion_utils::findNearestIndex(ref_path, target_pose.position);
+  line();
   stat.add(
     tier4_autoware_utils::calcLateralDeviation(ref_path[nearest_index], target_pose.position));
+  line();
 
   return stat;
 }
 
 Stat<double> calcYawDeviation(const std::vector<Pose> & ref_path, const Pose & target_pose)
 {
+  line();
   Stat<double> stat{};
 
   if (ref_path.empty()) {
+    line();
     return stat;
   }
+  line();
 
   const size_t nearest_index = motion_utils::findNearestIndex(ref_path, target_pose.position);
+  line();
   stat.add(tier4_autoware_utils::calcYawDeviation(ref_path[nearest_index], target_pose));
-
+  line();
   return stat;
 }
 
 Stat<double> calcPredictedPathDeviation(
   const std::vector<Pose> & ref_path, const PredictedPath & pred_path)
 {
+  line();
   Stat<double> stat{};
 
   if (ref_path.empty() || pred_path.path.empty()) {
+    line();
     return stat;
   }
-
+  line();
   for (const Pose & p : pred_path.path) {
     const size_t nearest_index = motion_utils::findNearestIndex(ref_path, p.position);
     stat.add(tier4_autoware_utils::calcDistance2d(ref_path[nearest_index].position, p.position));
   }
+  line();
 
   return stat;
 }

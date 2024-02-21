@@ -6,6 +6,8 @@ autoware_package()
 
 find_package(pluginlib REQUIRED)
 
+find_package(glog REQUIRED)
+
 ament_auto_add_library(${PROJECT_NAME}_node SHARED
   src/metrics_calculator.cpp
   src/${PROJECT_NAME}_node.cpp
@@ -21,6 +23,8 @@ rclcpp_components_register_node(${PROJECT_NAME}_node
   PLUGIN "perception_diagnostics::MotionEvaluatorNode"
   EXECUTABLE motion_evaluator
 )
+
+target_link_libraries(${PROJECT_NAME}_node glog::glog)
 
 # if(BUILD_TESTING)
 #   ament_add_ros_isolated_gtest(test_${PROJECT_NAME}
