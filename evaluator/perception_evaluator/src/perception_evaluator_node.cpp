@@ -128,32 +128,23 @@ void PerceptionEvaluatorNode::initTimer(double period_s)
 
 void PerceptionEvaluatorNode::onTimer()
 {
-  line();
-
   DiagnosticArray metrics_msg;
   for (Metric metric : metrics_) {
-    line();
     const auto metric_stat = metrics_calculator_.calculate(Metric(metric));
     if (!metric_stat.has_value()) {
-      line();
       continue;
     }
-    line();
+
     metric_stats_[static_cast<size_t>(metric)].push_back(*metric_stat);
     if (metric_stat->count() > 0) {
-      line();
       metrics_msg.status.push_back(generateDiagnosticStatus(metric, *metric_stat));
     }
-    line();
   }
+
   if (!metrics_msg.status.empty()) {
-    line();
     metrics_msg.header.stamp = now();
-    line();
     metrics_pub_->publish(metrics_msg);
-    line();
   }
-  line();
 }
 
 DiagnosticStatus PerceptionEvaluatorNode::generateDiagnosticStatus(
@@ -162,16 +153,18 @@ DiagnosticStatus PerceptionEvaluatorNode::generateDiagnosticStatus(
   DiagnosticStatus status;
   status.level = status.OK;
   status.name = metric_to_str.at(metric);
+
   diagnostic_msgs::msg::KeyValue key_value;
   key_value.key = "min";
-  key_value.value = boost::lexical_cast<decltype(key_value.value)>(metric_stat.min());
+  key_value.value = std::to_string(metric_stat.min());
   status.values.push_back(key_value);
   key_value.key = "max";
-  key_value.value = boost::lexical_cast<decltype(key_value.value)>(metric_stat.max());
+  key_value.value = std::to_string(metric_stat.max());
   status.values.push_back(key_value);
   key_value.key = "mean";
-  key_value.value = boost::lexical_cast<decltype(key_value.value)>(metric_stat.mean());
+  key_value.value = std::to_string(metric_stat.mean());
   status.values.push_back(key_value);
+
   return status;
 }
 

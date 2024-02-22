@@ -52,62 +52,41 @@ namespace perception_diagnostics
 namespace metrics
 {
 
-Stat<double> calcLateralDeviation(const std::vector<Pose> & ref_path, const Pose & target_pose)
+double calcLateralDeviation(const std::vector<Pose> & ref_path, const Pose & target_pose)
 {
-  line();
-  Stat<double> stat{};
-
   if (ref_path.empty()) {
-    line();
-    return stat;
+    return 0.0;
   }
-  line();
 
   const size_t nearest_index = motion_utils::findNearestIndex(ref_path, target_pose.position);
-  line();
-  stat.add(
-    tier4_autoware_utils::calcLateralDeviation(ref_path[nearest_index], target_pose.position));
-  line();
-
-  return stat;
+  return tier4_autoware_utils::calcLateralDeviation(ref_path[nearest_index], target_pose.position);
 }
 
-Stat<double> calcYawDeviation(const std::vector<Pose> & ref_path, const Pose & target_pose)
+double calcYawDeviation(const std::vector<Pose> & ref_path, const Pose & target_pose)
 {
-  line();
-  Stat<double> stat{};
-
   if (ref_path.empty()) {
-    line();
-    return stat;
+    return 0.0;
   }
-  line();
 
   const size_t nearest_index = motion_utils::findNearestIndex(ref_path, target_pose.position);
-  line();
-  stat.add(tier4_autoware_utils::calcYawDeviation(ref_path[nearest_index], target_pose));
-  line();
-  return stat;
+  return tier4_autoware_utils::calcYawDeviation(ref_path[nearest_index], target_pose);
 }
 
-Stat<double> calcPredictedPathDeviation(
+std::vector<double> calcPredictedPathDeviation(
   const std::vector<Pose> & ref_path, const PredictedPath & pred_path)
 {
-  line();
-  Stat<double> stat{};
+  std::vector<double> deviations;
 
   if (ref_path.empty() || pred_path.path.empty()) {
-    line();
-    return stat;
+    return {};
   }
-  line();
   for (const Pose & p : pred_path.path) {
     const size_t nearest_index = motion_utils::findNearestIndex(ref_path, p.position);
-    stat.add(tier4_autoware_utils::calcDistance2d(ref_path[nearest_index].position, p.position));
+    deviations.push_back(
+      tier4_autoware_utils::calcDistance2d(ref_path[nearest_index].position, p.position));
   }
-  line();
 
-  return stat;
+  return deviations;
 }
 }  // namespace metrics
 }  // namespace perception_diagnostics

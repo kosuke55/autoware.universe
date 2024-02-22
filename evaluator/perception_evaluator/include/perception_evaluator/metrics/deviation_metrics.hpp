@@ -33,7 +33,7 @@ using geometry_msgs::msg::Pose;
  * @param [in] pred_path predicted path
  * @return calculated statistics
  */
-Stat<double> calcLateralDeviation(const std::vector<Pose> & ref_path, const Pose & target_pose);
+double calcLateralDeviation(const std::vector<Pose> & ref_path, const Pose & target_pose);
 
 /**
  * @brief calculate yaw deviation of the given path from the reference path
@@ -41,9 +41,9 @@ Stat<double> calcLateralDeviation(const std::vector<Pose> & ref_path, const Pose
  * @param [in] pred_path predicted path
  * @return calculated statistics
  */
-Stat<double> calcYawDeviation(const std::vector<Pose> & ref_path, const Pose & target_pose);
+double calcYawDeviation(const std::vector<Pose> & ref_path, const Pose & target_pose);
 
-Stat<double> calcPredictedPathDeviation(
+std::vector<double> calcPredictedPathDeviation(
   const std::vector<Pose> & ref_path, const PredictedPath & pred_path);
 }  // namespace metrics
 }  // namespace perception_diagnostics

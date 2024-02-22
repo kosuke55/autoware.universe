@@ -15,8 +15,9 @@
 #include "perception_evaluator/metrics_calculator.hpp"
 
 #include "motion_utils/trajectory/trajectory.hpp"
-#include "perception_evaluator/metrics/deviation_metrics.hpp"
 #include "tier4_autoware_utils/geometry/geometry.hpp"
+
+#include <tier4_autoware_utils/ros/uuid_helper.hpp>
 
 // clang-format off
 namespace {
@@ -49,91 +50,155 @@ namespace perception_diagnostics
 {
 std::optional<Stat<double>> MetricsCalculator::calculate(const Metric metric) const
 {
-  line();
   // tmp implementation
-  if (stamp_and_objects_map_.empty()) {
-    line();
+  if (object_map_.empty()) {
     return {};
   }
-  line();
-  if(stamp_and_objects_map_.rbegin()->second.objects.empty()) {
-    line();
-    return {};
-  }
-  const auto object = stamp_and_objects_map_.rbegin()->second.objects.front();
-  line();
-  const auto object_pose = object.kinematics.initial_pose_with_covariance.pose;
-  if (object.kinematics.predicted_paths.empty()) {
-    line();
-    return {};
-  }
-  const auto predicted_path = object.kinematics.predicted_paths.front();
 
-  line();
-
-  // Functions to calculate pose metrics
-  const auto history_path = generateHistoryPath();
   switch (metric) {
     case Metric::lateral_deviation:
-      line();
-      return metrics::calcLateralDeviation(history_path, object_pose);
+      return calcLateralDeviationMetrics();
     case Metric::yaw_deviation:
-      line();
-      return metrics::calcYawDeviation(history_path, object_pose);
+      return calcYawDeviationMetrics();
     case Metric::predicted_path_deviation:
-      line();
-      return metrics::calcPredictedPathDeviation(history_path, predicted_path);
+      return calcPredictedPathDeviationMetrics();
     default:
-      line();
       return {};
   }
 }
 
-void MetricsCalculator::setPredictedObjects(const PredictedObjects & objects)
+Stat<double> MetricsCalculator::calcLateralDeviationMetrics() const
 {
-  // pop if the size exceeds the history length
-  if (stamp_and_objects_map_.size() > history_length_) {
-    stamp_and_objects_map_.erase(stamp_and_objects_map_.begin());
-  }
-
-  // store the predicted objects
-  stamp_and_objects_map_.emplace(objects.header.stamp, objects);
-}
-
-std::vector<Pose> MetricsCalculator::generateHistoryPath() const
-{
-  std::vector<Pose> history_path;
-  for (const auto & stamp_and_objects : stamp_and_objects_map_) {
-    const auto & objects = stamp_and_objects.second;
-    for (const auto & object : objects.objects) {
-      history_path.push_back(object.kinematics.initial_pose_with_covariance.pose);
+  Stat<double> stat{};
+  for (const auto & [uuid, stamp_and_objects] : object_map_) {
+    for (const auto & [stamp, object] : stamp_and_objects) {
+      const auto object_pose = object.kinematics.initial_pose_with_covariance.pose;
+      const auto history_path = history_path_map_.at(uuid);
+      if (history_path.empty()) {
+        continue;
+      }
+      stat.add(metrics::calcLateralDeviation(history_path, object_pose));
     }
   }
+  return stat;
+}
 
-  const auto filtered_path = averageFilterPath(history_path, 5);
+Stat<double> MetricsCalculator::calcYawDeviationMetrics() const
+{
+  Stat<double> stat{};
+  for (const auto & [uuid, stamp_and_objects] : object_map_) {
+    for (const auto & [stamp, object] : stamp_and_objects) {
+      const auto object_pose = object.kinematics.initial_pose_with_covariance.pose;
+      const auto history_path = history_path_map_.at(uuid);
+      if (history_path.empty()) {
+        continue;
+      }
+      stat.add(metrics::calcYawDeviation(history_path, object_pose));
+    }
+  }
+  return stat;
+}
 
-  return filtered_path;
+Stat<double> MetricsCalculator::calcPredictedPathDeviationMetrics() const
+{
+  Stat<double> stat{};
+  for (const auto & [uuid, stamp_and_objects] : object_map_) {
+    for (const auto & [stamp, object] : stamp_and_objects) {
+      const auto history_path = history_path_map_.at(uuid);
+      if (history_path.empty() || object.kinematics.predicted_paths.empty()) {
+        continue;
+      }
+      const auto predicted_path = object.kinematics.predicted_paths.front();
+      const std::vector<double> deviations =
+        metrics::calcPredictedPathDeviation(history_path, predicted_path);
+      for (const auto & deviation : deviations) {
+        stat.add(deviation);
+      }
+    }
+  }
+  return stat;
+}
+
+void MetricsCalculator::setPredictedObjects(const PredictedObjects & objects)
+{
+  // store the predicted objects
+  using tier4_autoware_utils::toHexString;
+  for (const auto & object : objects.objects) {
+    std::string uuid = toHexString(object.object_id);
+    object_map_[uuid][objects.header.stamp] = object;
+
+    updateHistoryPath(uuid);
+  }
+}
+
+void MetricsCalculator::updateHistoryPath(const std::string uuid)
+{
+  const size_t window_size = 5;
+
+  const auto generateNewHistoryPath = [&](const std::string uuid) -> std::vector<Pose> {
+    std::vector<Pose> history_path;
+    for (const auto & [stamp, object] : object_map_.at(uuid)) {
+      history_path.push_back(object.kinematics.initial_pose_with_covariance.pose);
+    }
+    return averageFilterPath(history_path, window_size);
+  };
+
+  if (history_path_map_.find(uuid) == history_path_map_.end()) {
+    history_path_map_[uuid] = generateNewHistoryPath(uuid);
+  }
+
+  const auto history_path = history_path_map_.at(uuid);
+  if (history_path.size() < window_size) {
+    history_path_map_[uuid] = generateNewHistoryPath(uuid);
+    return;
+  }
+
+  history_path_map_[uuid] = generateHistoryPathWithPrev(
+    history_path, object_map_.at(uuid).rbegin()->second.kinematics.initial_pose_with_covariance.pose,
+    window_size);
+}
+
+// 新しいポイントが追加された後のhistory_pathの更新
+std::vector<Pose> MetricsCalculator::generateHistoryPathWithPrev(
+  const std::vector<Pose> & prev_history_path, const Pose & new_pose,
+  const size_t window_size)
+{
+  std::vector<Pose> history_path;
+  const size_t half_window_size = static_cast<size_t>(window_size / 2);
+  history_path.insert(
+    history_path.end(), prev_history_path.begin(), prev_history_path.end() - half_window_size);
+
+  std::vector<Pose> updated_poses;
+  updated_poses.insert(
+    updated_poses.end(), prev_history_path.end() - half_window_size * 2, prev_history_path.end());
+  updated_poses.push_back(new_pose);
+  // 移動平均法を新しい部分に適応する
+  updated_poses = averageFilterPath(updated_poses, window_size);
+  history_path.insert(
+    history_path.end(), updated_poses.begin() + half_window_size + 1, updated_poses.end());
+
+  return history_path;
 }
 
 std::vector<Pose> MetricsCalculator::averageFilterPath(
   const std::vector<Pose> & path, const size_t window_size) const
 {
   if (path.empty() || window_size <= 1) {
-    return path;  // Early return for edge cases
+    return path;  // Early return for edge casesper
   }
 
   std::vector<Pose> filtered_path;
   filtered_path.reserve(path.size());  // Reserve space to avoid reallocations
 
-  const int half_window = static_cast<int>(window_size) / 2;
+  const size_t half_window = static_cast<size_t>(window_size / 2);
 
   // Calculate the moving average for positions
   for (size_t i = 0; i < path.size(); ++i) {
     double sum_x = 0.0, sum_y = 0.0, sum_z = 0.0;
     size_t valid_points = 0;  // Correctly initialize and use as counter
 
-    for (int j = std::max(static_cast<int>(i) - half_window, 0);
-         j <= std::min(static_cast<int>(i) + half_window, static_cast<int>(path.size()) - 1); ++j) {
+    for (size_t j = std::max(i - half_window, static_cast<size_t>(0));
+         j <= std::min(i + half_window, path.size() - 1); ++j) {
       sum_x += path[j].position.x;
       sum_y += path[j].position.y;
       sum_z += path[j].position.z;
