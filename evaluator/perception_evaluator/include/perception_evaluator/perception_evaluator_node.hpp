@@ -24,6 +24,7 @@
 #include "autoware_auto_perception_msgs/msg/predicted_objects.hpp"
 #include "diagnostic_msgs/msg/diagnostic_array.hpp"
 #include "nav_msgs/msg/odometry.hpp"
+#include "visualization_msgs/msg/marker_array.hpp"
 
 #include <array>
 #include <deque>
@@ -37,6 +38,7 @@ using autoware_auto_perception_msgs::msg::PredictedObjects;
 using diagnostic_msgs::msg::DiagnosticArray;
 using diagnostic_msgs::msg::DiagnosticStatus;
 using nav_msgs::msg::Odometry;
+using MarkerArray = visualization_msgs::msg::MarkerArray;
 
 /**
  * @brief Node for perception evaluation
@@ -60,8 +62,11 @@ private:
   rclcpp::Subscription<PredictedObjects>::SharedPtr objects_sub_;
 
   rclcpp::Publisher<DiagnosticArray>::SharedPtr metrics_pub_;
+  rclcpp::Publisher<MarkerArray>::SharedPtr pub_marker_;
   std::shared_ptr<tf2_ros::TransformListener> transform_listener_{nullptr};
   std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
+
+  mutable MarkerArray marker_;
 
   // Parameters
   std::string output_file_str_;
@@ -71,6 +76,8 @@ private:
   rclcpp::TimerBase::SharedPtr timer_;
   void initTimer(double period_s);
   void onTimer();
+
+  void publishDebugMarker();
 
   // Calculator
   MetricsCalculator metrics_calculator_;

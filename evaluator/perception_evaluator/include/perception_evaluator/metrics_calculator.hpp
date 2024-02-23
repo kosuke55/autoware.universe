@@ -26,8 +26,11 @@
 #include "geometry_msgs/msg/pose.hpp"
 #include <unique_identifier_msgs/msg/uuid.hpp>
 
+#include <algorithm>  // std::transform を使用するために必要
 #include <map>
 #include <optional>
+#include <utility>  // std::pair を使用するために必要
+#include <vector>
 
 namespace perception_diagnostics
 {
@@ -36,6 +39,39 @@ using autoware_auto_perception_msgs::msg::PredictedObjects;
 using geometry_msgs::msg::Point;
 using geometry_msgs::msg::Pose;
 using unique_identifier_msgs::msg::UUID;
+
+struct ObjectData
+{
+  PredictedObject object;
+  std::vector<std::pair<Pose, Pose>> path_pairs;
+
+  std::vector<Pose> getPredictedPath() const
+  {
+    std::vector<Pose> path;
+    path.resize(path_pairs.size());
+    std::transform(
+      path_pairs.begin(), path_pairs.end(), path.begin(),
+      [](const std::pair<Pose, Pose> & pair) -> Pose { return pair.first; });
+    return path;
+  }
+
+  std::vector<Pose> getHistoryPath() const
+  {
+    std::vector<Pose> path;
+    path.resize(path_pairs.size());
+    std::transform(
+      path_pairs.begin(), path_pairs.end(), path.begin(),
+      [](const std::pair<Pose, Pose> & pair) -> Pose { return pair.second; });
+    return path;
+  }
+};
+using ObjectDataMap = std::unordered_map<std::string, ObjectData>;
+
+// struct Objectdata
+// {
+//   PredictedObject object;
+//   std::vector<std::pair<Pose, Pose>> path_pairs;
+// };
 
 class MetricsCalculator
 {
@@ -57,6 +93,13 @@ public:
    */
   void setPredictedObjects(const PredictedObjects & objects);
 
+  std::unordered_map<std::string, std::vector<Pose>> getHistoryPathMap() const
+  {
+    return history_path_map_;
+  }
+
+  ObjectDataMap getDebugObjectData() const { return debug_target_object_; }
+
 private:
   std::unordered_map<std::string, std::map<rclcpp::Time, PredictedObject>> object_map_;
   std::unordered_map<std::string, std::vector<Pose>> history_path_map_;
@@ -66,14 +109,31 @@ private:
   std::vector<Pose> averageFilterPath(
     const std::vector<Pose> & path, const size_t window_size) const;
 
-  void updateHistoryPath(const std::string uuid);
+  void updateHistoryPath();
   std::vector<Pose> generateHistoryPathWithPrev(
-    const std::vector<Pose> & prev_history_path, const Pose & new_pose,
-    const size_t window_size);
+    const std::vector<Pose> & prev_history_path, const Pose & new_pose, const size_t window_size);
+  void updateObjects(
+    const std::string uuid, const rclcpp::Time stamp, const PredictedObject & object);
+  void deleteOldObjects(const rclcpp::Time stamp);
 
-  Stat<double> calcLateralDeviationMetrics() const;
-  Stat<double> calcYawDeviationMetrics() const;
-  Stat<double> calcPredictedPathDeviationMetrics() const;
+  Stat<double> calcLateralDeviationMetrics(const PredictedObjects & objects) const;
+  Stat<double> calcYawDeviationMetrics(const PredictedObjects & objects) const;
+  Stat<double> calcPredictedPathDeviationMetrics(const PredictedObjects & objects) const;
+
+  bool hasPassedTime(const rclcpp::Time stamp) const;
+  bool hasPassedTime(const std::string uuid, const rclcpp::Time stamp) const;
+  rclcpp::Time getClosestStamp(const rclcpp::Time stamp) const;
+  std::optional<PredictedObject> getObjectByStamp(
+    const std::string uuid, const rclcpp::Time stamp) const;
+  PredictedObjects getObjectsByStamp(const rclcpp::Time stamp) const;
+
+  // tmp
+  double time_delay_{10.0};
+  rclcpp::Time current_stamp_;
+
+  // debug
+
+  mutable ObjectDataMap debug_target_object_;
 
 };  // class MetricsCalculator
 

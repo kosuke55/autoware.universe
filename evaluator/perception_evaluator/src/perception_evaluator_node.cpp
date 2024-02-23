@@ -14,6 +14,11 @@
 
 #include "perception_evaluator/perception_evaluator_node.hpp"
 
+#include "perception_evaluator/marker_utils/utils.hpp"
+#include "tier4_autoware_utils/ros/marker_helper.hpp"
+
+#include <tier4_autoware_utils/ros/uuid_helper.hpp>
+
 #include "boost/lexical_cast.hpp"
 
 #include <glog/logging.h>
@@ -81,6 +86,8 @@ PerceptionEvaluatorNode::PerceptionEvaluatorNode(const rclcpp::NodeOptions & nod
     metrics_.push_back(metric);
   }
 
+  pub_marker_ = create_publisher<MarkerArray>("~/markers", 10);
+
   // Timer
   initTimer(/*period_s=*/0.1);
 }
@@ -145,6 +152,8 @@ void PerceptionEvaluatorNode::onTimer()
     metrics_msg.header.stamp = now();
     metrics_pub_->publish(metrics_msg);
   }
+
+  publishDebugMarker();
 }
 
 DiagnosticStatus PerceptionEvaluatorNode::generateDiagnosticStatus(
@@ -172,6 +181,45 @@ void PerceptionEvaluatorNode::onObjects(const PredictedObjects::ConstSharedPtr o
 {
   metrics_calculator_.setPredictedObjects(*objects_msg);
 }
+
+void PerceptionEvaluatorNode::publishDebugMarker()
+{
+  MarkerArray marker;
+  using marker_utils::createColorFromString;
+  using marker_utils::createObjectPolygonMarkerArray;
+
+  const auto add = [&marker](MarkerArray added) {
+    for (auto & marker : added.markers) {
+      marker.lifetime = rclcpp::Duration::from_seconds(1.5);
+    }
+    tier4_autoware_utils::appendMarkerArray(added, &marker);
+  };
+
+  const auto history_path_map = metrics_calculator_.getHistoryPathMap();
+
+  for (const auto & [uuid, history_path] : history_path_map) {
+    const auto c = createColorFromString(uuid);
+    add(marker_utils::createPointsMarkerArray(
+      history_path, "smoothed_history_path_" + uuid, 0, c.r, c.g, c.b));
+  }
+
+  const auto object_data_map = metrics_calculator_.getDebugObjectData();
+  for (const auto & [uuid, object_data] : object_data_map) {
+    const auto c = createColorFromString(uuid);
+    const auto predicted_path = object_data.getPredictedPath();
+    add(marker_utils::createPosesMarkerArray(predicted_path, "predicted_path_" + uuid, 0, 0, 0, 1));
+    const auto history_path = object_data.getHistoryPath();
+    add(marker_utils::createPosesMarkerArray(history_path, "history_path_" + uuid, 0, 1, 0, 0));
+
+    add(marker_utils::createDeviationLines(predicted_path, history_path, "deviation_lines_" + uuid, 0, 1, 1, 1));
+
+
+   add(createObjectPolygonMarkerArray(object_data.object, "object_polygon_" + uuid, 0, c.r, c.g, c.b));
+  }
+
+  pub_marker_->publish(marker);
+}
+
 }  // namespace perception_diagnostics
 
 #include "rclcpp_components/register_node_macro.hpp"
