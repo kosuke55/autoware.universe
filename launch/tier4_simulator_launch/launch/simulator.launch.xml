@@ -83,10 +83,11 @@
           <arg name="use_vector_map" value="true"/>
         </include>
       </group>
-      <!-- perception evaluator -->
-      <group>
-        <include file="$(find-pkg-share perception_evaluator)/launch/perception_evaluator.launch.xml"/>
-      </group>
+    </group>
+
+    <!-- perception evaluator -->
+    <group>
+      <include file="$(find-pkg-share perception_evaluator)/launch/perception_evaluator.launch.xml"/>
     </group>
 
     <!-- publish empty objects instead of object recognition module -->

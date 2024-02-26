@@ -16,6 +16,7 @@
 #define PERCEPTION_EVALUATOR__PLANNING_EVALUATOR_NODE_HPP_
 
 #include "perception_evaluator/metrics_calculator.hpp"
+#include "perception_evaluator/parameters.hpp"
 #include "perception_evaluator/stat.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "tf2_ros/buffer.h"
@@ -34,10 +35,12 @@
 
 namespace perception_diagnostics
 {
+using autoware_auto_perception_msgs::msg::ObjectClassification;
 using autoware_auto_perception_msgs::msg::PredictedObjects;
 using diagnostic_msgs::msg::DiagnosticArray;
 using diagnostic_msgs::msg::DiagnosticStatus;
 using nav_msgs::msg::Odometry;
+
 using MarkerArray = visualization_msgs::msg::MarkerArray;
 
 /**
@@ -59,32 +62,38 @@ public:
     const Metric & metric, const Stat<double> & metric_stat) const;
 
 private:
-  rclcpp::Subscription<PredictedObjects>::SharedPtr objects_sub_;
-
-  rclcpp::Publisher<DiagnosticArray>::SharedPtr metrics_pub_;
-  rclcpp::Publisher<MarkerArray>::SharedPtr pub_marker_;
-  std::shared_ptr<tf2_ros::TransformListener> transform_listener_{nullptr};
-  std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
-
-  mutable MarkerArray marker_;
-
-  // Parameters
-  std::string output_file_str_;
-  std::string ego_frame_str_;
-
   // Timer
   rclcpp::TimerBase::SharedPtr timer_;
   void initTimer(double period_s);
   void onTimer();
 
-  void publishDebugMarker();
+  // Subscribers and publishers
+  rclcpp::Subscription<PredictedObjects>::SharedPtr objects_sub_;
+  rclcpp::Publisher<DiagnosticArray>::SharedPtr metrics_pub_;
+  rclcpp::Publisher<MarkerArray>::SharedPtr pub_marker_;
 
-  // Calculator
+  // TF
+  std::shared_ptr<tf2_ros::TransformListener> transform_listener_{nullptr};
+  std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
+
+  // Parameters
+  std::shared_ptr<Parameters> parameters_;
+  void initParameter();
+  rcl_interfaces::msg::SetParametersResult onParameter(
+    const std::vector<rclcpp::Parameter> & parameters);
+  OnSetParametersCallbackHandle::SharedPtr set_param_res_;
+
+  // Parameters
+  std::string output_file_str_;
+  std::string ego_frame_str_;
+
+  // Metrics Calculator
   MetricsCalculator metrics_calculator_;
-  // Metrics
-  std::vector<Metric> metrics_;
   std::deque<rclcpp::Time> stamps_;
   std::array<std::deque<Stat<double>>, static_cast<size_t>(Metric::SIZE)> metric_stats_;
+
+  // Debug
+  void publishDebugMarker();
 };
 }  // namespace perception_diagnostics
 

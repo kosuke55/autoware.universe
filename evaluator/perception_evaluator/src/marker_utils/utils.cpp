@@ -82,7 +82,7 @@ MarkerArray createPointsMarkerArray(
 {
   auto marker = createDefaultMarker(
     "map", rclcpp::Clock{RCL_ROS_TIME}.now(), ns, id, Marker::LINE_STRIP,
-    createMarkerScale(0.1, 0.0, 0.0), createMarkerColor(r, g, b, 0.999));
+    createMarkerScale(0.05, 0.0, 0.0), createMarkerColor(r, g, b, 0.999));
 
   for (const auto & point : points) {
     marker.points.push_back(point);
@@ -99,7 +99,7 @@ MarkerArray createPointsMarkerArray(
 {
   auto marker = createDefaultMarker(
     "map", rclcpp::Clock{RCL_ROS_TIME}.now(), ns, id, Marker::LINE_STRIP,
-    createMarkerScale(0.1, 0.0, 0.0), createMarkerColor(r, g, b, 0.999));
+    createMarkerScale(0.05, 0.0, 0.0), createMarkerColor(r, g, b, 0.999));
 
   for (const auto & pose : poses) {
     marker.points.push_back(pose.position);
@@ -120,7 +120,7 @@ MarkerArray createDeviationLines(
   for (size_t i = 0; i < max_idx; ++i) {
     auto marker = createDefaultMarker(
       "map", rclcpp::Clock{RCL_ROS_TIME}.now(), ns, i, Marker::LINE_STRIP,
-      createMarkerScale(0.01, 0.0, 0.0), createMarkerColor(r, g, b, 0.999));
+      createMarkerScale(0.005, 0.0, 0.0), createMarkerColor(r, g, b, 0.5));
     marker.points.push_back(poses1.at(i).position);
     marker.points.push_back(poses2.at(i).position);
     msg.markers.push_back(marker);
@@ -146,14 +146,15 @@ MarkerArray createPoseMarkerArray(
 
 MarkerArray createPosesMarkerArray(
   const std::vector<Pose> poses, std::string && ns, const int32_t & id, const float & r,
-  const float & g, const float & b)
+  const float & g, const float & b, const float & x_scale, const float & y_scale,
+  const float & z_scale)
 {
   MarkerArray msg;
 
   for (size_t i = 0; i < poses.size(); ++i) {
     Marker marker = createDefaultMarker(
       "map", rclcpp::Clock{RCL_ROS_TIME}.now(), ns, id + i, Marker::ARROW,
-      createMarkerScale(0.7, 0.3, 0.3), createMarkerColor(r, g, b, 0.999));
+      createMarkerScale(x_scale, y_scale, z_scale), createMarkerColor(r, g, b, 0.5));
     marker.pose = poses.at(i);
     msg.markers.push_back(marker);
   }
@@ -178,7 +179,7 @@ MarkerArray createObjectPolygonMarkerArray(
 
   auto marker = createDefaultMarker(
     "map", rclcpp::Clock{RCL_ROS_TIME}.now(), ns, id, Marker::LINE_STRIP,
-    createMarkerScale(0.1, 0.0, 0.0), createMarkerColor(r, g, b, 0.999));
+    createMarkerScale(0.05, 0.0, 0.0), createMarkerColor(r, g, b, 0.999));
 
   const double z = object.kinematics.initial_pose_with_covariance.pose.position.z;
   const double height = object.shape.dimensions.z;

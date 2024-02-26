@@ -22,12 +22,36 @@
 namespace perception_diagnostics
 {
 /**
- * @brief Enumeration of trajectory metrics
+ * @brief Enumeration of perception metrics
  */
+
+struct ObjectParameter
+{
+  bool check_deviation{false};
+};
+
+struct DebugMarkerParameter
+{
+  bool show_history_path{false};
+  bool show_history_path_arrows{false};
+  bool show_smoothed_history_path{true};
+  bool show_smoothed_history_path_arrows{false};
+  bool show_predicted_path{true};
+  bool show_predicted_path_gt{true};
+  bool show_deviation_lines{true};
+  bool show_object_polygon{true};
+};
+
 struct Parameters
 {
-  std::array<bool, static_cast<size_t>(Metric::SIZE)> metrics{};  // default values to false
-};  // struct Parameters
+  std::vector<Metric> metrics;
+  size_t smoothing_window_size{0};
+  std::vector<double> prediction_time_horizons;
+  double time_delay{0.0};
+  DebugMarkerParameter debug_marker_parameters;
+  // parameters depend on object class
+  std::unordered_map<uint8_t, ObjectParameter> object_parameters;
+};
 
 }  // namespace perception_diagnostics
 

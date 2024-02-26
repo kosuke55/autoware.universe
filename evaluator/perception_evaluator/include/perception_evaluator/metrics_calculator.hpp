@@ -26,10 +26,10 @@
 #include "geometry_msgs/msg/pose.hpp"
 #include <unique_identifier_msgs/msg/uuid.hpp>
 
-#include <algorithm>  // std::transform を使用するために必要
+#include <algorithm>
 #include <map>
 #include <optional>
-#include <utility>  // std::pair を使用するために必要
+#include <utility>
 #include <vector>
 
 namespace perception_diagnostics
@@ -67,43 +67,37 @@ struct ObjectData
 };
 using ObjectDataMap = std::unordered_map<std::string, ObjectData>;
 
-// struct Objectdata
-// {
-//   PredictedObject object;
-//   std::vector<std::pair<Pose, Pose>> path_pairs;
-// };
+// pair of history_path and smoothed_history_path for each object id
+using HistoryPathMap =
+  std::unordered_map<std::string, std::pair<std::vector<Pose>, std::vector<Pose>>>;
 
 class MetricsCalculator
 {
 public:
-  Parameters parameters;
-
-  MetricsCalculator() = default;
+  explicit MetricsCalculator(const std::shared_ptr<Parameters> & parameters)
+  : parameters_(parameters){};
 
   /**
    * @brief calculate
    * @param [in] metric Metric enum value
    * @return string describing the requested metric
    */
-  std::optional<Stat<double>> calculate(const Metric metric) const;
+  std::optional<Stat<double>> calculate(const Metric & metric) const;
 
   /**
    * @brief set the dynamic objects used to calculate obstacle metrics
    * @param [in] objects predicted objects
    */
   void setPredictedObjects(const PredictedObjects & objects);
-
-  std::unordered_map<std::string, std::vector<Pose>> getHistoryPathMap() const
-  {
-    return history_path_map_;
-  }
+  HistoryPathMap getHistoryPathMap() const { return history_path_map_; }
 
   ObjectDataMap getDebugObjectData() const { return debug_target_object_; }
 
 private:
-  std::unordered_map<std::string, std::map<rclcpp::Time, PredictedObject>> object_map_;
-  std::unordered_map<std::string, std::vector<Pose>> history_path_map_;
+  std::shared_ptr<Parameters> parameters_;
 
+  std::unordered_map<std::string, std::map<rclcpp::Time, PredictedObject>> object_map_;
+  HistoryPathMap history_path_map_;
   size_t history_length_{300};
 
   std::vector<Pose> averageFilterPath(
@@ -132,7 +126,6 @@ private:
   rclcpp::Time current_stamp_;
 
   // debug
-
   mutable ObjectDataMap debug_target_object_;
 
 };  // class MetricsCalculator

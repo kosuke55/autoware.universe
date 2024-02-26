@@ -64,7 +64,8 @@ MarkerArray createPoseMarkerArray(
 
 MarkerArray createPosesMarkerArray(
   const std::vector<Pose> poses, std::string && ns, const int32_t & id, const float & r,
-  const float & g, const float & b);
+  const float & g, const float & b, const float & x_scale = 0.5, const float & y_scale = 0.2,
+  const float & z_scale = 0.2);
 
 std_msgs::msg::ColorRGBA createColorFromString(const std::string & str);
 

@@ -15,6 +15,7 @@
 #include "perception_evaluator/metrics_calculator.hpp"
 
 #include "motion_utils/trajectory/trajectory.hpp"
+#include "perception_evaluator/utils/objects_filtering.hpp"
 #include "tier4_autoware_utils/geometry/geometry.hpp"
 
 #include <tier4_autoware_utils/ros/uuid_helper.hpp>
@@ -48,9 +49,8 @@ template <typename... Args> void debug_helper(const char *f, int l, const char *
 
 namespace perception_diagnostics
 {
-std::optional<Stat<double>> MetricsCalculator::calculate(const Metric metric) const
+std::optional<Stat<double>> MetricsCalculator::calculate(const Metric & metric) const
 {
-  // tmp implementation
   if (object_map_.empty()) {
     return {};
   }
@@ -113,7 +113,7 @@ rclcpp::Time MetricsCalculator::getClosestStamp(const rclcpp::Time stamp) const
         stamp_and_objects.begin(), stamp_and_objects.end(), stamp,
         [](const auto & pair, const rclcpp::Time & val) { return pair.first < val; });
 
-      // 上界をチェック
+      // check the upper bound
       if (it != stamp_and_objects.end()) {
         const auto duration = it->first - stamp;  // rclcpp::Durationオブジェクトとして直接取得
         if (std::abs(duration.nanoseconds()) < min_duration.nanoseconds()) {
@@ -122,10 +122,10 @@ rclcpp::Time MetricsCalculator::getClosestStamp(const rclcpp::Time stamp) const
         }
       }
 
-      // 下界をチェック (itが先頭でなければ)
+      // check the lower bound (if it is not the first element)
       if (it != stamp_and_objects.begin()) {
         const auto prev_it = std::prev(it);
-        const auto duration = stamp - prev_it->first;  // rclcpp::Durationオブジェクトとして直接取得
+        const auto duration = stamp - prev_it->first;
         if (std::abs(duration.nanoseconds()) < min_duration.nanoseconds()) {
           min_duration = duration;
           closest_stamp = prev_it->first;
@@ -181,7 +181,7 @@ Stat<double> MetricsCalculator::calcLateralDeviationMetrics(const PredictedObjec
       continue;
     }
     const auto object_pose = object.kinematics.initial_pose_with_covariance.pose;
-    const auto history_path = history_path_map_.at(uuid);
+    const auto history_path = history_path_map_.at(uuid).second;
     if (history_path.empty()) {
       continue;
     }
@@ -201,7 +201,7 @@ Stat<double> MetricsCalculator::calcYawDeviationMetrics(const PredictedObjects &
       continue;
     }
     const auto object_pose = object.kinematics.initial_pose_with_covariance.pose;
-    const auto history_path = history_path_map_.at(uuid);
+    const auto history_path = history_path_map_.at(uuid).second;
     if (history_path.empty()) {
       continue;
     }
@@ -235,45 +235,26 @@ Stat<double> MetricsCalculator::calcPredictedPathDeviationMetrics(
           rclcpp::Duration::from_seconds(
             rclcpp::Duration(predicted_path.time_step).seconds() * static_cast<double>(j));
 
-        // print time stamp
-        debug(target_stamp.seconds());
-        RCLCPP_INFO(
-          rclcpp::get_logger("%d perception_evaluator"), "time stamp: %f -> %f (diff: %f)", j,
-          rclcpp::Time(stamp).seconds(), target_stamp.seconds(),
-          (target_stamp - rclcpp::Time(stamp)).seconds());
-
-        // `predicted_path.time_step`の秒数とナノ秒数を取得し、秒単位での合計時間を計算します。
-        // double total_seconds = predicted_path.time_step.sec + predicted_path.time_step.nanosec /
-        // 1e9; 計算した秒数に`i`を乗算し、その結果を`rclcpp::Duration`に渡します。 const
-        // rclcpp::Time target_stamp = rclcpp::Time(stamp) +
-        // rclcpp::Duration::from_seconds(total_seconds * static_cast<double>(i));
-
         if (!hasPassedTime(uuid, target_stamp)) {
-          debug(uuid, j);
           continue;
         }
         const auto history_object_opt = getObjectByStamp(uuid, target_stamp);
         if (!history_object_opt.has_value()) {
-          debug(uuid, j);
           continue;
         }
-        debug(uuid, j);
         const auto history_object = history_object_opt.value();
         const auto history_pose = history_object.kinematics.initial_pose_with_covariance.pose;
         const double distance =
           tier4_autoware_utils::calcDistance2d(p.position, history_pose.position);
-        debug(i, j, distance);
         deviation_map_for_paths[uuid][i].push_back(distance);
 
         // debug
-
         debug_predicted_path_pairs_map[path_id].push_back(std::make_pair(p, history_pose));
-        debug(debug_predicted_path_pairs_map[path_id].size());
       }
     }
   }
 
-  // uuidごとに最も偏差の我が小さなpredicted_pathを選択
+  // select the predicted path with the smallest deviation for each uuid
   std::unordered_map<std::string, std::vector<double>> deviation_map_for_objects;
   for (const auto & [uuid, deviation_map] : deviation_map_for_paths) {
     size_t min_deviation_index = 0;
@@ -291,15 +272,12 @@ Stat<double> MetricsCalculator::calcPredictedPathDeviationMetrics(
     deviation_map_for_objects[uuid] = deviation_map.at(min_deviation_index);
 
     // debug
-    // mutable std::unordered_map<PredictedObject, std::vector<std::pair<pose, pose>>>
-    // debug_target_object_;
     const auto path_id = uuid + "_" + std::to_string(min_deviation_index);
     const auto target_stamp_object = getObjectByStamp(uuid, stamp);
     if (target_stamp_object.has_value()) {
       ObjectData object_data;
       object_data.object = target_stamp_object.value();
       object_data.path_pairs = debug_predicted_path_pairs_map[path_id];
-      debug(object_data.path_pairs.size());
       debug_target_object_[uuid] = object_data;
     }
   }
@@ -321,19 +299,23 @@ void MetricsCalculator::setPredictedObjects(const PredictedObjects & objects)
   // using TimeStamp = builtin_interfaces::msg::Time;
   current_stamp_ = objects.header.stamp;
 
-  // store the predicted objects
-  using tier4_autoware_utils::toHexString;
-  for (const auto & object : objects.objects) {
-    std::string uuid = toHexString(object.object_id);
-    updateObjects(uuid, current_stamp_, object);
+  // store objects to check deviation
+  {
+    auto deviation_check_objects = objects;
+    filterDeviationCheckObjects(deviation_check_objects, parameters_->object_parameters);
+    using tier4_autoware_utils::toHexString;
+    for (const auto & object : deviation_check_objects.objects) {
+      std::string uuid = toHexString(object.object_id);
+      updateObjects(uuid, current_stamp_, object);
+    }
+    deleteOldObjects(current_stamp_);
+    updateHistoryPath();
   }
-  deleteOldObjects(current_stamp_);
-  updateHistoryPath();
 }
 
 void MetricsCalculator::deleteOldObjects(const rclcpp::Time stamp)
 {
-  // 20秒よりまえのデータは削除
+  // delete the data older than 2*time_delay_
   for (auto & [uuid, stamp_and_objects] : object_map_) {
     for (auto it = stamp_and_objects.begin(); it != stamp_and_objects.end();) {
       if (it->first < stamp - rclcpp::Duration::from_seconds(time_delay_ * 2)) {
@@ -357,14 +339,12 @@ void MetricsCalculator::deleteOldObjects(const rclcpp::Time stamp)
 void MetricsCalculator::updateObjects(
   const std::string uuid, const rclcpp::Time stamp, const PredictedObject & object)
 {
-  // 20秒よりまえのデータは削除
-
   object_map_[uuid][stamp] = object;
 }
 
 void MetricsCalculator::updateHistoryPath()
 {
-  const size_t window_size = 10;
+  const double window_size = parameters_->smoothing_window_size;
 
   for (const auto & [uuid, stamp_and_objects] : object_map_) {
     std::vector<Pose> history_path;
@@ -372,44 +352,13 @@ void MetricsCalculator::updateHistoryPath()
       history_path.push_back(object.kinematics.initial_pose_with_covariance.pose);
     }
 
-    history_path_map_[uuid] = history_path.size() < window_size
-                                ? history_path
-                                : averageFilterPath(history_path, window_size);
+    // pair of history_path(raw) and smoothed_history_path
+    // history_path(raw) is just for debugging
+    history_path_map_[uuid] =
+      std::make_pair(history_path, averageFilterPath(history_path, window_size));
   }
 }
 
-// const auto generateNewHistoryPath = [&](const std::string uuid) -> std::vector<Pose> {
-//   std::vector<Pose> history_path;
-
-//   for (const auto & [stamp, object] : object_map_.at(uuid)) {
-//     history_path.push_back(object.kinematics.initial_pose_with_covariance.pose);
-//   }
-//   debug(history_path.size());
-//   return history_path.size() < window_size ? history_path
-//                                            : averageFilterPath(history_path, window_size);
-// };
-
-// const auto history_path =generateNewHistoryPath(uuid);
-
-// if (history_path_map_.find(uuid) == history_path_map_.end()) {
-//   history_path_map_[uuid] = generateNewHistoryPath(uuid);
-//   return;
-// }
-
-// const auto history_path = history_path_map_.at(uuid);
-// if (history_path.size() < window_size) {
-//   history_path_map_[uuid] = generateNewHistoryPath(uuid);
-//   return;
-// }
-
-// // history_path_map_[uuid] = generateNewHistoryPath(uuid);
-
-// history_path_map_[uuid] = generateHistoryPathWithPrev(
-//   history_path_map_[uuid],
-//   object_map_.at(uuid).rbegin()->second.kinematics.initial_pose_with_covariance.pose,
-//   window_size);
-
-// 新しいポイントが追加された後のhistory_pathの更新
 std::vector<Pose> MetricsCalculator::generateHistoryPathWithPrev(
   const std::vector<Pose> & prev_history_path, const Pose & new_pose, const size_t window_size)
 {
@@ -422,7 +371,7 @@ std::vector<Pose> MetricsCalculator::generateHistoryPathWithPrev(
   updated_poses.insert(
     updated_poses.end(), prev_history_path.end() - half_window_size * 2, prev_history_path.end());
   updated_poses.push_back(new_pose);
-  // 移動平均法を新しい部分に適応する
+
   updated_poses = averageFilterPath(updated_poses, window_size);
   history_path.insert(
     history_path.end(), updated_poses.begin() + half_window_size, updated_poses.end());
@@ -435,10 +384,6 @@ std::vector<Pose> MetricsCalculator::averageFilterPath(
   using tier4_autoware_utils::calcAzimuthAngle;
   using tier4_autoware_utils::calcDistance2d;
   using tier4_autoware_utils::createQuaternionFromYaw;
-
-  if (path.size() < window_size) {
-    return path;
-  }
 
   std::vector<Pose> filtered_path;
   filtered_path.reserve(path.size());  // Reserve space to avoid reallocations
