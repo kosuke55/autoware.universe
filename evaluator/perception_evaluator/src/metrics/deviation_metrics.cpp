@@ -59,7 +59,8 @@ double calcLateralDeviation(const std::vector<Pose> & ref_path, const Pose & tar
   }
 
   const size_t nearest_index = motion_utils::findNearestIndex(ref_path, target_pose.position);
-  return tier4_autoware_utils::calcLateralDeviation(ref_path[nearest_index], target_pose.position);
+  return std::abs(
+    tier4_autoware_utils::calcLateralDeviation(ref_path[nearest_index], target_pose.position));
 }
 
 double calcYawDeviation(const std::vector<Pose> & ref_path, const Pose & target_pose)
@@ -69,7 +70,7 @@ double calcYawDeviation(const std::vector<Pose> & ref_path, const Pose & target_
   }
 
   const size_t nearest_index = motion_utils::findNearestIndex(ref_path, target_pose.position);
-  return tier4_autoware_utils::calcYawDeviation(ref_path[nearest_index], target_pose);
+  return std::abs(tier4_autoware_utils::calcYawDeviation(ref_path[nearest_index], target_pose));
 }
 
 std::vector<double> calcPredictedPathDeviation(

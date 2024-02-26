@@ -15,6 +15,8 @@
 #ifndef PERCEPTION_EVALUATOR__METRICS__METRIC_HPP_
 #define PERCEPTION_EVALUATOR__METRICS__METRIC_HPP_
 
+#include "perception_evaluator/stat.hpp"
+
 #include <iostream>
 #include <string>
 #include <unordered_map>
@@ -32,9 +34,8 @@ enum class Metric {
   SIZE,
 };
 
-/** TODO(Maxime CLEMENT):
- * make the addition of metrics simpler, e.g. with some macro ADD_METRIC(metric, metric_description)
- */
+using MetricStatMap = std::unordered_map<std::string, Stat<double>>;
+
 static const std::unordered_map<std::string, Metric> str_to_metric = {
   {"lateral_deviation", Metric::lateral_deviation},
   {"yaw_deviation", Metric::yaw_deviation},

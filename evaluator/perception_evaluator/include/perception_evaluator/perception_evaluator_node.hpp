@@ -59,7 +59,7 @@ public:
   void onObjects(const PredictedObjects::ConstSharedPtr objects_msg);
 
   DiagnosticStatus generateDiagnosticStatus(
-    const Metric & metric, const Stat<double> & metric_stat) const;
+    const std::string metric, const Stat<double> & metric_stat) const;
 
 private:
   // Timer
@@ -90,7 +90,6 @@ private:
   // Metrics Calculator
   MetricsCalculator metrics_calculator_;
   std::deque<rclcpp::Time> stamps_;
-  std::array<std::deque<Stat<double>>, static_cast<size_t>(Metric::SIZE)> metric_stats_;
 
   // Debug
   void publishDebugMarker();

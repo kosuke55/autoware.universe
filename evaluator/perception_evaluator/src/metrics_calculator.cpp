@@ -49,13 +49,15 @@ template <typename... Args> void debug_helper(const char *f, int l, const char *
 
 namespace perception_diagnostics
 {
-std::optional<Stat<double>> MetricsCalculator::calculate(const Metric & metric) const
+std::optional<MetricStatMap> MetricsCalculator::calculate(const Metric & metric) const
 {
   if (object_map_.empty()) {
     return {};
   }
 
-  const auto target_stamp = current_stamp_ - rclcpp::Duration::from_seconds(time_delay_);
+  // time delay is max element of parameters_->prediction_time_horizons
+  const double time_delay = getTimeDelay();
+  const auto target_stamp = current_stamp_ - rclcpp::Duration::from_seconds(time_delay);
   if (!hasPassedTime(target_stamp)) {
     return {};
   }
@@ -71,6 +73,16 @@ std::optional<Stat<double>> MetricsCalculator::calculate(const Metric & metric) 
     default:
       return {};
   }
+}
+
+double MetricsCalculator::getTimeDelay() const
+{
+  const auto max_element_it = std::max_element(
+    parameters_->prediction_time_horizons.begin(), parameters_->prediction_time_horizons.end());
+  if (max_element_it != parameters_->prediction_time_horizons.end()) {
+    return *max_element_it;
+  }
+  throw std::runtime_error("prediction_time_horizons is empty");
 }
 
 bool MetricsCalculator::hasPassedTime(const std::string uuid, const rclcpp::Time stamp) const
@@ -170,7 +182,7 @@ PredictedObjects MetricsCalculator::getObjectsByStamp(const rclcpp::Time stamp) 
   return objects;
 }
 
-Stat<double> MetricsCalculator::calcLateralDeviationMetrics(const PredictedObjects & objects) const
+MetricStatMap MetricsCalculator::calcLateralDeviationMetrics(const PredictedObjects & objects) const
 {
   Stat<double> stat{};
   const auto stamp = rclcpp::Time(objects.header.stamp);
@@ -188,10 +200,12 @@ Stat<double> MetricsCalculator::calcLateralDeviationMetrics(const PredictedObjec
     stat.add(metrics::calcLateralDeviation(history_path, object_pose));
   }
 
-  return stat;
+  MetricStatMap metric_stat_map;
+  metric_stat_map["lateral_deviation"] = stat;
+  return metric_stat_map;
 }
 
-Stat<double> MetricsCalculator::calcYawDeviationMetrics(const PredictedObjects & objects) const
+MetricStatMap MetricsCalculator::calcYawDeviationMetrics(const PredictedObjects & objects) const
 {
   Stat<double> stat{};
   const auto stamp = rclcpp::Time(objects.header.stamp);
@@ -208,16 +222,37 @@ Stat<double> MetricsCalculator::calcYawDeviationMetrics(const PredictedObjects &
     stat.add(metrics::calcYawDeviation(history_path, object_pose));
   }
 
-  return stat;
+  MetricStatMap metric_stat_map;
+  metric_stat_map["yaw_deviation"] = stat;
+  return metric_stat_map;
+}
+
+MetricStatMap MetricsCalculator::calcPredictedPathDeviationMetrics(
+  const PredictedObjects & objects) const
+{
+  const auto time_horizons = parameters_->prediction_time_horizons;
+
+  MetricStatMap metric_stat_map;
+  for (const double time_horizon : time_horizons) {
+    const auto stat = calcPredictedPathDeviationMetrics(objects, time_horizon);
+    std::ostringstream stream;
+    stream << std::fixed << std::setprecision(2) << time_horizon;
+    std::string time_horizon_str = stream.str();
+    metric_stat_map["predicted_path_deviation_" + time_horizon_str] = stat;
+  }
+
+  return metric_stat_map;
 }
 
 Stat<double> MetricsCalculator::calcPredictedPathDeviationMetrics(
-  const PredictedObjects & objects) const
+  const PredictedObjects & objects, const double time_horizon) const
 {
-  Stat<double> stat{};
+  // For each object, select the predicted path that is closest to the history path and store the
+  // distance to the history path
   std::unordered_map<std::string, std::unordered_map<size_t, std::vector<double>>>
     deviation_map_for_paths;
-
+  // For debugging. Save the pairs of predicted path pose and history path pose.
+  // Visualize the correspondence in rviz from the node.
   std::unordered_map<std::string, std::vector<std::pair<Pose, Pose>>>
     debug_predicted_path_pairs_map;
 
@@ -229,11 +264,14 @@ Stat<double> MetricsCalculator::calcPredictedPathDeviationMetrics(
       const auto predicted_path = predicted_paths[i];
       const std::string path_id = uuid + "_" + std::to_string(i);
       for (size_t j = 0; j < predicted_path.path.size(); j++) {
-        const Pose & p = predicted_path.path[j];
+        const double time_duration =
+          rclcpp::Duration(predicted_path.time_step).seconds() * static_cast<double>(j);
+        if (time_duration > time_horizon) {
+          break;
+        }
+
         const rclcpp::Time target_stamp =
-          rclcpp::Time(stamp) +
-          rclcpp::Duration::from_seconds(
-            rclcpp::Duration(predicted_path.time_step).seconds() * static_cast<double>(j));
+          rclcpp::Time(stamp) + rclcpp::Duration::from_seconds(time_duration);
 
         if (!hasPassedTime(uuid, target_stamp)) {
           continue;
@@ -244,6 +282,7 @@ Stat<double> MetricsCalculator::calcPredictedPathDeviationMetrics(
         }
         const auto history_object = history_object_opt.value();
         const auto history_pose = history_object.kinematics.initial_pose_with_covariance.pose;
+        const Pose & p = predicted_path.path[j];
         const double distance =
           tier4_autoware_utils::calcDistance2d(p.position, history_pose.position);
         deviation_map_for_paths[uuid][i].push_back(distance);
@@ -282,6 +321,7 @@ Stat<double> MetricsCalculator::calcPredictedPathDeviationMetrics(
     }
   }
 
+  Stat<double> stat;
   for (const auto & [uuid, deviations] : deviation_map_for_objects) {
     if (deviations.empty()) {
       continue;
@@ -316,9 +356,10 @@ void MetricsCalculator::setPredictedObjects(const PredictedObjects & objects)
 void MetricsCalculator::deleteOldObjects(const rclcpp::Time stamp)
 {
   // delete the data older than 2*time_delay_
+  const double time_delay = getTimeDelay();
   for (auto & [uuid, stamp_and_objects] : object_map_) {
     for (auto it = stamp_and_objects.begin(); it != stamp_and_objects.end();) {
-      if (it->first < stamp - rclcpp::Duration::from_seconds(time_delay_ * 2)) {
+      if (it->first < stamp - rclcpp::Duration::from_seconds(time_delay * 2)) {
         it = stamp_and_objects.erase(it);
       } else {
         break;

@@ -92,35 +92,6 @@ PerceptionEvaluatorNode::PerceptionEvaluatorNode(const rclcpp::NodeOptions & nod
 
 PerceptionEvaluatorNode::~PerceptionEvaluatorNode()
 {
-  if (!output_file_str_.empty()) {
-    // column width is the maximum size we might print + 1 for the space between columns
-    // Write data using format
-    std::ofstream f(output_file_str_);
-    f << std::fixed << std::left;
-    // header
-    f << "#Stamp(ns)";
-    for (Metric metric : parameters_->metrics) {
-      f << " " << metric_descriptions.at(metric);
-      f << " . .";  // extra "columns" to align columns headers
-    }
-    f << std::endl;
-    f << "#.";
-    for (Metric metric : parameters_->metrics) {
-      (void)metric;
-      f << " min max mean";
-    }
-    f << std::endl;
-    // data
-    for (size_t i = 0; i < stamps_.size(); ++i) {
-      f << stamps_[i].nanoseconds();
-      for (Metric metric : parameters_->metrics) {
-        const auto & stat = metric_stats_[static_cast<size_t>(metric)][i];
-        f << " " << stat;
-      }
-      f << std::endl;
-    }
-    f.close();
-  }
 }
 
 void PerceptionEvaluatorNode::initTimer(double period_s)
@@ -135,16 +106,18 @@ void PerceptionEvaluatorNode::onTimer()
 {
   DiagnosticArray metrics_msg;
   for (const Metric & metric : parameters_->metrics) {
-    const auto metric_stat = metrics_calculator_.calculate(Metric(metric));
-    if (!metric_stat.has_value()) {
+    const auto metric_stat_map = metrics_calculator_.calculate(Metric(metric));
+    if (!metric_stat_map.has_value()) {
       continue;
     }
 
-    metric_stats_[static_cast<size_t>(metric)].push_back(*metric_stat);
-    if (metric_stat->count() > 0) {
-      metrics_msg.status.push_back(generateDiagnosticStatus(metric, *metric_stat));
+    for (const auto & [metric, stat] : metric_stat_map.value()) {
+      if (stat.count() > 0) {
+        metrics_msg.status.push_back(generateDiagnosticStatus(metric, stat));
+      }
     }
   }
+
   if (!metrics_msg.status.empty()) {
     metrics_msg.header.stamp = now();
     metrics_pub_->publish(metrics_msg);
@@ -153,11 +126,12 @@ void PerceptionEvaluatorNode::onTimer()
 }
 
 DiagnosticStatus PerceptionEvaluatorNode::generateDiagnosticStatus(
-  const Metric & metric, const Stat<double> & metric_stat) const
+  const std::string metric, const Stat<double> & metric_stat) const
 {
   DiagnosticStatus status;
+
   status.level = status.OK;
-  status.name = metric_to_str.at(metric);
+  status.name = metric;
 
   diagnostic_msgs::msg::KeyValue key_value;
   key_value.key = "min";
@@ -402,7 +376,6 @@ void PerceptionEvaluatorNode::initParameter()
       getOrDeclareParameter<bool>(*this, ns + "object_polygon");
   }
 }
-
 }  // namespace perception_diagnostics
 
 #include "rclcpp_components/register_node_macro.hpp"

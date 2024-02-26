@@ -82,7 +82,7 @@ public:
    * @param [in] metric Metric enum value
    * @return string describing the requested metric
    */
-  std::optional<Stat<double>> calculate(const Metric & metric) const;
+  std::optional<MetricStatMap> calculate(const Metric & metric) const;
 
   /**
    * @brief set the dynamic objects used to calculate obstacle metrics
@@ -110,9 +110,11 @@ private:
     const std::string uuid, const rclcpp::Time stamp, const PredictedObject & object);
   void deleteOldObjects(const rclcpp::Time stamp);
 
-  Stat<double> calcLateralDeviationMetrics(const PredictedObjects & objects) const;
-  Stat<double> calcYawDeviationMetrics(const PredictedObjects & objects) const;
-  Stat<double> calcPredictedPathDeviationMetrics(const PredictedObjects & objects) const;
+  MetricStatMap calcLateralDeviationMetrics(const PredictedObjects & objects) const;
+  MetricStatMap calcYawDeviationMetrics(const PredictedObjects & objects) const;
+  MetricStatMap calcPredictedPathDeviationMetrics(const PredictedObjects & objects) const;
+  Stat<double> calcPredictedPathDeviationMetrics(
+    const PredictedObjects & objects, const double time_horizon) const;
 
   bool hasPassedTime(const rclcpp::Time stamp) const;
   bool hasPassedTime(const std::string uuid, const rclcpp::Time stamp) const;
@@ -121,8 +123,7 @@ private:
     const std::string uuid, const rclcpp::Time stamp) const;
   PredictedObjects getObjectsByStamp(const rclcpp::Time stamp) const;
 
-  // tmp
-  double time_delay_{10.0};
+  double getTimeDelay() const;
   rclcpp::Time current_stamp_;
 
   // debug
