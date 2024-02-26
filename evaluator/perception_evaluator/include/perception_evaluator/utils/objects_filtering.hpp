@@ -22,6 +22,7 @@
 #include <autoware_auto_perception_msgs/msg/predicted_objects.hpp>
 
 #include <memory>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -35,7 +36,6 @@ namespace perception_diagnostics
 using autoware_auto_perception_msgs::msg::ObjectClassification;
 using autoware_auto_perception_msgs::msg::PredictedObject;
 using autoware_auto_perception_msgs::msg::PredictedObjects;
-
 
 std::uint8_t getHighestProbLabel(const std::vector<ObjectClassification> & classification);
 

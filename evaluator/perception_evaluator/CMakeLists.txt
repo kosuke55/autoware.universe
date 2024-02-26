@@ -12,7 +12,7 @@ ament_auto_add_library(${PROJECT_NAME}_node SHARED
   src/metrics_calculator.cpp
   src/${PROJECT_NAME}_node.cpp
   src/metrics/deviation_metrics.cpp
-  src/marker_utils/utils.cpp
+  src/utils/marker_utils.cpp
   src/utils/objects_filtering.cpp
 )
 

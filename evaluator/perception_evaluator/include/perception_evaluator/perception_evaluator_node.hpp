@@ -1,4 +1,4 @@
-// Copyright 2021 Tier IV, Inc.
+// Copyright 2024 TIER IV, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef PERCEPTION_EVALUATOR__PLANNING_EVALUATOR_NODE_HPP_
-#define PERCEPTION_EVALUATOR__PLANNING_EVALUATOR_NODE_HPP_
+#ifndef PERCEPTION_EVALUATOR__PERCEPTION_EVALUATOR_NODE_HPP_
+#define PERCEPTION_EVALUATOR__PERCEPTION_EVALUATOR_NODE_HPP_
 
 #include "perception_evaluator/metrics_calculator.hpp"
 #include "perception_evaluator/parameters.hpp"
@@ -83,10 +83,6 @@ private:
     const std::vector<rclcpp::Parameter> & parameters);
   OnSetParametersCallbackHandle::SharedPtr set_param_res_;
 
-  // Parameters
-  std::string output_file_str_;
-  std::string ego_frame_str_;
-
   // Metrics Calculator
   MetricsCalculator metrics_calculator_;
   std::deque<rclcpp::Time> stamps_;
@@ -96,4 +92,4 @@ private:
 };
 }  // namespace perception_diagnostics
 
-#endif  // PERCEPTION_EVALUATOR__PLANNING_EVALUATOR_NODE_HPP_
+#endif  // PERCEPTION_EVALUATOR__PERCEPTION_EVALUATOR_NODE_HPP_

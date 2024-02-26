@@ -8,7 +8,6 @@
       - yaw_deviation
       - predicted_path_deviation
 
-
     # this should be an odd number, because it includes the target point
     smoothing_window_size: 11
 

@@ -20,33 +20,6 @@
 
 #include <tier4_autoware_utils/ros/uuid_helper.hpp>
 
-// clang-format off
-namespace {
-std::vector<std::string> split(const std::string &s, char delimiter) {
-  std::vector<std::string> tokens; std::string token; int p = 0;
-  for (char c : s) {
-    if (c == '(') p++; else if (c == ')') p--;
-    if (c == delimiter && p == 0) { tokens.push_back(token); token.clear(); } else token += c;
-  }
-  if (!token.empty()) tokens.push_back(token);
-  return tokens;
-}
-
-template <typename T> void view(const std::string &n, T e) { std::cerr << n << ": " << e << ", "; }
-template <typename T> void view(const std::string &n, const std::vector<T> &v) { std::cerr << n << ":"; for (const auto &e : v) std::cerr << " " << e; std::cerr << ", "; }
-template <typename First, typename... Rest> void view_multi(const std::vector<std::string> &n, First f, Rest... r) { view(n[0], f); if constexpr (sizeof...(r) > 0) view_multi(std::vector<std::string>(n.begin() + 1, n.end()), r...); }
-
-template <typename... Args> void debug_helper(const char *f, int l, const char *n, Args... a) {
-  std::cerr << f << ": " << l << ", "; auto nl = split(n, ',');
-  for (auto &nn : nl) { nn.erase(nn.begin(), std::find_if(nn.begin(), nn.end(), [](int ch) { return !std::isspace(ch); })); nn.erase(std::find_if(nn.rbegin(), nn.rend(), [](int ch) { return !std::isspace(ch); }).base(), nn.end()); }
-  view_multi(nl, a...); std::cerr << std::endl;
-}
-
-#define debug(...) debug_helper(__func__, __LINE__, #__VA_ARGS__, __VA_ARGS__)
-#define line() { std::cerr << "(" << __FILE__ << ") " << __func__ << ": " << __LINE__ << std::endl; }
-} // namespace
-// clang-format on
-
 namespace perception_diagnostics
 {
 std::optional<MetricStatMap> MetricsCalculator::calculate(const Metric & metric) const
@@ -256,6 +229,8 @@ Stat<double> MetricsCalculator::calcPredictedPathDeviationMetrics(
   std::unordered_map<std::string, std::vector<std::pair<Pose, Pose>>>
     debug_predicted_path_pairs_map;
 
+  // Find the corresponding pose in the history path for each pose of the predicted path of each
+  // object, and record the distances
   const auto stamp = objects.header.stamp;
   for (const auto & object : objects.objects) {
     const auto uuid = tier4_autoware_utils::toHexString(object.object_id);
@@ -269,10 +244,8 @@ Stat<double> MetricsCalculator::calcPredictedPathDeviationMetrics(
         if (time_duration > time_horizon) {
           break;
         }
-
         const rclcpp::Time target_stamp =
           rclcpp::Time(stamp) + rclcpp::Duration::from_seconds(time_duration);
-
         if (!hasPassedTime(uuid, target_stamp)) {
           continue;
         }
@@ -286,14 +259,13 @@ Stat<double> MetricsCalculator::calcPredictedPathDeviationMetrics(
         const double distance =
           tier4_autoware_utils::calcDistance2d(p.position, history_pose.position);
         deviation_map_for_paths[uuid][i].push_back(distance);
-
         // debug
         debug_predicted_path_pairs_map[path_id].push_back(std::make_pair(p, history_pose));
       }
     }
   }
 
-  // select the predicted path with the smallest deviation for each uuid
+  // Select the predicted path with the smallest deviation for each object
   std::unordered_map<std::string, std::vector<double>> deviation_map_for_objects;
   for (const auto & [uuid, deviation_map] : deviation_map_for_paths) {
     size_t min_deviation_index = 0;
@@ -310,7 +282,7 @@ Stat<double> MetricsCalculator::calcPredictedPathDeviationMetrics(
     }
     deviation_map_for_objects[uuid] = deviation_map.at(min_deviation_index);
 
-    // debug
+    // debug: save the delayed target object and the corresponding predicted path
     const auto path_id = uuid + "_" + std::to_string(min_deviation_index);
     const auto target_stamp_object = getObjectByStamp(uuid, stamp);
     if (target_stamp_object.has_value()) {
@@ -321,6 +293,7 @@ Stat<double> MetricsCalculator::calcPredictedPathDeviationMetrics(
     }
   }
 
+  // Store the deviation as a metric
   Stat<double> stat;
   for (const auto & [uuid, deviations] : deviation_map_for_objects) {
     if (deviations.empty()) {
@@ -330,7 +303,6 @@ Stat<double> MetricsCalculator::calcPredictedPathDeviationMetrics(
       stat.add(deviation);
     }
   }
-
   return stat;
 }
 

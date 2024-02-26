@@ -20,6 +20,8 @@
 #include <autoware_auto_perception_msgs/msg/predicted_path.hpp>
 #include <geometry_msgs/msg/pose.hpp>
 
+#include <vector>
+
 namespace perception_diagnostics
 {
 namespace metrics

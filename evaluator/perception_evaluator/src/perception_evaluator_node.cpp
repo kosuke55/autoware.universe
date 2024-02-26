@@ -14,7 +14,7 @@
 
 #include "perception_evaluator/perception_evaluator_node.hpp"
 
-#include "perception_evaluator/marker_utils/utils.hpp"
+#include "perception_evaluator/utils/marker_utils.hpp"
 #include "tier4_autoware_utils/ros/marker_helper.hpp"
 #include "tier4_autoware_utils/ros/parameter.hpp"
 #include "tier4_autoware_utils/ros/update_param.hpp"
@@ -32,33 +32,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-
-// clang-format off
-namespace {
-std::vector<std::string> split(const std::string &s, char delimiter) {
-  std::vector<std::string> tokens; std::string token; int p = 0;
-  for (char c : s) {
-    if (c == '(') p++; else if (c == ')') p--;
-    if (c == delimiter && p == 0) { tokens.push_back(token); token.clear(); } else token += c;
-  }
-  if (!token.empty()) tokens.push_back(token);
-  return tokens;
-}
-
-template <typename T> void view(const std::string &n, T e) { std::cerr << n << ": " << e << ", "; }
-template <typename T> void view(const std::string &n, const std::vector<T> &v) { std::cerr << n << ":"; for (const auto &e : v) std::cerr << " " << e; std::cerr << ", "; }
-template <typename First, typename... Rest> void view_multi(const std::vector<std::string> &n, First f, Rest... r) { view(n[0], f); if constexpr (sizeof...(r) > 0) view_multi(std::vector<std::string>(n.begin() + 1, n.end()), r...); }
-
-template <typename... Args> void debug_helper(const char *f, int l, const char *n, Args... a) {
-  std::cerr << f << ": " << l << ", "; auto nl = split(n, ',');
-  for (auto &nn : nl) { nn.erase(nn.begin(), std::find_if(nn.begin(), nn.end(), [](int ch) { return !std::isspace(ch); })); nn.erase(std::find_if(nn.rbegin(), nn.rend(), [](int ch) { return !std::isspace(ch); }).base(), nn.end()); }
-  view_multi(nl, a...); std::cerr << std::endl;
-}
-
-#define debug(...) debug_helper(__func__, __LINE__, #__VA_ARGS__, __VA_ARGS__)
-#define line() { std::cerr << "(" << __FILE__ << ") " << __func__ << ": " << __LINE__ << std::endl; }
-} // namespace
-// clang-format on
 
 namespace perception_diagnostics
 {
@@ -227,10 +200,7 @@ rcl_interfaces::msg::SetParametersResult PerceptionEvaluatorNode::onParameter(
 
   auto & p = parameters_;
 
-  updateParam<std::string>(parameters, "output_file", output_file_str_);
-  updateParam<std::string>(parameters, "ego_frame", ego_frame_str_);
   updateParam<size_t>(parameters, "smoothing_window_size", p->smoothing_window_size);
-  updateParam<double>(parameters, "time_delay", p->time_delay);
 
   // update metrics
   {
@@ -318,13 +288,9 @@ void PerceptionEvaluatorNode::initParameter()
 
   auto & p = parameters_;
 
-  output_file_str_ = getOrDeclareParameter<std::string>(*this, "output_file");
-  ego_frame_str_ = getOrDeclareParameter<std::string>(*this, "ego_frame");
-
   p->smoothing_window_size = getOrDeclareParameter<int>(*this, "smoothing_window_size");
   p->prediction_time_horizons =
     getOrDeclareParameter<std::vector<double>>(*this, "prediction_time_horizons");
-  p->time_delay = getOrDeclareParameter<double>(*this, "time_delay");
 
   // set metrics
   const auto selected_metrics =

@@ -83,7 +83,8 @@ protected:
       return status.name == metric_str;
     };
     metric_sub_ = rclcpp::create_subscription<DiagnosticArray>(
-      dummy_node, "/perception_evaluator/metrics", 1, [=](const DiagnosticArray::ConstSharedPtr msg) {
+      dummy_node, "/perception_evaluator/metrics", 1,
+      [=](const DiagnosticArray::ConstSharedPtr msg) {
         const auto it = std::find_if(msg->status.begin(), msg->status.end(), is_target_metric);
         if (it != msg->status.end()) {
           metric_value_ = boost::lexical_cast<double>(it->values[2].value);

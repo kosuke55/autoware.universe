@@ -80,7 +80,7 @@ public:
   /**
    * @brief calculate
    * @param [in] metric Metric enum value
-   * @return string describing the requested metric
+   * @return map of string describing the requested metric and the calculated value
    */
   std::optional<MetricStatMap> calculate(const Metric & metric) const;
 
@@ -89,27 +89,35 @@ public:
    * @param [in] objects predicted objects
    */
   void setPredictedObjects(const PredictedObjects & objects);
-  HistoryPathMap getHistoryPathMap() const { return history_path_map_; }
 
+  HistoryPathMap getHistoryPathMap() const { return history_path_map_; }
   ObjectDataMap getDebugObjectData() const { return debug_target_object_; }
 
 private:
   std::shared_ptr<Parameters> parameters_;
 
+  // Store predicted objects information and calculation results
   std::unordered_map<std::string, std::map<rclcpp::Time, PredictedObject>> object_map_;
   HistoryPathMap history_path_map_;
-  size_t history_length_{300};
 
+  rclcpp::Time current_stamp_;
+
+  // debug
+  mutable ObjectDataMap debug_target_object_;
+
+  // Functions to calculate history path
+  void updateHistoryPath();
   std::vector<Pose> averageFilterPath(
     const std::vector<Pose> & path, const size_t window_size) const;
-
-  void updateHistoryPath();
   std::vector<Pose> generateHistoryPathWithPrev(
     const std::vector<Pose> & prev_history_path, const Pose & new_pose, const size_t window_size);
+
+  // Update object data
   void updateObjects(
     const std::string uuid, const rclcpp::Time stamp, const PredictedObject & object);
   void deleteOldObjects(const rclcpp::Time stamp);
 
+  // Calculate metrics
   MetricStatMap calcLateralDeviationMetrics(const PredictedObjects & objects) const;
   MetricStatMap calcYawDeviationMetrics(const PredictedObjects & objects) const;
   MetricStatMap calcPredictedPathDeviationMetrics(const PredictedObjects & objects) const;
@@ -118,16 +126,13 @@ private:
 
   bool hasPassedTime(const rclcpp::Time stamp) const;
   bool hasPassedTime(const std::string uuid, const rclcpp::Time stamp) const;
+  double getTimeDelay() const;
+
+  // Extract object
   rclcpp::Time getClosestStamp(const rclcpp::Time stamp) const;
   std::optional<PredictedObject> getObjectByStamp(
     const std::string uuid, const rclcpp::Time stamp) const;
   PredictedObjects getObjectsByStamp(const rclcpp::Time stamp) const;
-
-  double getTimeDelay() const;
-  rclcpp::Time current_stamp_;
-
-  // debug
-  mutable ObjectDataMap debug_target_object_;
 
 };  // class MetricsCalculator
 

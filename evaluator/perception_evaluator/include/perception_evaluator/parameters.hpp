@@ -1,4 +1,4 @@
-// Copyright 2024 Tier IV, Inc.
+// Copyright 2024 TIER IV, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,8 @@
 
 #include "perception_evaluator/metrics/metric.hpp"
 
-#include <array>
+#include <unordered_map>
+#include <vector>
 
 namespace perception_diagnostics
 {
@@ -47,7 +48,6 @@ struct Parameters
   std::vector<Metric> metrics;
   size_t smoothing_window_size{0};
   std::vector<double> prediction_time_horizons;
-  double time_delay{0.0};
   DebugMarkerParameter debug_marker_parameters;
   // parameters depend on object class
   std::unordered_map<uint8_t, ObjectParameter> object_parameters;
