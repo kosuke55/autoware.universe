@@ -183,6 +183,7 @@ class MetricsVisualizePanel : public rviz_common::Panel
 
 public:
   explicit MetricsVisualizePanel(QWidget * parent = nullptr);
+  virtual ~MetricsVisualizePanel() {};
   void onInitialize() override;
 
 private Q_SLOTS:
@@ -199,6 +200,9 @@ private:
 
   std::mutex mutex_;
   std::unordered_map<std::string, Metric> metrics_;
+
+protected:
+  std::string metrics_topic_;  // set specific topic for metrics in derived class
 };
 }  // namespace rviz_plugins
 

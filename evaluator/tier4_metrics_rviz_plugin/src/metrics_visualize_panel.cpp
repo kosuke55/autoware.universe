@@ -27,20 +27,26 @@
 namespace rviz_plugins
 {
 MetricsVisualizePanel::MetricsVisualizePanel(QWidget * parent)
-: rviz_common::Panel(parent), grid_(new QGridLayout())
+: rviz_common::Panel(parent), grid_(new QGridLayout()), metrics_topic_("")
 {
   setLayout(grid_);
 }
 
 void MetricsVisualizePanel::onInitialize()
 {
-  using std::placeholders::_1;
+  if (metrics_topic_.empty()) {
+    return;
+  }
 
+  using std::placeholders::_1;
   raw_node_ = this->getDisplayContext()->getRosNodeAbstraction().lock()->get_raw_node();
 
+  // sub_ = raw_node_->create_subscription<DiagnosticArray>(
+  //   "/diagnostic/planning_evaluator/metrics", rclcpp::QoS{1},
+  //   std::bind(&MetricsVisualizePanel::onMetrics, this, _1));
+
   sub_ = raw_node_->create_subscription<DiagnosticArray>(
-    "/diagnostic/planning_evaluator/metrics", rclcpp::QoS{1},
-    std::bind(&MetricsVisualizePanel::onMetrics, this, _1));
+    metrics_topic_, rclcpp::QoS{1}, std::bind(&MetricsVisualizePanel::onMetrics, this, _1));
 
   const auto period = std::chrono::milliseconds(static_cast<int64_t>(1e3 / 10));
   timer_ = raw_node_->create_wall_timer(period, [&]() { onTimer(); });
