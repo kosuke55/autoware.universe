@@ -34,11 +34,14 @@
 
 #include <diagnostic_msgs/msg/diagnostic_array.hpp>
 
+#include <iostream>
 #include <limits>
+#include <stdexcept>  // std::out_of_rangeを使用するため
 #include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
 namespace rviz_plugins
 {
 
@@ -48,6 +51,69 @@ using diagnostic_msgs::msg::KeyValue;
 using QtCharts::QChart;
 using QtCharts::QChartView;
 using QtCharts::QLineSeries;
+
+#include <iostream>
+#include <limits>
+#include <stdexcept>  // std::out_of_rangeを使用するため
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
+template <typename KeyType, typename ValueType>
+class OrderedMap
+{
+public:
+  // 値を挿入するメソッド
+  template<typename V>
+  void emplace(const KeyType& key, V&& value)
+  {
+    auto it = index_map_.find(key);
+    if (it == index_map_.end()) {
+      data_.emplace_back(key, std::forward<V>(value)); // 完全転送を使用
+      index_map_[key] = data_.size() - 1;
+    }
+  }
+
+  size_t size() const { return data_.size(); }
+
+  // キーに基づいて値を取得するメソッド
+  ValueType & at(const KeyType & key)
+  {
+    if (index_map_.find(key) == index_map_.end()) {
+      throw std::out_of_range("Key not found");
+    }
+    return data_[index_map_[key]].second;
+  }
+
+  // const版のatメソッド
+  const ValueType & at(const KeyType & key) const
+  {
+    if (index_map_.find(key) == index_map_.end()) {
+      throw std::out_of_range("Key not found");
+    }
+    return data_[index_map_[key]].second;
+  }
+
+  // ベクターのイテレータを公開するメソッド
+  typename std::vector<std::pair<KeyType, ValueType>>::iterator begin() { return data_.begin(); }
+
+  typename std::vector<std::pair<KeyType, ValueType>>::iterator end() { return data_.end(); }
+
+  typename std::vector<std::pair<KeyType, ValueType>>::const_iterator begin() const
+  {
+    return data_.begin();
+  }
+
+  typename std::vector<std::pair<KeyType, ValueType>>::const_iterator end() const
+  {
+    return data_.end();
+  }
+
+private:
+  std::vector<std::pair<KeyType, ValueType>> data_;  // キーと値のペアを挿入順に保持
+  std::unordered_map<KeyType, size_t> index_map_;  // キーとそのベクター内インデックスのマッピング
+};
 
 struct Metric
 {
@@ -148,6 +214,8 @@ public:
 
   QTableWidget * getTable() const { return table; }
 
+  OrderedMap<std::string, QLabel *> getLabels() const { return labels; }
+
 private:
   static std::optional<std::string> getValue(const DiagnosticStatus & status, std::string && key)
   {
@@ -172,7 +240,8 @@ private:
   QChartView * chart;
   QTableWidget * table;
 
-  std::unordered_map<std::string, QLabel *> labels;
+  // std::unordered_map<std::string, QLabel *> labels;
+  OrderedMap<std::string, QLabel *> labels;
   std::unordered_map<std::string, QLineSeries *> plots;
 
   double y_range_min{std::numeric_limits<double>::max()};
@@ -189,6 +258,7 @@ public:
 
 private Q_SLOTS:
   void onTopicChanged();
+  void onSpecificMetricChanged();
 
 private:
   rclcpp::Node::SharedPtr raw_node_;
@@ -202,6 +272,15 @@ private:
 
   QGridLayout * grid_;
   QComboBox * topic_selector_;
+  QTabWidget * tab_widget_;
+  // QComboBox * metric_selector_;
+  // QWidget * all_metrics_tab_;
+  // QWidget * specific_metrics_tab_;
+
+  // specific metrics tab
+  QComboBox * specific_metric_selector_;
+  QChartView * specific_metric_chart_view_;
+  QTableWidget * specific_metric_table_;
 
   // <topic_name, <metric_name, <table, chart>>>
   std::unordered_map<
@@ -214,6 +293,7 @@ private:
   void updateWidgetVisibility(const std::string & target_topic, const bool show);
   void showCurrentTopicWidgets();
   void hideInactiveTopicWidgets();
+  void updateSpecificMetricTable();
 };
 }  // namespace rviz_plugins
 
