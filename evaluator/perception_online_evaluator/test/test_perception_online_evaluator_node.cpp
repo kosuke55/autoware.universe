@@ -40,6 +40,8 @@ using PredictedObject = autoware_auto_perception_msgs::msg::PredictedObject;
 using DiagnosticArray = diagnostic_msgs::msg::DiagnosticArray;
 using MarkerArray = visualization_msgs::msg::MarkerArray;
 using ObjectClassification = autoware_auto_perception_msgs::msg::ObjectClassification;
+using nav_msgs::msg::Odometry;
+using TFMessage = tf2_msgs::msg::TFMessage;
 
 using tier4_autoware_utils::generateUUID;
 
@@ -76,6 +78,9 @@ protected:
     }
     objects_pub_ = rclcpp::create_publisher<PredictedObjects>(
       dummy_node, "/perception_online_evaluator/input/objects", 1);
+    // odom_pub_ =
+    //   rclcpp::create_publisher<Odometry>(dummy_node, "/perception_evaluator/input/odometry", 1);
+    tf_pub_ = rclcpp::create_publisher<TFMessage>(dummy_node, "/tf", 1);
 
     marker_sub_ = rclcpp::create_subscription<MarkerArray>(
       eval_node, "perception_online_evaluator/markers", 10,
@@ -83,12 +88,61 @@ protected:
         has_received_marker_ = true;
       });
     uuid_ = generateUUID();
+
+    // tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(dummy_node);
+    // publishEgoPose(0.0, 0.0, 0.0);
+    // publishEgoTF();
   }
 
   ~EvalTest() override
   {
     rclcpp::shutdown();
     google::ShutdownGoogleLogging();
+  }
+
+  // void publishEgoPose(const double x, const double y, const double yaw)
+  // {
+  //   Odometry odom;
+  //   odom.header.frame_id = "map";
+  //   odom.header.stamp = dummy_node->now();
+  //   odom.pose.pose.position.x = x;
+  //   odom.pose.pose.position.y = y;
+  //   odom.pose.pose.position.z = 0.0;
+  //   tf2::Quaternion q;
+  //   q.setRPY(0.0, 0.0, yaw);
+  //   odom.pose.pose.orientation.x = q.x();
+  //   odom.pose.pose.orientation.y = q.y();
+  //   odom.pose.pose.orientation.z = q.z();
+  //   odom.pose.pose.orientation.w = q.w();
+
+  //   odom_pub_->publish(odom);
+  //   rclcpp::spin_some(eval_node);
+  //   rclcpp::spin_some(dummy_node);
+  //   rclcpp::sleep_for(std::chrono::milliseconds(100));
+  // }
+
+  void publishEgoTF()
+  {
+    geometry_msgs::msg::TransformStamped tf;
+    tf.header.frame_id = "map";
+    tf.header.stamp = dummy_node->now();
+    tf.child_frame_id = "base_link";
+
+    geometry_msgs::msg::Quaternion quaternion;
+    quaternion.x = 0.;
+    quaternion.y = 0.;
+    quaternion.z = 0.;
+    quaternion.w = 1.;
+    tf.transform.rotation = quaternion;
+
+    tf.transform.translation.x = 0.;
+    tf.transform.translation.y = 0.;
+    tf.transform.translation.z = 0.;
+
+    TFMessage tf_msg;
+    tf_msg.transforms.push_back(tf);
+
+    tf_pub_->publish(tf_msg);
   }
 
   void setTargetMetric(perception_diagnostics::Metric metric)
@@ -164,6 +218,7 @@ protected:
     PredictedObjects objects;
     objects.objects.push_back(makePredictedObject(predicted_path, label, velocity));
     objects.header.stamp = rclcpp::Time(0);
+    objects.header.frame_id = "map";
     return objects;
   }
 
@@ -229,12 +284,10 @@ protected:
 
   void waitForDummyNode()
   {
-    // wait for the marker to be published
-    publishObjects(makeStraightPredictedObjects(0));
-    while (!has_received_marker_) {
+    // Wait until the publisher is connected to the dummy node
+    while (objects_pub_->get_subscription_count() == 0) {
       rclcpp::spin_some(dummy_node);
       rclcpp::sleep_for(std::chrono::milliseconds(100));
-      rclcpp::spin_some(eval_node);
     }
   }
 
@@ -249,6 +302,7 @@ protected:
   rclcpp::Publisher<PredictedObjects>::SharedPtr objects_pub_;
   rclcpp::Subscription<DiagnosticArray>::SharedPtr metric_sub_;
   rclcpp::Subscription<MarkerArray>::SharedPtr marker_sub_;
+  rclcpp::Publisher<TFMessage>::SharedPtr tf_pub_;
   bool has_received_marker_{false};
 
   double time_delay_ = 5.0;
@@ -347,7 +401,8 @@ TEST_F(EvalTest, testLateralDeviation_deviation0_PEDESTRIAN)
   }
 
   const auto last_objects =
-    makeDeviatedStraightPredictedObjects(time_delay_, deviation, ObjectClassification::PEDESTRIAN);
+    makeDeviatedStraightPredictedObjects(time_delay_, deviation,
+    ObjectClassification::PEDESTRIAN);
   EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), 0.0, epsilon);
 }
 // ==========================================================================================
@@ -492,7 +547,8 @@ TEST_F(EvalTest, testYawDeviation_deviation0_PEDESTRIAN)
   }
 
   const auto last_objects =
-    makeDeviatedStraightPredictedObjects(time_delay_, deviation, ObjectClassification::PEDESTRIAN);
+    makeDeviatedStraightPredictedObjects(time_delay_, deviation,
+    ObjectClassification::PEDESTRIAN);
   EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), 0.0, epsilon);
 }
 
@@ -577,7 +633,8 @@ TEST_F(EvalTest, testPredictedPathDeviation_deviation0_PEDESTRIAN)
     publishObjects(objects);
   }
   const auto last_objects =
-    makeDeviatedStraightPredictedObjects(time_delay_, deviation, ObjectClassification::PEDESTRIAN);
+    makeDeviatedStraightPredictedObjects(time_delay_, deviation,
+    ObjectClassification::PEDESTRIAN);
 
   const double num_points = time_delay_ / time_step_ + 1;
   const double mean_deviation = deviation * (num_points - 1) / num_points;
@@ -723,3 +780,22 @@ TEST_F(EvalTest, testYawRate_minus_5)
 }
 // TEST_F(EvalTest, testYawRate_rate01)
 // ==========================================================================================
+
+// ==========================================================================================
+// historical objects count
+TEST_F(EvalTest, testHistoricalObjectsCount_CAR)
+{
+  waitForDummyNode();
+  setTargetMetric("historical_objects_count_CAR");
+
+  for (double time = 0; time < time_delay_; time += time_step_) {
+    publishEgoTF();
+    publishObjects(makeStraightPredictedObjects(time));
+  }
+
+  const double mean_num_objects = 1.0;
+
+  publishEgoTF();
+  EXPECT_NEAR(
+    publishObjectsAndGetMetric(makeStraightPredictedObjects(time_delay_)), mean_num_objects, epsilon);
+}

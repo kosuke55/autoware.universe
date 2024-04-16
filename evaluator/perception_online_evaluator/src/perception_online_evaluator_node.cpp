@@ -48,6 +48,8 @@ PerceptionOnlineEvaluatorNode::PerceptionOnlineEvaluatorNode(
 
   objects_sub_ = create_subscription<PredictedObjects>(
     "~/input/objects", 1, std::bind(&PerceptionOnlineEvaluatorNode::onObjects, this, _1));
+  // odom_sub_ = create_subscription<Odometry>(
+  //   "~/input/odometry", 1, std::bind(&PerceptionOnlineEvaluatorNode::onOdometry, this, _1));
   metrics_pub_ = create_publisher<DiagnosticArray>("~/metrics", 1);
   pub_marker_ = create_publisher<MarkerArray>("~/markers", 10);
 

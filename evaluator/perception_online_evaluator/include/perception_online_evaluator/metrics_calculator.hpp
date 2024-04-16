@@ -80,7 +80,19 @@ using HistoryPathMap =
 using StampObjectMap = std::map<rclcpp::Time, PredictedObject>;
 using StampObjectMapIterator = std::map<rclcpp::Time, PredictedObject>::const_iterator;
 using ObjectMap = std::unordered_map<std::string, StampObjectMap>;
-using DetectionCountMap = std::unordered_map<std::uint8_t, int>;
+
+struct DetectionCountMap : std::unordered_map<std::uint8_t, int>
+{
+  DetectionCountMap()
+  : std::unordered_map<std::uint8_t, int>{
+      {ObjectClassification::UNKNOWN, 0}, {ObjectClassification::CAR, 0},
+      {ObjectClassification::TRUCK, 0},   {ObjectClassification::BUS, 0},
+      {ObjectClassification::TRAILER, 0}, {ObjectClassification::MOTORCYCLE, 0},
+      {ObjectClassification::BICYCLE, 0}, {ObjectClassification::PEDESTRIAN, 0},
+    }
+  {
+  }
+};
 
 class MetricsCalculator
 {
@@ -101,6 +113,8 @@ public:
    */
   void setPredictedObjects(const PredictedObjects & objects);
 
+  void setEgoPose(const geometry_msgs::msg::Pose & pose) { ego_pose_ = pose; }
+
   void updateObjectsCountMap(const PredictedObjects & objects, const tf2_ros::Buffer & tf_buffer);
 
   HistoryPathMap getHistoryPathMap() const { return history_path_map_; }
@@ -113,11 +127,13 @@ private:
   ObjectMap object_map_;
   HistoryPathMap history_path_map_;
 
-  DetectionCountMap historical_detection_count_map_ = initializeDetectionCountMap();
+  DetectionCountMap historical_detection_count_map_;
   int objects_count_frame_ = 0;
   std::vector<std::pair<DetectionCountMap, rclcpp::Time>> detection_count_vector_{};
 
   rclcpp::Time current_stamp_;
+
+  std::optional<Pose> ego_pose_;
 
   // debug
   mutable ObjectDataMap debug_target_object_;
@@ -156,16 +172,6 @@ private:
   std::optional<std::pair<rclcpp::Time, PredictedObject>> getPreviousObjectByStamp(
     const std::string uuid, const rclcpp::Time stamp) const;
   PredictedObjects getObjectsByStamp(const rclcpp::Time stamp) const;
-
-  DetectionCountMap initializeDetectionCountMap() const
-  {
-    return {
-      {ObjectClassification::UNKNOWN, 0}, {ObjectClassification::CAR, 0},
-      {ObjectClassification::TRUCK, 0},   {ObjectClassification::BUS, 0},
-      {ObjectClassification::TRAILER, 0}, {ObjectClassification::MOTORCYCLE, 0},
-      {ObjectClassification::BICYCLE, 0}, {ObjectClassification::PEDESTRIAN, 0},
-    };
-  }
 
 };  // class MetricsCalculator
 
