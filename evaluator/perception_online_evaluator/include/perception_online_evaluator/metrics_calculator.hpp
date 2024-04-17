@@ -81,17 +81,39 @@ using StampObjectMap = std::map<rclcpp::Time, PredictedObject>;
 using StampObjectMapIterator = std::map<rclcpp::Time, PredictedObject>::const_iterator;
 using ObjectMap = std::unordered_map<std::string, StampObjectMap>;
 
-struct DetectionCountMap : std::unordered_map<std::uint8_t, int>
+struct DetectionCountMap : std::unordered_map<std::uint8_t, std::unordered_map<double, size_t>>
 {
-  DetectionCountMap()
-  : std::unordered_map<std::uint8_t, int>{
-      {ObjectClassification::UNKNOWN, 0}, {ObjectClassification::CAR, 0},
-      {ObjectClassification::TRUCK, 0},   {ObjectClassification::BUS, 0},
-      {ObjectClassification::TRAILER, 0}, {ObjectClassification::MOTORCYCLE, 0},
-      {ObjectClassification::BICYCLE, 0}, {ObjectClassification::PEDESTRIAN, 0},
-    }
+  explicit(const std::vector<double> & detection_radius_list)
+  : std::unordered_map<std::uint8_t, std::unordered_map<double, size_t>>{
+      {ObjectClassification::UNKNOWN, {}}, {ObjectClassification::CAR, {}},
+      {ObjectClassification::TRUCK, {}},   {ObjectClassification::BUS, {}},
+      {ObjectClassification::TRAILER, {}}, {ObjectClassification::MOTORCYCLE, {}},
+      {ObjectClassification::BICYCLE, {}}, {ObjectClassification::PEDESTRIAN, {}}}
   {
+    for (const auto & detection_radius : detection_radius_list) {
+      for (auto & [object_class, count_map] : *this) {
+        count_map[detection_radius] = 0;
+      }
+    }
   }
+
+  void add(const std::uint8_t object_class, const double detection_radius, const std::string & uuid)
+  {
+    if (find(object_class) == end()) {
+      return;
+    }
+    if (find(object_class)->second.find(detection_radius) == find(object_class)->second.end()) {
+      return;
+    }
+
+    // increment count if the uuid is not in the uuids
+    if (std::find(uuids.begin(), uuids.end(), uuid) == uuids.end()) {
+      find(object_class)->second[detection_radius]++;
+      uuids.push_back(uuid);
+    }
+  }
+
+  std::vector<uuid> uuids;
 };
 
 class MetricsCalculator
