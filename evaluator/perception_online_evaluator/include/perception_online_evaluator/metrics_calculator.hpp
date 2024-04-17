@@ -94,11 +94,46 @@ struct DetectionCountMap : std::unordered_map<std::uint8_t, int>
   }
 };
 
+class DetectionCounter
+{
+public:
+  DetectionCounter(
+    std::vector<std::string> ranges, double objects_count_window_seconds, double purge_seconds);
+
+  void addDetection(
+    const std::string uuid, const std::uint8_t classification, const std::string & range,
+    const rclcpp::Time & timestamp);
+  std::unordered_map<std::uint8_t, std::unordered_map<std::string, double>> getAverageCount(
+    double seconds) const;
+  std::unordered_map<std::uint8_t, std::unordered_map<std::string, double>>
+  getOverallAverageCount() const;
+  std::unordered_map<std::uint8_t, std::unordered_map<std::string, size_t>> getTotalCount() const;
+  std::set<rclcpp::Time> unique_timestamps_;
+
+private:
+  void purgeOldRecords(rclcpp::Time current_time);
+
+  std::vector<std::string> ranges_;
+  double objects_count_window_seconds_;
+  double purge_seconds_;
+
+  // Structures for storing detection counts and UUIDs for uniqueness checks
+  std::unordered_map<std::uint8_t, std::unordered_map<std::string, std::vector<rclcpp::Time>>>
+    time_series_counts_;
+  std::unordered_map<std::uint8_t, std::unordered_map<std::string, std::set<std::string>>>
+    seen_uuids_;
+};
+
 class MetricsCalculator
 {
 public:
   explicit MetricsCalculator(const std::shared_ptr<Parameters> & parameters)
-  : parameters_(parameters){};
+  : parameters_(parameters),
+    detection_counter_(
+      std::vector<std::string>{"50.0", "100.0", "150.0", "200.0"},
+      parameters->objects_count_window_seconds, 36000)
+  {
+  }
 
   /**
    * @brief calculate
@@ -134,6 +169,8 @@ private:
   rclcpp::Time current_stamp_;
 
   std::optional<Pose> ego_pose_;
+
+  DetectionCounter detection_counter_;
 
   // debug
   mutable ObjectDataMap debug_target_object_;

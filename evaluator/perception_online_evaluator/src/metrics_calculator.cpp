@@ -26,6 +26,122 @@ namespace perception_diagnostics
 using object_recognition_utils::convertLabelToString;
 using tier4_autoware_utils::inverseTransformPoint;
 
+DetectionCounter::DetectionCounter(
+  std::vector<std::string> ranges, double objects_count_window_seconds, double purge_seconds)
+: ranges_(ranges),
+  objects_count_window_seconds_(objects_count_window_seconds),
+  purge_seconds_(purge_seconds)
+{
+  // Initialize the data structures
+  for (auto & range : ranges_) {
+    for (std::uint8_t i = ObjectClassification::UNKNOWN; i < ObjectClassification::PEDESTRIAN + 1;
+         ++i) {
+      time_series_counts_[i][range] = std::vector<rclcpp::Time>();
+      seen_uuids_[i][range] = std::set<std::string>();
+    }
+  }
+}
+
+void DetectionCounter::addDetection(
+  const std::string uuid, const std::uint8_t classification, const std::string & range,
+  const rclcpp::Time & timestamp)
+{
+  unique_timestamps_.insert(timestamp).second;
+  seen_uuids_[classification][range].insert(uuid).second;
+
+  // Record the detection time for averaging
+  time_series_counts_[classification][range].push_back(timestamp);
+
+  // Purge old records if necessary
+  purgeOldRecords(timestamp);
+}
+
+std::unordered_map<std::uint8_t, std::unordered_map<std::string, double>>
+DetectionCounter::getAverageCount(double seconds) const
+{
+  std::unordered_map<std::uint8_t, std::unordered_map<std::string, double>> averages;
+  if (unique_timestamps_.size() == 0) {
+    return averages;
+  }
+  const rclcpp::Time cutoff_time = *unique_timestamps_.rbegin() - rclcpp::Duration::from_seconds(seconds);
+
+  for (auto & [classification, range_map] : time_series_counts_) {
+    for (auto & [range, timestamps] : range_map) {
+      // Calculate the number of detections within the given time window
+      const size_t count = std::count_if(
+        timestamps.begin(), timestamps.end(),
+        [&](const rclcpp::Time & time) { return time >= cutoff_time; });
+
+      // Calculate the number of unique frames within the given time window
+      const size_t frame_count = std::count_if(
+        unique_timestamps_.begin(), unique_timestamps_.end(),
+        [&](const rclcpp::Time & time) { return time >= cutoff_time; });
+
+      if (frame_count > 0) {
+        averages[classification][range] = static_cast<double>(count) / frame_count;
+      } else {
+        averages[classification][range] = 0;
+      }
+    }
+  }
+
+  return averages;
+}
+
+std::unordered_map<std::uint8_t, std::unordered_map<std::string, double>>
+DetectionCounter::getOverallAverageCount() const
+{
+  std::unordered_map<std::uint8_t, std::unordered_map<std::string, double>> averages;
+
+  for (auto & [classification, range_map] : time_series_counts_) {
+    for (auto & [range, timestamps] : range_map) {
+      const size_t count = timestamps.size();
+      const size_t frame_count = unique_timestamps_.size();
+      if (frame_count > 0) {
+        averages[classification][range] = static_cast<double>(count) / frame_count;
+      } else {
+        averages[classification][range] = 0;
+      }
+    }
+  }
+
+  return averages;
+}
+
+std::unordered_map<std::uint8_t, std::unordered_map<std::string, size_t>>
+DetectionCounter::getTotalCount() const
+{
+  std::unordered_map<std::uint8_t, std::unordered_map<std::string, size_t>> total_counts;
+  for (auto & [classification, range_map] : seen_uuids_) {
+    for (auto & [range, uuids] : range_map) {
+      total_counts[classification][range] = uuids.size();
+    }
+  }
+
+  return total_counts;
+}
+
+void DetectionCounter::purgeOldRecords(rclcpp::Time current_time)
+{
+  const rclcpp::Time cutoff_time = current_time - rclcpp::Duration::from_seconds(purge_seconds_);
+
+  // Remove timestamps older than purge_seconds_ from time_series_counts_
+  for (auto & [classification, range_map] : time_series_counts_) {
+    for (auto & [range, timestamps] : range_map) {
+      timestamps.erase(
+        std::remove_if(
+          timestamps.begin(), timestamps.end(),
+          [&](const rclcpp::Time & time) { return time < cutoff_time; }),
+        timestamps.end());
+    }
+  }
+
+  // Remove timestamps older than purge_seconds_ from unique_timestamps_
+  while (!unique_timestamps_.empty() && *unique_timestamps_.begin() < cutoff_time) {
+    unique_timestamps_.erase(unique_timestamps_.begin());
+  }
+}
+
 std::optional<MetricStatMap> MetricsCalculator::calculate(const Metric & metric) const
 {
   if (object_map_.empty()) {
@@ -432,13 +548,20 @@ MetricStatMap MetricsCalculator::calcObjectsCountMetrics() const
   MetricStatMap metric_stat_map;
 
   // calculate the average number of objects in the detection area in all past frames
+  const auto overall_average_count = detection_counter_.getOverallAverageCount();
+
   for (const auto & [label, count] : historical_detection_count_map_) {
+    // metric_stat_map["historical_objects_count_" + convertLabelToString(label)].add(
+    //   static_cast<double>(count) / static_cast<double>(objects_count_frame_));
     metric_stat_map["historical_objects_count_" + convertLabelToString(label)].add(
-      static_cast<double>(count) / static_cast<double>(objects_count_frame_));
+      overall_average_count.at(label).at("100.0"));
   }
 
   // calculate the average number of objects in the detection area in the past
   // `objects_count_window_seconds`
+
+  const auto average_count =
+    detection_counter_.getAverageCount(parameters_->objects_count_window_seconds);
   DetectionCountMap interval_detection_count_map;
   for (const auto & [detection_count_map, stamp] : detection_count_vector_) {
     for (const auto & [label, count] : detection_count_map) {
@@ -447,7 +570,8 @@ MetricStatMap MetricsCalculator::calcObjectsCountMetrics() const
   }
   for (const auto & [label, count] : interval_detection_count_map) {
     Stat<double> stat;
-    stat.add(static_cast<double>(count) / static_cast<double>(detection_count_vector_.size()));
+    // stat.add(static_cast<double>(count) / static_cast<double>(detection_count_vector_.size()));
+    stat.add(average_count.at(label).at("100.0"));
     metric_stat_map["interval_objects_count_" + convertLabelToString(label)] = stat;
   }
 
@@ -506,6 +630,9 @@ void MetricsCalculator::updateObjectsCountMap(
     if (is_within_detection_radius && is_below_detection_height) {
       historical_detection_count_map_[label]++;
       current_detection_count_map[label]++;
+
+      detection_counter_.addDetection(
+        tier4_autoware_utils::toHexString(object.object_id), label, "100.0", objects.header.stamp);
     }
   }
 
