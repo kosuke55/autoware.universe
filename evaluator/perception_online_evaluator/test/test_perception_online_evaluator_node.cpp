@@ -61,9 +61,19 @@ protected:
       {"--ros-args", "--params-file",
        share_dir + "/param/perception_online_evaluator.defaults.yaml"});
     options.append_parameter_override("prediction_time_horizons", std::vector<double>{5.0});
+    options.append_parameter_override("detection_radius_list", std::vector<double>{100.0});
+    options.append_parameter_override("detection_height_list", std::vector<double>{10.0});
     options.append_parameter_override("smoothing_window_size", 11);
     options.append_parameter_override(
       "objects_count_window_seconds", objects_count_window_seconds_);
+    options.append_parameter_override("target_object.car.check_total_objects_count", true);
+    options.append_parameter_override("target_object.car.check_average_objects_count", true);
+    options.append_parameter_override(
+      "target_object.car.check_interval_average_objects_count", true);
+    options.append_parameter_override("target_object.unknown.check_total_objects_count", true);
+    options.append_parameter_override("target_object.unknown.check_average_objects_count", true);
+    options.append_parameter_override(
+      "target_object.unknown.check_interval_average_objects_count", true);
 
     dummy_node = std::make_shared<rclcpp::Node>("perception_online_evaluator_test", options);
     eval_node = std::make_shared<EvalNode>(options);
@@ -124,13 +134,11 @@ protected:
   void setTargetMetric(std::string metric_str)
   {
     const auto is_target_metric = [metric_str](const auto & status) {
-      std::cerr << status.name << ", " << metric_str << std::endl;
       return status.name == metric_str;
     };
     metric_sub_ = rclcpp::create_subscription<DiagnosticArray>(
       eval_node, "/perception_online_evaluator/metrics", 1,
       [=](const DiagnosticArray::ConstSharedPtr msg) {
-        std::cerr << "on metric update" << std::endl;
         const auto it = std::find_if(msg->status.begin(), msg->status.end(), is_target_metric);
         if (it != msg->status.end()) {
           metric_value_ = boost::lexical_cast<double>(it->values[2].value);
@@ -141,10 +149,11 @@ protected:
 
   PredictedObject makePredictedObject(
     const std::vector<std::pair<double, double>> & predicted_path,
-    const uint8_t label = ObjectClassification::CAR, const double velocity = 2.0)
+    const uint8_t label = ObjectClassification::CAR, const double velocity = 2.0,
+    const unique_identifier_msgs::msg::UUID uuid = unique_identifier_msgs::msg::UUID())
   {
     PredictedObject object;
-    object.object_id = uuid_;
+    object.object_id = uuid;
     ObjectClassification classification;
     classification.label = label;
     classification.probability = 1.0;
@@ -185,36 +194,39 @@ protected:
 
   PredictedObjects makePredictedObjects(
     const std::vector<std::pair<double, double>> & predicted_path,
-    const uint8_t label = ObjectClassification::CAR, const double velocity = 2.0)
+    const uint8_t label = ObjectClassification::CAR, const double velocity = 2.0,
+    const unique_identifier_msgs::msg::UUID uuid = unique_identifier_msgs::msg::UUID())
   {
     PredictedObjects objects;
-    objects.objects.push_back(makePredictedObject(predicted_path, label, velocity));
+    objects.objects.push_back(makePredictedObject(predicted_path, label, velocity, uuid));
     objects.header.stamp = rclcpp::Time(0);
     objects.header.frame_id = "map";
     return objects;
   }
 
   PredictedObjects makeStraightPredictedObjects(
-    const double time, const uint8_t label = ObjectClassification::CAR, const double velocity = 2.0)
+    const double time, const uint8_t label = ObjectClassification::CAR, const double velocity = 2.0,
+    const unique_identifier_msgs::msg::UUID uuid = unique_identifier_msgs::msg::UUID())
   {
     std::vector<std::pair<double, double>> predicted_path;
     for (size_t i = 0; i <= time_horizon_ / time_step_; i++) {
       predicted_path.push_back({velocity * (time + i * time_step_), 0.0});
     }
-    auto objects = makePredictedObjects(predicted_path, label, velocity);
+    auto objects = makePredictedObjects(predicted_path, label, velocity, uuid);
     objects.header.stamp = rclcpp::Time(0) + rclcpp::Duration::from_seconds(time);
     return objects;
   }
 
   PredictedObjects makeDeviatedStraightPredictedObjects(
     const double time, const double deviation, const uint8_t label = ObjectClassification::CAR,
-    const double velocity = 2.0)
+    const double velocity = 2.0,
+    const unique_identifier_msgs::msg::UUID uuid = unique_identifier_msgs::msg::UUID())
   {
     std::vector<std::pair<double, double>> predicted_path;
     for (size_t i = 0; i <= time_horizon_ / time_step_; i++) {
       predicted_path.push_back({velocity * (time + i * time_step_), deviation});
     }
-    auto objects = makePredictedObjects(predicted_path, label, velocity);
+    auto objects = makePredictedObjects(predicted_path, label, velocity, uuid);
     objects.header.stamp = rclcpp::Time(0) + rclcpp::Duration::from_seconds(time);
     return objects;
   }
@@ -227,6 +239,26 @@ protected:
       object.kinematics.initial_pose_with_covariance.pose.orientation.w = cos(yaw / 2);
     }
     return rotated_objects;
+  }
+
+  PredictedObjects moveObjects(
+    const PredictedObjects objects, const double x, const double y, const double z)
+  {
+    PredictedObjects moved_objects = objects;
+    for (auto & object : moved_objects.objects) {
+      object.kinematics.initial_pose_with_covariance.pose.position.x += x;
+      object.kinematics.initial_pose_with_covariance.pose.position.y += y;
+      object.kinematics.initial_pose_with_covariance.pose.position.z += z;
+
+      for (auto & path : object.kinematics.predicted_paths) {
+        for (auto & pose : path.path) {
+          pose.position.x += x;
+          pose.position.y += y;
+          pose.position.z += z;
+        }
+      }
+    }
+    return moved_objects;
   }
 
   double publishObjectsAndGetMetric(const PredictedObjects & objects)
@@ -292,652 +324,654 @@ protected:
 
 // ==========================================================================================
 // lateral deviation
-// TEST_F(EvalTest, testLateralDeviation_deviation0)
-// {
-//   waitForDummyNode();
-//   setTargetMetric("lateral_deviation_CAR");
-
-//   const double deviation = 0.0;
-//   for (double time = 0; time < time_delay_; time += time_step_) {
-//     const auto objects = makeDeviatedStraightPredictedObjects(time, deviation);
-//     publishEgoTF(time);
-//     publishObjects(objects);
-//   }
-
-//   const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_, deviation);
-//   EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), 0.0, epsilon);
-// }
-
-// TEST_F(EvalTest, testLateralDeviation_deviation1)
-// {
-//   waitForDummyNode();
-//   setTargetMetric("lateral_deviation_CAR");
-
-//   const double deviation = 1.0;
-//   for (double time = 0; time < time_delay_; time += time_step_) {
-//     const auto objects = makeDeviatedStraightPredictedObjects(time, deviation);
-//     publishEgoTF(time);
-//     publishObjects(objects);
-//   }
-
-//   const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_ * 2, deviation);
-//   EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), 0.0, epsilon);
-// }
-
-// TEST_F(EvalTest, testLateralDeviation_oscillation)
-// {
-//   waitForDummyNode();
-//   setTargetMetric("lateral_deviation_CAR");
-
-//   const double deviation = 1.0;
-//   double sign = 1.0;
-//   for (double time = 0; time < time_delay_ * 2; time += time_step_) {
-//     PredictedObjects objects;
-//     if (time == time_delay_) {
-//       objects = makeDeviatedStraightPredictedObjects(time, 0);
-//     } else {
-//       objects = makeDeviatedStraightPredictedObjects(time, deviation * sign);
-//       sign *= -1.0;
-//     }
-//     publishEgoTF(time);
-//     publishObjects(objects);
-//   }
-
-//   const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_ * 2, deviation);
-//   EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), 0.0, epsilon);
-// }
-
-// TEST_F(EvalTest, testLateralDeviation_distortion)
-// {
-//   waitForDummyNode();
-//   setTargetMetric("lateral_deviation_CAR");
-
-//   const double deviation = 1.0;
-//   for (double time = 0; time < time_delay_ * 2; time += time_step_) {
-//     PredictedObjects objects;
-//     if (time == time_delay_) {
-//       objects = makeDeviatedStraightPredictedObjects(time, deviation);
-//     } else if (time == time_delay_ + time_step_) {
-//       objects = makeDeviatedStraightPredictedObjects(time, -deviation);
-//     } else {
-//       objects = makeDeviatedStraightPredictedObjects(time, 0);
-//     }
-//     publishEgoTF(time);
-//     publishObjects(objects);
-//   }
-
-//   const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_ * 2, deviation);
-//   EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), deviation, epsilon);
-// }
-
-// TEST_F(EvalTest, testLateralDeviation_deviation0_PEDESTRIAN)
-// {
-//   waitForDummyNode();
-//   setTargetMetric("lateral_deviation_PEDESTRIAN");
-
-//   const double deviation = 0.0;
-//   for (double time = 0; time < time_delay_; time += time_step_) {
-//     const auto objects =
-//       makeDeviatedStraightPredictedObjects(time, deviation, ObjectClassification::PEDESTRIAN);
-//     publishEgoTF(time);
-//     publishObjects(objects);
-//   }
-
-//   const auto last_objects =
-//     makeDeviatedStraightPredictedObjects(time_delay_, deviation, ObjectClassification::PEDESTRIAN);
-//   EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), 0.0, epsilon);
-// }
-// // ==========================================================================================
-
-// // ==========================================================================================
-// // yaw deviation
-// TEST_F(EvalTest, testYawDeviation_deviation0)
-// {
-//   waitForDummyNode();
-//   setTargetMetric("yaw_deviation_CAR");
-
-//   const double deviation = 0.0;
-//   for (double time = 0; time < time_delay_; time += time_step_) {
-//     const auto objects = makeDeviatedStraightPredictedObjects(time, deviation);
-//     publishEgoTF(time);
-//     publishObjects(objects);
-//   }
-
-//   const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_, deviation);
-//   EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), 0.0, epsilon);
-// }
-
-// TEST_F(EvalTest, testYawDeviation_deviation1)
-// {
-//   waitForDummyNode();
-//   setTargetMetric("yaw_deviation_CAR");
-
-//   const double deviation = 1.0;
-//   for (double time = 0; time < time_delay_; time += time_step_) {
-//     const auto objects = makeDeviatedStraightPredictedObjects(time, deviation);
-//     publishEgoTF(time);
-//     publishObjects(objects);
-//   }
-
-//   const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_, deviation);
-//   EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), 0.0, epsilon);
-// }
-
-// TEST_F(EvalTest, testYawDeviation_oscillation)
-// {
-//   waitForDummyNode();
-//   setTargetMetric("yaw_deviation_CAR");
-
-//   const double deviation = 1.0;
-//   double sign = 1.0;
-//   for (double time = 0; time < time_delay_ * 2; time += time_step_) {
-//     PredictedObjects objects;
-//     if (time == time_delay_) {
-//       objects = makeDeviatedStraightPredictedObjects(time, 0);
-//     } else {
-//       objects = makeDeviatedStraightPredictedObjects(time, deviation * sign);
-//       sign *= -1.0;
-//     }
-//     publishEgoTF(time);
-//     publishObjects(objects);
-//   }
-
-//   const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_ * 2, deviation);
-//   EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), 0.0, epsilon);
-// }
-
-// TEST_F(EvalTest, testYawDeviation_distortion)
-// {
-//   waitForDummyNode();
-//   setTargetMetric("yaw_deviation_CAR");
-
-//   const double deviation = 1.0;
-//   for (double time = 0; time < time_delay_ * 2; time += time_step_) {
-//     PredictedObjects objects;
-//     if (time == time_delay_) {
-//       objects = makeDeviatedStraightPredictedObjects(time, deviation);
-//     } else if (time == time_delay_ + time_step_) {
-//       objects = makeDeviatedStraightPredictedObjects(time, -deviation);
-//     } else {
-//       objects = makeDeviatedStraightPredictedObjects(time, 0);
-//     }
-//     publishEgoTF(time);
-//     publishObjects(objects);
-//   }
-
-//   const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_ * 2, deviation);
-//   EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), 0, epsilon);
-// }
-
-// TEST_F(EvalTest, testYawDeviation_oscillation_rotate)
-// {
-//   waitForDummyNode();
-//   setTargetMetric("yaw_deviation_CAR");
-
-//   const double deviation = 1.0;
-//   const double yaw = M_PI / 4;
-//   double sign = 1.0;
-//   for (double time = 0; time < time_delay_ * 2; time += time_step_) {
-//     PredictedObjects objects;
-//     if (time == time_delay_) {
-//       objects = rotateObjects(makeDeviatedStraightPredictedObjects(time, 0), yaw);
-//     } else {
-//       objects = rotateObjects(
-//         makeDeviatedStraightPredictedObjects(time, deviation * sign), 2 * M_PI * std::rand());
-//       sign *= -1.0;
-//     }
-//     publishEgoTF(time);
-//     publishObjects(objects);
-//   }
-
-//   const auto last_objects = rotateObjects(
-//     makeDeviatedStraightPredictedObjects(time_delay_ * 2, deviation), 2 * M_PI * std::rand());
-//   EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), yaw, epsilon);
-// }
-
-// TEST_F(EvalTest, testYawDeviation_distortion_rotate)
-// {
-//   waitForDummyNode();
-//   setTargetMetric("yaw_deviation_CAR");
-
-//   const double deviation = 1.0;
-//   const double yaw = M_PI / 4;
-//   for (double time = 0; time < time_delay_ * 2; time += time_step_) {
-//     PredictedObjects objects;
-//     if (time == time_delay_) {
-//       objects = rotateObjects(makeDeviatedStraightPredictedObjects(time, deviation), yaw);
-//     } else if (time == time_delay_ + time_step_) {
-//       objects = rotateObjects(
-//         makeDeviatedStraightPredictedObjects(time, -deviation), 2 * M_PI * std::rand());
-//     } else {
-//       objects =
-//         rotateObjects(makeDeviatedStraightPredictedObjects(time, 0), 2 * M_PI * std::rand());
-//     }
-//     publishEgoTF(time);
-//     publishObjects(objects);
-//   }
-
-//   const auto last_objects = rotateObjects(
-//     makeDeviatedStraightPredictedObjects(time_delay_ * 2, deviation), 2 * M_PI * std::rand());
-//   EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), yaw, epsilon);
-// }
-
-// TEST_F(EvalTest, testYawDeviation_deviation0_PEDESTRIAN)
-// {
-//   waitForDummyNode();
-//   setTargetMetric("yaw_deviation_PEDESTRIAN");
-
-//   const double deviation = 0.0;
-//   for (double time = 0; time < time_delay_; time += time_step_) {
-//     const auto objects =
-//       makeDeviatedStraightPredictedObjects(time, deviation, ObjectClassification::PEDESTRIAN);
-//     publishEgoTF(time);
-//     publishObjects(objects);
-//   }
-
-//   const auto last_objects =
-//     makeDeviatedStraightPredictedObjects(time_delay_, deviation, ObjectClassification::PEDESTRIAN);
-//   EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), 0.0, epsilon);
-// }
-
-// // ==========================================================================================
-// // predicted path deviation
-// TEST_F(EvalTest, testPredictedPathDeviation_deviation0)
-// {
-//   waitForDummyNode();
-
-//   setTargetMetric("predicted_path_deviation_CAR_5.00");
-
-//   const auto init_objects = makeStraightPredictedObjects(0);
-//   publishEgoTF();
-//   publishObjects(init_objects);
-
-//   const double deviation = 0.0;
-//   for (double time = time_step_; time < time_delay_; time += time_step_) {
-//     const auto objects = makeDeviatedStraightPredictedObjects(time, deviation);
-//     publishEgoTF(time);
-//     publishObjects(objects);
-//   }
-//   const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_, deviation);
-
-//   const double num_points = time_delay_ / time_step_ + 1;
-//   const double mean_deviation = deviation * (num_points - 1) / num_points;
-//   publishEgoTF(time_delay_);
-//   EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), mean_deviation, epsilon);
-// }
-
-// TEST_F(EvalTest, testPredictedPathDeviation_deviation1)
-// {
-//   waitForDummyNode();
-
-//   setTargetMetric("predicted_path_deviation_CAR_5.00");
-
-//   const auto init_objects = makeStraightPredictedObjects(0);
-//   publishObjects(init_objects);
-
-//   const double deviation = 1.0;
-//   for (double time = time_step_; time < time_delay_; time += time_step_) {
-//     const auto objects = makeDeviatedStraightPredictedObjects(time, deviation);
-//     publishEgoTF(time);
-//     publishObjects(objects);
-//   }
-//   const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_, deviation);
-
-//   const double num_points = time_delay_ / time_step_ + 1;
-//   const double mean_deviation = deviation * (num_points - 1) / num_points;
-//   publishEgoTF(time_delay_);
-//   EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), mean_deviation, epsilon);
-// }
-
-// TEST_F(EvalTest, testPredictedPathDeviation_deviation2)
-// {
-//   waitForDummyNode();
-
-//   setTargetMetric("predicted_path_deviation_CAR_5.00");
-
-//   const auto init_objects = makeStraightPredictedObjects(0);
-//   publishEgoTF();
-//   publishObjects(init_objects);
-
-//   const double deviation = 2.0;
-//   for (double time = time_step_; time < time_delay_; time += time_step_) {
-//     const auto objects = makeDeviatedStraightPredictedObjects(time, deviation);
-//     publishEgoTF(time);
-//     publishObjects(objects);
-//   }
-//   const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_, deviation);
-
-//   const double num_points = time_delay_ / time_step_ + 1;
-//   const double mean_deviation = deviation * (num_points - 1) / num_points;
-//   publishEgoTF(time_delay_);
-//   EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), mean_deviation, epsilon);
-// }
-
-// TEST_F(EvalTest, testPredictedPathDeviation_deviation0_PEDESTRIAN)
-// {
-//   waitForDummyNode();
-
-//   setTargetMetric("predicted_path_deviation_PEDESTRIAN_5.00");
-
-//   const auto init_objects = makeStraightPredictedObjects(0, ObjectClassification::PEDESTRIAN);
-//   publishEgoTF();
-//   publishObjects(init_objects);
-
-//   const double deviation = 0.0;
-//   for (double time = time_step_; time < time_delay_; time += time_step_) {
-//     const auto objects =
-//       makeDeviatedStraightPredictedObjects(time, deviation, ObjectClassification::PEDESTRIAN);
-//     publishEgoTF(time);
-//     publishObjects(objects);
-//   }
-//   const auto last_objects =
-//     makeDeviatedStraightPredictedObjects(time_delay_, deviation, ObjectClassification::PEDESTRIAN);
-
-//   const double num_points = time_delay_ / time_step_ + 1;
-//   const double mean_deviation = deviation * (num_points - 1) / num_points;
-//   publishEgoTF(time_delay_);
-//   EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), mean_deviation, epsilon);
-// }
-// // ==========================================================================================
-
-// // ==========================================================================================
-// // predicted path deviation variance
-// TEST_F(EvalTest, testPredictedPathDeviationVariance_deviation0)
-// {
-//   waitForDummyNode();
-
-//   setTargetMetric("predicted_path_deviation_variance_CAR_5.00");
-
-//   const auto init_objects = makeStraightPredictedObjects(0);
-//   publishObjects(init_objects);
-
-//   const double deviation = 0.0;
-//   for (double time = time_step_; time < time_delay_; time += time_step_) {
-//     const auto objects = makeDeviatedStraightPredictedObjects(time, deviation);
-//     publishObjects(objects);
-//   }
-//   const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_, deviation);
-
-//   EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), 0.0, epsilon);
-// }
-
-// TEST_F(EvalTest, testPredictedPathDeviationVariance_deviation1)
-// {
-//   waitForDummyNode();
-
-//   setTargetMetric("predicted_path_deviation_variance_CAR_5.00");
-
-//   const auto init_objects = makeStraightPredictedObjects(0);
-//   publishObjects(init_objects);
-
-//   const double deviation = 1.0;
-//   for (double time = time_step_; time < time_delay_; time += time_step_) {
-//     const auto objects = makeDeviatedStraightPredictedObjects(time, deviation);
-//     publishObjects(objects);
-//   }
-//   const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_, deviation);
-
-//   const double num_points = time_delay_ / time_step_ + 1;
-//   // deviations
-//   //   All    - 11 points (num_points)
-//   //   0.0[m] -  1 points
-//   //   1.0[m] - 10 points
-//   const double mean_deviation = deviation * (num_points - 1) / num_points;
-//   const double variance =
-//     (pow(0.0 - mean_deviation, 2) + 10 * pow(1.0 - mean_deviation, 2)) / num_points;
-
-//   EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), variance, epsilon);
-// }
-
-// TEST_F(EvalTest, testPredictedPathDeviationVariance_deviationIncreasing)
-// {
-//   waitForDummyNode();
-
-//   setTargetMetric("predicted_path_deviation_variance_CAR_5.00");
-
-//   const auto init_objects = makeStraightPredictedObjects(0);
-//   publishObjects(init_objects);
-
-//   const double deviation_step = 0.1;
-//   double deviation = deviation_step;
-//   for (double time = time_step_; time < time_delay_; time += time_step_) {
-//     const auto objects = makeDeviatedStraightPredictedObjects(time, deviation);
-//     publishObjects(objects);
-//     deviation += deviation_step;
-//   }
-//   const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_, deviation);
-
-//   const double num_points = time_delay_ / time_step_ + 1;
-//   // deviations
-//   //   All          - 11 points (num_points)
-//   //   0.0[m]       -  1 points
-//   //   0.1[m]       -  1 points
-//   //   0.2[m]       -  1 points
-//   //      :
-//   //   0.9[m]       -  1 points
-//   //   1.0[m]       -  1 points
-//   const double mean_deviation = std::invoke([&]() {
-//     double sum = 0.0;
-//     for (size_t i = 0; i < num_points; ++i) {
-//       sum += static_cast<double>(i) * deviation_step;
-//     }
-//     return sum / num_points;
-//   });
-//   double sum_squared_deviations = 0.0;
-//   for (size_t i = 0; i < num_points; ++i) {
-//     const double deviation = static_cast<double>(i) * deviation_step;
-//     sum_squared_deviations += pow(deviation - mean_deviation, 2);
-//   }
-//   const double variance = sum_squared_deviations / num_points;
-
-//   EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), variance, epsilon);
-// }
-
-// TEST_F(EvalTest, testPredictedPathDeviationVariance_deviationOscillating)
-// {
-//   waitForDummyNode();
-
-//   setTargetMetric("predicted_path_deviation_variance_CAR_5.00");
-
-//   const auto init_objects = makeStraightPredictedObjects(0);
-//   publishObjects(init_objects);
-
-//   const std::vector<double> deviations = {-0.1, -0.2, -0.1, 0.0, 0.1, 0.2, 0.1, 0.0, -0.1, -0.2};
-//   for (size_t i = 0; i < deviations.size() - 1; ++i) {
-//     const double time = static_cast<double>(i + 1) * time_step_;
-//     const auto objects = makeDeviatedStraightPredictedObjects(time, deviations[i]);
-//     publishObjects(objects);
-//   }
-
-//   const double num_points = deviations.size() + 1;
-//   // deviations
-//   //   All          - 11 points (num_points)
-//   //   0.0[m]       -  1 points
-//   //  -0.1[m]       -  1 points
-//   //  -0.2[m]       -  1 points
-//   //  -0.1[m]       -  1 points
-//   //  -0.0[m]       -  1 points
-//   //   0.1[m]       -  1 points
-//   //   0.2[m]       -  1 points
-//   //   0.1[m]       -  1 points
-//   //   0.0[m]       -  1 points
-//   //  -0.1[m]       -  1 points
-//   //  -0.2[m]       -  1 points
-//   const double mean_deviation =
-//     std::accumulate(
-//       deviations.begin(), deviations.end(), 0.0,
-//       [](double sum, double deviation) { return sum + std::abs(deviation); }) /
-//     num_points;
-
-//   double sum_squared_deviations = pow(0 - mean_deviation, 2);
-//   for (const auto deviation : deviations) {
-//     sum_squared_deviations += pow(std::abs(deviation) - mean_deviation, 2);
-//   }
-//   const double variance = sum_squared_deviations / num_points;
-//   const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_, deviations.back());
-//   EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), variance, epsilon);
-// }
-// // ==========================================================================================
-
-// // ==========================================================================================
-// // yaw rate
-// TEST_F(EvalTest, testYawRate_0)
-// {
-//   waitForDummyNode();
-//   setTargetMetric("yaw_rate_CAR");
-
-//   for (double time = 0; time <= time_delay_ + 0.01; time += time_step_) {
-//     const auto objects = makeStraightPredictedObjects(time, ObjectClassification::CAR, 0.0);
-//     publishEgoTF(time);
-//     publishObjects(objects);
-//   }
-
-//   const auto last_objects =
-//     makeStraightPredictedObjects(time_delay_ + time_step_, ObjectClassification::CAR, 0.0);
-//   publishEgoTF(time_delay_ + time_step_);
-//   EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), 0.0, epsilon);
-// }
-
-// TEST_F(EvalTest, testYawRate_01)
-// {
-//   waitForDummyNode();
-//   setTargetMetric("yaw_rate_CAR");
-
-//   const double yaw_rate = 0.1;
-
-//   for (double time = 0; time <= time_delay_ + 0.01; time += time_step_) {
-//     const auto objects = rotateObjects(
-//       makeStraightPredictedObjects(time, ObjectClassification::CAR, 0.0), yaw_rate * time);
-//     publishEgoTF(time);
-//     publishObjects(objects);
-//   }
-
-//   for (double time = time_delay_ + time_step_; time < time_delay_ * 2; time += time_step_) {
-//     const auto objects = rotateObjects(
-//       makeStraightPredictedObjects(time, ObjectClassification::CAR, 0.0), yaw_rate * time);
-//     publishEgoTF(time);
-//     EXPECT_NEAR(publishObjectsAndGetMetric(objects), yaw_rate, epsilon);
-//   }
-// }
-
-// TEST_F(EvalTest, testYawRate_minus_01)
-// {
-//   waitForDummyNode();
-//   setTargetMetric("yaw_rate_CAR");
-
-//   const double yaw_rate = 0.1;
-
-//   for (double time = 0; time <= time_delay_ + 0.01; time += time_step_) {
-//     const auto objects = rotateObjects(
-//       makeStraightPredictedObjects(time, ObjectClassification::CAR, 0.0), -yaw_rate * time);
-//     publishEgoTF(time);
-//     publishObjects(objects);
-//   }
-
-//   for (double time = time_delay_ + time_step_; time < time_delay_ * 2; time += time_step_) {
-//     const auto objects = rotateObjects(
-//       makeStraightPredictedObjects(time, ObjectClassification::CAR, 0.0), -yaw_rate * time);
-//     publishEgoTF(time);
-//     EXPECT_NEAR(publishObjectsAndGetMetric(objects), yaw_rate, epsilon);
-//   }
-// }
-
-// TEST_F(EvalTest, testYawRate_1)
-// {
-//   waitForDummyNode();
-//   setTargetMetric("yaw_rate_CAR");
-
-//   const double yaw_rate = 1.0;
-
-//   for (double time = 0; time <= time_delay_ + 0.01; time += time_step_) {
-//     const auto objects = rotateObjects(
-//       makeStraightPredictedObjects(time, ObjectClassification::CAR, 0.0), yaw_rate * time);
-//     publishEgoTF(time);
-//     publishObjects(objects);
-//   }
-
-//   for (double time = time_delay_ + time_step_; time < time_delay_ * 2; time += time_step_) {
-//     const auto objects = rotateObjects(
-//       makeStraightPredictedObjects(time, ObjectClassification::CAR, 0.0), yaw_rate * time);
-//     publishEgoTF(time);
-//     EXPECT_NEAR(publishObjectsAndGetMetric(objects), yaw_rate, epsilon);
-//   }
-// }
-
-// TEST_F(EvalTest, testYawRate_minus_1)
-// {
-//   waitForDummyNode();
-//   setTargetMetric("yaw_rate_CAR");
-
-//   const double yaw_rate = 1.0;
-
-//   for (double time = 0; time <= time_delay_ + 0.01; time += time_step_) {
-//     const auto objects = rotateObjects(
-//       makeStraightPredictedObjects(time, ObjectClassification::CAR, 0.0), -yaw_rate * time);
-//     publishEgoTF(time);
-//     publishObjects(objects);
-//   }
-
-//   for (double time = time_delay_ + time_step_; time < time_delay_ * 2; time += time_step_) {
-//     const auto objects = rotateObjects(
-//       makeStraightPredictedObjects(time, ObjectClassification::CAR, 0.0), -yaw_rate * time);
-//     publishEgoTF(time);
-//     EXPECT_NEAR(publishObjectsAndGetMetric(objects), yaw_rate, epsilon);
-//   }
-// }
-
-// TEST_F(EvalTest, testYawRate_5)
-// {
-//   waitForDummyNode();
-//   setTargetMetric("yaw_rate_CAR");
-
-//   const double yaw_rate = 5.0;
-
-//   for (double time = 0; time <= time_delay_ + 0.01; time += time_step_) {
-//     const auto objects = rotateObjects(
-//       makeStraightPredictedObjects(time, ObjectClassification::CAR, 0.0), yaw_rate * time);
-//     publishEgoTF(time);
-//     publishObjects(objects);
-//   }
-
-//   for (double time = time_delay_ + time_step_; time < time_delay_ * 2; time += time_step_) {
-//     const auto objects = rotateObjects(
-//       makeStraightPredictedObjects(time, ObjectClassification::CAR, 0.0), yaw_rate * time);
-//     publishEgoTF(time);
-//     EXPECT_NEAR(publishObjectsAndGetMetric(objects), yaw_rate, epsilon);
-//   }
-// }
-
-// TEST_F(EvalTest, testYawRate_minus_5)
-// {
-//   waitForDummyNode();
-//   setTargetMetric("yaw_rate_CAR");
-
-//   const double yaw_rate = 5.0;
-
-//   for (double time = 0; time <= time_delay_ + 0.01; time += time_step_) {
-//     const auto objects = rotateObjects(
-//       makeStraightPredictedObjects(time, ObjectClassification::CAR, 0.0), -yaw_rate * time);
-//     publishEgoTF(time);
-//     publishObjects(objects);
-//   }
-
-//   for (double time = time_delay_ + time_step_; time < time_delay_ * 2; time += time_step_) {
-//     const auto objects = rotateObjects(
-//       makeStraightPredictedObjects(time, ObjectClassification::CAR, 0.0), -yaw_rate * time);
-//     publishEgoTF(time);
-//     EXPECT_NEAR(publishObjectsAndGetMetric(objects), yaw_rate, epsilon);
-//   }
-// }
-// // TEST_F(EvalTest, testYawRate_rate01)
-// // ==========================================================================================
-
-// ==========================================================================================
-// historical objects count
-TEST_F(EvalTest, testHistoricalObjectsCount_CAR)
+TEST_F(EvalTest, testLateralDeviation_deviation0)
 {
   waitForDummyNode();
-  setTargetMetric("historical_objects_count_CAR");
+  setTargetMetric("lateral_deviation_CAR");
+
+  const double deviation = 0.0;
+  for (double time = 0; time < time_delay_; time += time_step_) {
+    const auto objects = makeDeviatedStraightPredictedObjects(time, deviation);
+    publishEgoTF(time);
+    publishObjects(objects);
+  }
+
+  const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_, deviation);
+  EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), 0.0, epsilon);
+}
+
+TEST_F(EvalTest, testLateralDeviation_deviation1)
+{
+  waitForDummyNode();
+  setTargetMetric("lateral_deviation_CAR");
+
+  const double deviation = 1.0;
+  for (double time = 0; time < time_delay_; time += time_step_) {
+    const auto objects = makeDeviatedStraightPredictedObjects(time, deviation);
+    publishEgoTF(time);
+    publishObjects(objects);
+  }
+
+  const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_ * 2, deviation);
+  EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), 0.0, epsilon);
+}
+
+TEST_F(EvalTest, testLateralDeviation_oscillation)
+{
+  waitForDummyNode();
+  setTargetMetric("lateral_deviation_CAR");
+
+  const double deviation = 1.0;
+  double sign = 1.0;
+  for (double time = 0; time < time_delay_ * 2; time += time_step_) {
+    PredictedObjects objects;
+    if (time == time_delay_) {
+      objects = makeDeviatedStraightPredictedObjects(time, 0);
+    } else {
+      objects = makeDeviatedStraightPredictedObjects(time, deviation * sign);
+      sign *= -1.0;
+    }
+    publishEgoTF(time);
+    publishObjects(objects);
+  }
+
+  const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_ * 2, deviation);
+  EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), 0.0, epsilon);
+}
+
+TEST_F(EvalTest, testLateralDeviation_distortion)
+{
+  waitForDummyNode();
+  setTargetMetric("lateral_deviation_CAR");
+
+  const double deviation = 1.0;
+  for (double time = 0; time < time_delay_ * 2; time += time_step_) {
+    PredictedObjects objects;
+    if (time == time_delay_) {
+      objects = makeDeviatedStraightPredictedObjects(time, deviation);
+    } else if (time == time_delay_ + time_step_) {
+      objects = makeDeviatedStraightPredictedObjects(time, -deviation);
+    } else {
+      objects = makeDeviatedStraightPredictedObjects(time, 0);
+    }
+    publishEgoTF(time);
+    publishObjects(objects);
+  }
+
+  const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_ * 2, deviation);
+  EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), deviation, epsilon);
+}
+
+TEST_F(EvalTest, testLateralDeviation_deviation0_PEDESTRIAN)
+{
+  waitForDummyNode();
+  setTargetMetric("lateral_deviation_PEDESTRIAN");
+
+  const double deviation = 0.0;
+  for (double time = 0; time < time_delay_; time += time_step_) {
+    const auto objects =
+      makeDeviatedStraightPredictedObjects(time, deviation, ObjectClassification::PEDESTRIAN);
+    publishEgoTF(time);
+    publishObjects(objects);
+  }
+
+  const auto last_objects =
+    makeDeviatedStraightPredictedObjects(time_delay_, deviation,
+    ObjectClassification::PEDESTRIAN);
+  EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), 0.0, epsilon);
+}
+// ==========================================================================================
+
+// ==========================================================================================
+// yaw deviation
+TEST_F(EvalTest, testYawDeviation_deviation0)
+{
+  waitForDummyNode();
+  setTargetMetric("yaw_deviation_CAR");
+
+  const double deviation = 0.0;
+  for (double time = 0; time < time_delay_; time += time_step_) {
+    const auto objects = makeDeviatedStraightPredictedObjects(time, deviation);
+    publishEgoTF(time);
+    publishObjects(objects);
+  }
+
+  const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_, deviation);
+  EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), 0.0, epsilon);
+}
+
+TEST_F(EvalTest, testYawDeviation_deviation1)
+{
+  waitForDummyNode();
+  setTargetMetric("yaw_deviation_CAR");
+
+  const double deviation = 1.0;
+  for (double time = 0; time < time_delay_; time += time_step_) {
+    const auto objects = makeDeviatedStraightPredictedObjects(time, deviation);
+    publishEgoTF(time);
+    publishObjects(objects);
+  }
+
+  const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_, deviation);
+  EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), 0.0, epsilon);
+}
+
+TEST_F(EvalTest, testYawDeviation_oscillation)
+{
+  waitForDummyNode();
+  setTargetMetric("yaw_deviation_CAR");
+
+  const double deviation = 1.0;
+  double sign = 1.0;
+  for (double time = 0; time < time_delay_ * 2; time += time_step_) {
+    PredictedObjects objects;
+    if (time == time_delay_) {
+      objects = makeDeviatedStraightPredictedObjects(time, 0);
+    } else {
+      objects = makeDeviatedStraightPredictedObjects(time, deviation * sign);
+      sign *= -1.0;
+    }
+    publishEgoTF(time);
+    publishObjects(objects);
+  }
+
+  const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_ * 2, deviation);
+  EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), 0.0, epsilon);
+}
+
+TEST_F(EvalTest, testYawDeviation_distortion)
+{
+  waitForDummyNode();
+  setTargetMetric("yaw_deviation_CAR");
+
+  const double deviation = 1.0;
+  for (double time = 0; time < time_delay_ * 2; time += time_step_) {
+    PredictedObjects objects;
+    if (time == time_delay_) {
+      objects = makeDeviatedStraightPredictedObjects(time, deviation);
+    } else if (time == time_delay_ + time_step_) {
+      objects = makeDeviatedStraightPredictedObjects(time, -deviation);
+    } else {
+      objects = makeDeviatedStraightPredictedObjects(time, 0);
+    }
+    publishEgoTF(time);
+    publishObjects(objects);
+  }
+
+  const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_ * 2, deviation);
+  EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), 0, epsilon);
+}
+
+TEST_F(EvalTest, testYawDeviation_oscillation_rotate)
+{
+  waitForDummyNode();
+  setTargetMetric("yaw_deviation_CAR");
+
+  const double deviation = 1.0;
+  const double yaw = M_PI / 4;
+  double sign = 1.0;
+  for (double time = 0; time < time_delay_ * 2; time += time_step_) {
+    PredictedObjects objects;
+    if (time == time_delay_) {
+      objects = rotateObjects(makeDeviatedStraightPredictedObjects(time, 0), yaw);
+    } else {
+      objects = rotateObjects(
+        makeDeviatedStraightPredictedObjects(time, deviation * sign), 2 * M_PI * std::rand());
+      sign *= -1.0;
+    }
+    publishEgoTF(time);
+    publishObjects(objects);
+  }
+
+  const auto last_objects = rotateObjects(
+    makeDeviatedStraightPredictedObjects(time_delay_ * 2, deviation), 2 * M_PI * std::rand());
+  EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), yaw, epsilon);
+}
+
+TEST_F(EvalTest, testYawDeviation_distortion_rotate)
+{
+  waitForDummyNode();
+  setTargetMetric("yaw_deviation_CAR");
+
+  const double deviation = 1.0;
+  const double yaw = M_PI / 4;
+  for (double time = 0; time < time_delay_ * 2; time += time_step_) {
+    PredictedObjects objects;
+    if (time == time_delay_) {
+      objects = rotateObjects(makeDeviatedStraightPredictedObjects(time, deviation), yaw);
+    } else if (time == time_delay_ + time_step_) {
+      objects = rotateObjects(
+        makeDeviatedStraightPredictedObjects(time, -deviation), 2 * M_PI * std::rand());
+    } else {
+      objects =
+        rotateObjects(makeDeviatedStraightPredictedObjects(time, 0), 2 * M_PI * std::rand());
+    }
+    publishEgoTF(time);
+    publishObjects(objects);
+  }
+
+  const auto last_objects = rotateObjects(
+    makeDeviatedStraightPredictedObjects(time_delay_ * 2, deviation), 2 * M_PI * std::rand());
+  EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), yaw, epsilon);
+}
+
+TEST_F(EvalTest, testYawDeviation_deviation0_PEDESTRIAN)
+{
+  waitForDummyNode();
+  setTargetMetric("yaw_deviation_PEDESTRIAN");
+
+  const double deviation = 0.0;
+  for (double time = 0; time < time_delay_; time += time_step_) {
+    const auto objects =
+      makeDeviatedStraightPredictedObjects(time, deviation, ObjectClassification::PEDESTRIAN);
+    publishEgoTF(time);
+    publishObjects(objects);
+  }
+
+  const auto last_objects =
+    makeDeviatedStraightPredictedObjects(time_delay_, deviation,
+    ObjectClassification::PEDESTRIAN);
+  EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), 0.0, epsilon);
+}
+
+// ==========================================================================================
+// predicted path deviation
+TEST_F(EvalTest, testPredictedPathDeviation_deviation0)
+{
+  waitForDummyNode();
+
+  setTargetMetric("predicted_path_deviation_CAR_5.00");
+
+  const auto init_objects = makeStraightPredictedObjects(0);
+  publishEgoTF();
+  publishObjects(init_objects);
+
+  const double deviation = 0.0;
+  for (double time = time_step_; time < time_delay_; time += time_step_) {
+    const auto objects = makeDeviatedStraightPredictedObjects(time, deviation);
+    publishEgoTF(time);
+    publishObjects(objects);
+  }
+  const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_, deviation);
+
+  const double num_points = time_delay_ / time_step_ + 1;
+  const double mean_deviation = deviation * (num_points - 1) / num_points;
+  publishEgoTF(time_delay_);
+  EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), mean_deviation, epsilon);
+}
+
+TEST_F(EvalTest, testPredictedPathDeviation_deviation1)
+{
+  waitForDummyNode();
+
+  setTargetMetric("predicted_path_deviation_CAR_5.00");
+
+  const auto init_objects = makeStraightPredictedObjects(0);
+  publishObjects(init_objects);
+
+  const double deviation = 1.0;
+  for (double time = time_step_; time < time_delay_; time += time_step_) {
+    const auto objects = makeDeviatedStraightPredictedObjects(time, deviation);
+    publishEgoTF(time);
+    publishObjects(objects);
+  }
+  const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_, deviation);
+
+  const double num_points = time_delay_ / time_step_ + 1;
+  const double mean_deviation = deviation * (num_points - 1) / num_points;
+  publishEgoTF(time_delay_);
+  EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), mean_deviation, epsilon);
+}
+
+TEST_F(EvalTest, testPredictedPathDeviation_deviation2)
+{
+  waitForDummyNode();
+
+  setTargetMetric("predicted_path_deviation_CAR_5.00");
+
+  const auto init_objects = makeStraightPredictedObjects(0);
+  publishEgoTF();
+  publishObjects(init_objects);
+
+  const double deviation = 2.0;
+  for (double time = time_step_; time < time_delay_; time += time_step_) {
+    const auto objects = makeDeviatedStraightPredictedObjects(time, deviation);
+    publishEgoTF(time);
+    publishObjects(objects);
+  }
+  const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_, deviation);
+
+  const double num_points = time_delay_ / time_step_ + 1;
+  const double mean_deviation = deviation * (num_points - 1) / num_points;
+  publishEgoTF(time_delay_);
+  EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), mean_deviation, epsilon);
+}
+
+TEST_F(EvalTest, testPredictedPathDeviation_deviation0_PEDESTRIAN)
+{
+  waitForDummyNode();
+
+  setTargetMetric("predicted_path_deviation_PEDESTRIAN_5.00");
+
+  const auto init_objects = makeStraightPredictedObjects(0, ObjectClassification::PEDESTRIAN);
+  publishEgoTF();
+  publishObjects(init_objects);
+
+  const double deviation = 0.0;
+  for (double time = time_step_; time < time_delay_; time += time_step_) {
+    const auto objects =
+      makeDeviatedStraightPredictedObjects(time, deviation, ObjectClassification::PEDESTRIAN);
+    publishEgoTF(time);
+    publishObjects(objects);
+  }
+  const auto last_objects =
+    makeDeviatedStraightPredictedObjects(time_delay_, deviation,
+    ObjectClassification::PEDESTRIAN);
+
+  const double num_points = time_delay_ / time_step_ + 1;
+  const double mean_deviation = deviation * (num_points - 1) / num_points;
+  publishEgoTF(time_delay_);
+  EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), mean_deviation, epsilon);
+}
+// ==========================================================================================
+
+// ==========================================================================================
+// predicted path deviation variance
+TEST_F(EvalTest, testPredictedPathDeviationVariance_deviation0)
+{
+  waitForDummyNode();
+
+  setTargetMetric("predicted_path_deviation_variance_CAR_5.00");
+
+  const auto init_objects = makeStraightPredictedObjects(0);
+  publishObjects(init_objects);
+
+  const double deviation = 0.0;
+  for (double time = time_step_; time < time_delay_; time += time_step_) {
+    const auto objects = makeDeviatedStraightPredictedObjects(time, deviation);
+    publishObjects(objects);
+  }
+  const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_, deviation);
+
+  EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), 0.0, epsilon);
+}
+
+TEST_F(EvalTest, testPredictedPathDeviationVariance_deviation1)
+{
+  waitForDummyNode();
+
+  setTargetMetric("predicted_path_deviation_variance_CAR_5.00");
+
+  const auto init_objects = makeStraightPredictedObjects(0);
+  publishObjects(init_objects);
+
+  const double deviation = 1.0;
+  for (double time = time_step_; time < time_delay_; time += time_step_) {
+    const auto objects = makeDeviatedStraightPredictedObjects(time, deviation);
+    publishObjects(objects);
+  }
+  const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_, deviation);
+
+  const double num_points = time_delay_ / time_step_ + 1;
+  // deviations
+  //   All    - 11 points (num_points)
+  //   0.0[m] -  1 points
+  //   1.0[m] - 10 points
+  const double mean_deviation = deviation * (num_points - 1) / num_points;
+  const double variance =
+    (pow(0.0 - mean_deviation, 2) + 10 * pow(1.0 - mean_deviation, 2)) / num_points;
+
+  EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), variance, epsilon);
+}
+
+TEST_F(EvalTest, testPredictedPathDeviationVariance_deviationIncreasing)
+{
+  waitForDummyNode();
+
+  setTargetMetric("predicted_path_deviation_variance_CAR_5.00");
+
+  const auto init_objects = makeStraightPredictedObjects(0);
+  publishObjects(init_objects);
+
+  const double deviation_step = 0.1;
+  double deviation = deviation_step;
+  for (double time = time_step_; time < time_delay_; time += time_step_) {
+    const auto objects = makeDeviatedStraightPredictedObjects(time, deviation);
+    publishObjects(objects);
+    deviation += deviation_step;
+  }
+  const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_, deviation);
+
+  const double num_points = time_delay_ / time_step_ + 1;
+  // deviations
+  //   All          - 11 points (num_points)
+  //   0.0[m]       -  1 points
+  //   0.1[m]       -  1 points
+  //   0.2[m]       -  1 points
+  //      :
+  //   0.9[m]       -  1 points
+  //   1.0[m]       -  1 points
+  const double mean_deviation = std::invoke([&]() {
+    double sum = 0.0;
+    for (size_t i = 0; i < num_points; ++i) {
+      sum += static_cast<double>(i) * deviation_step;
+    }
+    return sum / num_points;
+  });
+  double sum_squared_deviations = 0.0;
+  for (size_t i = 0; i < num_points; ++i) {
+    const double deviation = static_cast<double>(i) * deviation_step;
+    sum_squared_deviations += pow(deviation - mean_deviation, 2);
+  }
+  const double variance = sum_squared_deviations / num_points;
+
+  EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), variance, epsilon);
+}
+
+TEST_F(EvalTest, testPredictedPathDeviationVariance_deviationOscillating)
+{
+  waitForDummyNode();
+
+  setTargetMetric("predicted_path_deviation_variance_CAR_5.00");
+
+  const auto init_objects = makeStraightPredictedObjects(0);
+  publishObjects(init_objects);
+
+  const std::vector<double> deviations = {-0.1, -0.2, -0.1, 0.0, 0.1, 0.2, 0.1, 0.0, -0.1, -0.2};
+  for (size_t i = 0; i < deviations.size() - 1; ++i) {
+    const double time = static_cast<double>(i + 1) * time_step_;
+    const auto objects = makeDeviatedStraightPredictedObjects(time, deviations[i]);
+    publishObjects(objects);
+  }
+
+  const double num_points = deviations.size() + 1;
+  // deviations
+  //   All          - 11 points (num_points)
+  //   0.0[m]       -  1 points
+  //  -0.1[m]       -  1 points
+  //  -0.2[m]       -  1 points
+  //  -0.1[m]       -  1 points
+  //  -0.0[m]       -  1 points
+  //   0.1[m]       -  1 points
+  //   0.2[m]       -  1 points
+  //   0.1[m]       -  1 points
+  //   0.0[m]       -  1 points
+  //  -0.1[m]       -  1 points
+  //  -0.2[m]       -  1 points
+  const double mean_deviation =
+    std::accumulate(
+      deviations.begin(), deviations.end(), 0.0,
+      [](double sum, double deviation) { return sum + std::abs(deviation); }) /
+    num_points;
+
+  double sum_squared_deviations = pow(0 - mean_deviation, 2);
+  for (const auto deviation : deviations) {
+    sum_squared_deviations += pow(std::abs(deviation) - mean_deviation, 2);
+  }
+  const double variance = sum_squared_deviations / num_points;
+  const auto last_objects = makeDeviatedStraightPredictedObjects(time_delay_, deviations.back());
+  EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), variance, epsilon);
+}
+// ==========================================================================================
+
+// ==========================================================================================
+// yaw rate
+TEST_F(EvalTest, testYawRate_0)
+{
+  waitForDummyNode();
+  setTargetMetric("yaw_rate_CAR");
+
+  for (double time = 0; time <= time_delay_ + 0.01; time += time_step_) {
+    const auto objects = makeStraightPredictedObjects(time, ObjectClassification::CAR, 0.0);
+    publishEgoTF(time);
+    publishObjects(objects);
+  }
+
+  const auto last_objects =
+    makeStraightPredictedObjects(time_delay_ + time_step_, ObjectClassification::CAR, 0.0);
+  publishEgoTF(time_delay_ + time_step_);
+  EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), 0.0, epsilon);
+}
+
+TEST_F(EvalTest, testYawRate_01)
+{
+  waitForDummyNode();
+  setTargetMetric("yaw_rate_CAR");
+
+  const double yaw_rate = 0.1;
+
+  for (double time = 0; time <= time_delay_ + 0.01; time += time_step_) {
+    const auto objects = rotateObjects(
+      makeStraightPredictedObjects(time, ObjectClassification::CAR, 0.0), yaw_rate * time);
+    publishEgoTF(time);
+    publishObjects(objects);
+  }
+
+  for (double time = time_delay_ + time_step_; time < time_delay_ * 2; time += time_step_) {
+    const auto objects = rotateObjects(
+      makeStraightPredictedObjects(time, ObjectClassification::CAR, 0.0), yaw_rate * time);
+    publishEgoTF(time);
+    EXPECT_NEAR(publishObjectsAndGetMetric(objects), yaw_rate, epsilon);
+  }
+}
+
+TEST_F(EvalTest, testYawRate_minus_01)
+{
+  waitForDummyNode();
+  setTargetMetric("yaw_rate_CAR");
+
+  const double yaw_rate = 0.1;
+
+  for (double time = 0; time <= time_delay_ + 0.01; time += time_step_) {
+    const auto objects = rotateObjects(
+      makeStraightPredictedObjects(time, ObjectClassification::CAR, 0.0), -yaw_rate * time);
+    publishEgoTF(time);
+    publishObjects(objects);
+  }
+
+  for (double time = time_delay_ + time_step_; time < time_delay_ * 2; time += time_step_) {
+    const auto objects = rotateObjects(
+      makeStraightPredictedObjects(time, ObjectClassification::CAR, 0.0), -yaw_rate * time);
+    publishEgoTF(time);
+    EXPECT_NEAR(publishObjectsAndGetMetric(objects), yaw_rate, epsilon);
+  }
+}
+
+TEST_F(EvalTest, testYawRate_1)
+{
+  waitForDummyNode();
+  setTargetMetric("yaw_rate_CAR");
+
+  const double yaw_rate = 1.0;
+
+  for (double time = 0; time <= time_delay_ + 0.01; time += time_step_) {
+    const auto objects = rotateObjects(
+      makeStraightPredictedObjects(time, ObjectClassification::CAR, 0.0), yaw_rate * time);
+    publishEgoTF(time);
+    publishObjects(objects);
+  }
+
+  for (double time = time_delay_ + time_step_; time < time_delay_ * 2; time += time_step_) {
+    const auto objects = rotateObjects(
+      makeStraightPredictedObjects(time, ObjectClassification::CAR, 0.0), yaw_rate * time);
+    publishEgoTF(time);
+    EXPECT_NEAR(publishObjectsAndGetMetric(objects), yaw_rate, epsilon);
+  }
+}
+
+TEST_F(EvalTest, testYawRate_minus_1)
+{
+  waitForDummyNode();
+  setTargetMetric("yaw_rate_CAR");
+
+  const double yaw_rate = 1.0;
+
+  for (double time = 0; time <= time_delay_ + 0.01; time += time_step_) {
+    const auto objects = rotateObjects(
+      makeStraightPredictedObjects(time, ObjectClassification::CAR, 0.0), -yaw_rate * time);
+    publishEgoTF(time);
+    publishObjects(objects);
+  }
+
+  for (double time = time_delay_ + time_step_; time < time_delay_ * 2; time += time_step_) {
+    const auto objects = rotateObjects(
+      makeStraightPredictedObjects(time, ObjectClassification::CAR, 0.0), -yaw_rate * time);
+    publishEgoTF(time);
+    EXPECT_NEAR(publishObjectsAndGetMetric(objects), yaw_rate, epsilon);
+  }
+}
+
+TEST_F(EvalTest, testYawRate_5)
+{
+  waitForDummyNode();
+  setTargetMetric("yaw_rate_CAR");
+
+  const double yaw_rate = 5.0;
+
+  for (double time = 0; time <= time_delay_ + 0.01; time += time_step_) {
+    const auto objects = rotateObjects(
+      makeStraightPredictedObjects(time, ObjectClassification::CAR, 0.0), yaw_rate * time);
+    publishEgoTF(time);
+    publishObjects(objects);
+  }
+
+  for (double time = time_delay_ + time_step_; time < time_delay_ * 2; time += time_step_) {
+    const auto objects = rotateObjects(
+      makeStraightPredictedObjects(time, ObjectClassification::CAR, 0.0), yaw_rate * time);
+    publishEgoTF(time);
+    EXPECT_NEAR(publishObjectsAndGetMetric(objects), yaw_rate, epsilon);
+  }
+}
+
+TEST_F(EvalTest, testYawRate_minus_5)
+{
+  waitForDummyNode();
+  setTargetMetric("yaw_rate_CAR");
+
+  const double yaw_rate = 5.0;
+
+  for (double time = 0; time <= time_delay_ + 0.01; time += time_step_) {
+    const auto objects = rotateObjects(
+      makeStraightPredictedObjects(time, ObjectClassification::CAR, 0.0), -yaw_rate * time);
+    publishEgoTF(time);
+    publishObjects(objects);
+  }
+
+  for (double time = time_delay_ + time_step_; time < time_delay_ * 2; time += time_step_) {
+    const auto objects = rotateObjects(
+      makeStraightPredictedObjects(time, ObjectClassification::CAR, 0.0), -yaw_rate * time);
+    publishEgoTF(time);
+    EXPECT_NEAR(publishObjectsAndGetMetric(objects), yaw_rate, epsilon);
+  }
+}
+// ==========================================================================================
+
+// ==========================================================================================
+// average objects count
+TEST_F(EvalTest, testAverageObjectsCount_CAR)
+{
+  waitForDummyNode();
+  setTargetMetric("average_objects_count_CAR_r100.00_h10.00");
 
   for (double time = 0; time < time_delay_; time += time_step_) {
     publishEgoTF(time);
@@ -952,10 +986,10 @@ TEST_F(EvalTest, testHistoricalObjectsCount_CAR)
     epsilon);
 }
 
-TEST_F(EvalTest, testHistoricalObjectsCount_UNKNOWN)
+TEST_F(EvalTest, testAverageObjectsCount_UNKNOWN)
 {
   waitForDummyNode();
-  setTargetMetric("historical_objects_count_UNKNOWN");
+  setTargetMetric("average_objects_count_UNKNOWN_r100.00_h10.00");
 
   for (double time = 0; time < time_delay_; time += time_step_) {
     publishEgoTF(time);
@@ -971,10 +1005,10 @@ TEST_F(EvalTest, testHistoricalObjectsCount_UNKNOWN)
     mean_num_objects, epsilon);
 }
 
-TEST_F(EvalTest, testHistoricalObjectsCount_MultiClass)
+TEST_F(EvalTest, testAverageObjectsCount_MultiClass)
 {
   waitForDummyNode();
-  setTargetMetric("historical_objects_count_UNKNOWN");
+  setTargetMetric("average_objects_count_UNKNOWN_r100.00_h10.00");
 
   for (double time = 0; time < time_delay_; time += time_step_) {
     const size_t index = size_t(time / time_step_) % class_list_.size();
@@ -1009,10 +1043,10 @@ TEST_F(EvalTest, testHistoricalObjectsCount_MultiClass)
 
 // ==========================================================================================
 // interval objects count
-TEST_F(EvalTest, testIntervalObjectsCount_CAR)
+TEST_F(EvalTest, testIntervalAverageObjectsCount_CAR)
 {
   waitForDummyNode();
-  setTargetMetric("interval_objects_count_CAR");
+  setTargetMetric("interval_average_objects_count_CAR_r100.00_h10.00");
 
   for (double time = 0; time < time_delay_; time += time_step_) {
     publishEgoTF(time);
@@ -1027,10 +1061,10 @@ TEST_F(EvalTest, testIntervalObjectsCount_CAR)
     epsilon);
 }
 
-TEST_F(EvalTest, testIntervalObjectsCount_UNKNOWN)
+TEST_F(EvalTest, testIntervalAverageObjectsCount_UNKNOWN)
 {
   waitForDummyNode();
-  setTargetMetric("interval_objects_count_UNKNOWN");
+  setTargetMetric("interval_average_objects_count_UNKNOWN_r100.00_h10.00");
 
   for (double time = 0; time < time_delay_; time += time_step_) {
     publishEgoTF(time);
@@ -1046,10 +1080,10 @@ TEST_F(EvalTest, testIntervalObjectsCount_UNKNOWN)
     mean_num_objects, epsilon);
 }
 
-TEST_F(EvalTest, testIntervalObjectsCount_MultiClass)
+TEST_F(EvalTest, testIntervalAverageObjectsCount_MultiClass)
 {
   waitForDummyNode();
-  setTargetMetric("interval_objects_count_UNKNOWN");
+  setTargetMetric("interval_average_objects_count_UNKNOWN_r100.00_h10.00");
 
   // objects within the last `objects_count_window_seconds`
   // UNKNOWN: 1 frames
@@ -1082,4 +1116,105 @@ TEST_F(EvalTest, testIntervalObjectsCount_MultiClass)
     }
   }
 }
+// ==========================================================================================
+
+// ==========================================================================================
+// total objects count
+TEST_F(EvalTest, testTotalObjectsCount_CAR)
+{
+  waitForDummyNode();
+  setTargetMetric("total_objects_count_CAR_r100.00_h10.00");
+
+  for (double time = 0; time < time_delay_; time += time_step_) {
+    publishEgoTF(time);
+    publishObjects(makeStraightPredictedObjects(time));
+  }
+
+  const double num_objects = 1;
+  publishEgoTF(time_delay_);
+  EXPECT_NEAR(
+    publishObjectsAndGetMetric(makeStraightPredictedObjects(time_delay_)), num_objects, epsilon);
+}
+
+TEST_F(EvalTest, testTotalObjectsCount_UNKNOWN)
+{
+  waitForDummyNode();
+  setTargetMetric("total_objects_count_UNKNOWN_r100.00_h10.00");
+
+  for (double time = 0; time < time_delay_; time += time_step_) {
+    publishEgoTF(time);
+    publishObjects(makeStraightPredictedObjects(time, ObjectClassification::UNKNOWN));
+  }
+
+  const double num_objects = 1;
+  publishEgoTF(time_delay_);
+  EXPECT_NEAR(
+    publishObjectsAndGetMetric(
+      makeStraightPredictedObjects(time_delay_, ObjectClassification::UNKNOWN)),
+    num_objects, epsilon);
+}
+
+TEST_F(EvalTest, testTotalObjectsCount_DifferentCAR)
+{
+  waitForDummyNode();
+  setTargetMetric("total_objects_count_CAR_r100.00_h10.00");
+  constexpr double velocity = 0.0;
+  for (double time = 0; time < time_delay_; time += time_step_) {
+    publishEgoTF(time);
+    publishObjects(
+      makeStraightPredictedObjects(time, ObjectClassification::CAR, velocity, generateUUID()));
+  }
+
+  const double num_objects = 11.0;
+  publishEgoTF(time_delay_);
+  EXPECT_NEAR(
+    publishObjectsAndGetMetric(makeStraightPredictedObjects(
+      time_delay_, ObjectClassification::CAR, velocity, generateUUID())),
+    num_objects, epsilon);
+}
+
+TEST_F(EvalTest, testTotalObjectsCount_OutsideCAR)
+{
+  waitForDummyNode();
+  setTargetMetric("total_objects_count_CAR_r100.00_h10.00");
+
+  constexpr double velocity = 0.0;
+  const double offset = 100 / std::sqrt(2) + 1.;
+  for (double time = 0; time < time_delay_; time += time_step_) {
+    publishEgoTF(time);
+    publishObjects(moveObjects(
+      makeStraightPredictedObjects(time, ObjectClassification::CAR, velocity), offset, offset,
+      0.0));
+  }
+
+  const double num_objects = 0.0;
+  publishEgoTF(time_delay_);
+  EXPECT_NEAR(
+    publishObjectsAndGetMetric(moveObjects(
+      makeStraightPredictedObjects(time_delay_, ObjectClassification::CAR, velocity), offset,
+      offset, 0.0)),
+    num_objects, epsilon);
+}
+
+TEST_F(EvalTest, testTotalObjectsCount_OutsideHeightCAR)
+{
+  waitForDummyNode();
+  setTargetMetric("total_objects_count_CAR_r100.00_h10.00");
+
+  constexpr double velocity = 0.0;
+  for (double time = 0; time < time_delay_; time += time_step_) {
+    publishEgoTF(time);
+    publishObjects(moveObjects(
+      makeStraightPredictedObjects(time, ObjectClassification::CAR, velocity), 0., 0., 11.0));
+  }
+
+  const double num_objects = 0.0;
+  publishEgoTF(time_delay_);
+  EXPECT_NEAR(
+    publishObjectsAndGetMetric(moveObjects(
+      makeStraightPredictedObjects(time_delay_, ObjectClassification::CAR, velocity), 0., 0.,
+      11.0)),
+    num_objects, epsilon);
+}
+
 // ==========================================================================================

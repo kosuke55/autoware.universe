@@ -26,156 +26,55 @@ namespace perception_diagnostics
 using object_recognition_utils::convertLabelToString;
 using tier4_autoware_utils::inverseTransformPoint;
 
-DetectionCounter::DetectionCounter(
-  std::vector<std::string> ranges, double objects_count_window_seconds, double purge_seconds)
-: ranges_(ranges),
-  objects_count_window_seconds_(objects_count_window_seconds),
-  purge_seconds_(purge_seconds)
-{
-  // Initialize the data structures
-  for (auto & range : ranges_) {
-    for (std::uint8_t i = ObjectClassification::UNKNOWN; i < ObjectClassification::PEDESTRIAN + 1;
-         ++i) {
-      time_series_counts_[i][range] = std::vector<rclcpp::Time>();
-      seen_uuids_[i][range] = std::set<std::string>();
-    }
-  }
-}
-
-void DetectionCounter::addDetection(
-  const std::string uuid, const std::uint8_t classification, const std::string & range,
-  const rclcpp::Time & timestamp)
-{
-  unique_timestamps_.insert(timestamp).second;
-  seen_uuids_[classification][range].insert(uuid).second;
-
-  // Record the detection time for averaging
-  time_series_counts_[classification][range].push_back(timestamp);
-
-  // Purge old records if necessary
-  purgeOldRecords(timestamp);
-}
-
-std::unordered_map<std::uint8_t, std::unordered_map<std::string, double>>
-DetectionCounter::getAverageCount(double seconds) const
-{
-  std::unordered_map<std::uint8_t, std::unordered_map<std::string, double>> averages;
-  if (unique_timestamps_.size() == 0) {
-    return averages;
-  }
-  const rclcpp::Time cutoff_time = *unique_timestamps_.rbegin() - rclcpp::Duration::from_seconds(seconds);
-
-  for (auto & [classification, range_map] : time_series_counts_) {
-    for (auto & [range, timestamps] : range_map) {
-      // Calculate the number of detections within the given time window
-      const size_t count = std::count_if(
-        timestamps.begin(), timestamps.end(),
-        [&](const rclcpp::Time & time) { return time >= cutoff_time; });
-
-      // Calculate the number of unique frames within the given time window
-      const size_t frame_count = std::count_if(
-        unique_timestamps_.begin(), unique_timestamps_.end(),
-        [&](const rclcpp::Time & time) { return time >= cutoff_time; });
-
-      if (frame_count > 0) {
-        averages[classification][range] = static_cast<double>(count) / frame_count;
-      } else {
-        averages[classification][range] = 0;
-      }
-    }
-  }
-
-  return averages;
-}
-
-std::unordered_map<std::uint8_t, std::unordered_map<std::string, double>>
-DetectionCounter::getOverallAverageCount() const
-{
-  std::unordered_map<std::uint8_t, std::unordered_map<std::string, double>> averages;
-
-  for (auto & [classification, range_map] : time_series_counts_) {
-    for (auto & [range, timestamps] : range_map) {
-      const size_t count = timestamps.size();
-      const size_t frame_count = unique_timestamps_.size();
-      if (frame_count > 0) {
-        averages[classification][range] = static_cast<double>(count) / frame_count;
-      } else {
-        averages[classification][range] = 0;
-      }
-    }
-  }
-
-  return averages;
-}
-
-std::unordered_map<std::uint8_t, std::unordered_map<std::string, size_t>>
-DetectionCounter::getTotalCount() const
-{
-  std::unordered_map<std::uint8_t, std::unordered_map<std::string, size_t>> total_counts;
-  for (auto & [classification, range_map] : seen_uuids_) {
-    for (auto & [range, uuids] : range_map) {
-      total_counts[classification][range] = uuids.size();
-    }
-  }
-
-  return total_counts;
-}
-
-void DetectionCounter::purgeOldRecords(rclcpp::Time current_time)
-{
-  const rclcpp::Time cutoff_time = current_time - rclcpp::Duration::from_seconds(purge_seconds_);
-
-  // Remove timestamps older than purge_seconds_ from time_series_counts_
-  for (auto & [classification, range_map] : time_series_counts_) {
-    for (auto & [range, timestamps] : range_map) {
-      timestamps.erase(
-        std::remove_if(
-          timestamps.begin(), timestamps.end(),
-          [&](const rclcpp::Time & time) { return time < cutoff_time; }),
-        timestamps.end());
-    }
-  }
-
-  // Remove timestamps older than purge_seconds_ from unique_timestamps_
-  while (!unique_timestamps_.empty() && *unique_timestamps_.begin() < cutoff_time) {
-    unique_timestamps_.erase(unique_timestamps_.begin());
-  }
-}
-
 std::optional<MetricStatMap> MetricsCalculator::calculate(const Metric & metric) const
 {
-  if (object_map_.empty()) {
-    return {};
+  // clang-format off
+  const bool use_past_objects = metric == Metric::lateral_deviation        ||
+                                metric == Metric::yaw_deviation            ||
+                                metric == Metric::predicted_path_deviation ||
+                                metric == Metric::yaw_rate;
+  // clang-format on
+
+  // todo(kosuke55): todo separate function and add timestamp of checked objects to diagnostics
+  if (use_past_objects) {
+    if (object_map_.empty()) {
+      return {};
+    }
+    // time delay is max element of parameters_->prediction_time_horizons
+    const double time_delay = getTimeDelay();
+    const auto target_stamp = current_stamp_ - rclcpp::Duration::from_seconds(time_delay);
+    if (!hasPassedTime(target_stamp)) {
+      return {};
+    }
+    const auto target_stamp_objects = getObjectsByStamp(target_stamp);
+
+    // extract moving objects
+    const auto moving_objects = filterObjectsByVelocity(
+      target_stamp_objects, parameters_->stopped_velocity_threshold,
+      /*remove_above_threshold=*/false);
+    const auto class_moving_objects_map = separateObjectsByClass(moving_objects);
+
+    // extract stopped objects
+    const auto stopped_objects =
+      filterObjectsByVelocity(target_stamp_objects, parameters_->stopped_velocity_threshold);
+    const auto class_stopped_objects_map = separateObjectsByClass(stopped_objects);
+
+    switch (metric) {
+      case Metric::lateral_deviation:
+        return calcLateralDeviationMetrics(class_moving_objects_map);
+      case Metric::yaw_deviation:
+        return calcYawDeviationMetrics(class_moving_objects_map);
+      case Metric::predicted_path_deviation:
+        return calcPredictedPathDeviationMetrics(class_moving_objects_map);
+      case Metric::yaw_rate:
+        return calcYawRateMetrics(class_stopped_objects_map);
+      default:
+        return {};
+    }
   }
 
-  // time delay is max element of parameters_->prediction_time_horizons
-  const double time_delay = getTimeDelay();
-  const auto target_stamp = current_stamp_ - rclcpp::Duration::from_seconds(time_delay);
-  if (!hasPassedTime(target_stamp)) {
-    return {};
-  }
-  const auto target_stamp_objects = getObjectsByStamp(target_stamp);
-
-  // extract moving objects
-  const auto moving_objects = filterObjectsByVelocity(
-    target_stamp_objects, parameters_->stopped_velocity_threshold,
-    /*remove_above_threshold=*/false);
-  const auto class_moving_objects_map = separateObjectsByClass(moving_objects);
-
-  // extract stopped objects
-  const auto stopped_objects =
-    filterObjectsByVelocity(target_stamp_objects, parameters_->stopped_velocity_threshold);
-  const auto class_stopped_objects_map = separateObjectsByClass(stopped_objects);
-
+  // use latest objects
   switch (metric) {
-    case Metric::lateral_deviation:
-      return calcLateralDeviationMetrics(class_moving_objects_map);
-    case Metric::yaw_deviation:
-      return calcYawDeviationMetrics(class_moving_objects_map);
-    case Metric::predicted_path_deviation:
-      return calcPredictedPathDeviationMetrics(class_moving_objects_map);
-    case Metric::yaw_rate:
-      return calcYawRateMetrics(class_stopped_objects_map);
     case Metric::objects_count:
       return calcObjectsCountMetrics();
     default:
@@ -331,6 +230,11 @@ MetricStatMap MetricsCalculator::calcLateralDeviationMetrics(
 {
   MetricStatMap metric_stat_map{};
   for (const auto & [label, objects] : class_objects_map) {
+    if (
+      parameters_->object_parameters.find(label) == parameters_->object_parameters.end() ||
+      !parameters_->object_parameters.at(label).check_lateral_deviation) {
+      continue;
+    }
     Stat<double> stat{};
     const auto stamp = rclcpp::Time(objects.header.stamp);
     for (const auto & object : objects.objects) {
@@ -355,6 +259,11 @@ MetricStatMap MetricsCalculator::calcYawDeviationMetrics(
 {
   MetricStatMap metric_stat_map{};
   for (const auto & [label, objects] : class_objects_map) {
+    if (
+      parameters_->object_parameters.find(label) == parameters_->object_parameters.end() ||
+      !parameters_->object_parameters.at(label).check_yaw_deviation) {
+      continue;
+    }
     Stat<double> stat{};
     const auto stamp = rclcpp::Time(objects.header.stamp);
     for (const auto & object : objects.objects) {
@@ -381,6 +290,11 @@ MetricStatMap MetricsCalculator::calcPredictedPathDeviationMetrics(
 
   MetricStatMap metric_stat_map{};
   for (const auto & [label, objects] : class_objects_map) {
+    if (
+      parameters_->object_parameters.find(label) == parameters_->object_parameters.end() ||
+      !parameters_->object_parameters.at(label).check_predicted_path_deviation) {
+      continue;
+    }
     for (const double time_horizon : time_horizons) {
       const auto metrics = calcPredictedPathDeviationMetrics(objects, time_horizon);
       std::ostringstream stream;
@@ -505,7 +419,6 @@ MetricStatMap MetricsCalculator::calcYawRateMetrics(const ClassObjectsMap & clas
   // calculate yaw rate for each object
 
   MetricStatMap metric_stat_map{};
-
   for (const auto & [label, objects] : class_objects_map) {
     Stat<double> stat{};
     const auto stamp = rclcpp::Time(objects.header.stamp);
@@ -546,106 +459,55 @@ MetricStatMap MetricsCalculator::calcYawRateMetrics(const ClassObjectsMap & clas
 MetricStatMap MetricsCalculator::calcObjectsCountMetrics() const
 {
   MetricStatMap metric_stat_map;
-
   // calculate the average number of objects in the detection area in all past frames
   const auto overall_average_count = detection_counter_.getOverallAverageCount();
-
-  for (const auto & [label, count] : historical_detection_count_map_) {
-    // metric_stat_map["historical_objects_count_" + convertLabelToString(label)].add(
-    //   static_cast<double>(count) / static_cast<double>(objects_count_frame_));
-    metric_stat_map["historical_objects_count_" + convertLabelToString(label)].add(
-      overall_average_count.at(label).at("100.0"));
-  }
-
-  // calculate the average number of objects in the detection area in the past
-  // `objects_count_window_seconds`
-
-  const auto average_count =
-    detection_counter_.getAverageCount(parameters_->objects_count_window_seconds);
-  DetectionCountMap interval_detection_count_map;
-  for (const auto & [detection_count_map, stamp] : detection_count_vector_) {
-    for (const auto & [label, count] : detection_count_map) {
-      interval_detection_count_map[label] += count;
+  for (const auto & [label, range_and_count] : overall_average_count) {
+    for (const auto & [range, count] : range_and_count) {
+      metric_stat_map["average_objects_count_" + convertLabelToString(label) + "_" + range].add(
+        count);
     }
   }
-  for (const auto & [label, count] : interval_detection_count_map) {
-    Stat<double> stat;
-    // stat.add(static_cast<double>(count) / static_cast<double>(detection_count_vector_.size()));
-    stat.add(average_count.at(label).at("100.0"));
-    metric_stat_map["interval_objects_count_" + convertLabelToString(label)] = stat;
+  // calculate the average number of objects in the detection area in the past
+  // `objects_count_window_seconds`
+  const auto average_count =
+    detection_counter_.getAverageCount(parameters_->objects_count_window_seconds);
+  for (const auto & [label, range_and_count] : average_count) {
+    for (const auto & [range, count] : range_and_count) {
+      metric_stat_map["interval_average_objects_count_" + convertLabelToString(label) + "_" + range]
+        .add(count);
+    }
+  }
+
+  // calculate the total number of objects in the detection area
+  const auto total_count = detection_counter_.getTotalCount();
+  for (const auto & [label, range_and_count] : total_count) {
+    for (const auto & [range, count] : range_and_count) {
+      metric_stat_map["total_objects_count_" + convertLabelToString(label) + "_" + range].add(
+        count);
+    }
   }
 
   return metric_stat_map;
 }
 
-void MetricsCalculator::setPredictedObjects(const PredictedObjects & objects)
+void MetricsCalculator::setPredictedObjects(
+  const PredictedObjects & objects, const tf2_ros::Buffer & tf_buffer)
 {
   current_stamp_ = objects.header.stamp;
 
   // store objects to check deviation
   {
-    auto deviation_check_objects = objects;
-    filterDeviationCheckObjects(deviation_check_objects, parameters_->object_parameters);
     using tier4_autoware_utils::toHexString;
-    for (const auto & object : deviation_check_objects.objects) {
+    for (const auto & object : objects.objects) {
       std::string uuid = toHexString(object.object_id);
       updateObjects(uuid, current_stamp_, object);
     }
     deleteOldObjects(current_stamp_);
     updateHistoryPath();
   }
-}
 
-void MetricsCalculator::updateObjectsCountMap(
-  const PredictedObjects & objects, const tf2_ros::Buffer & tf_buffer)
-{
-  const auto objects_frame_id = objects.header.frame_id;
-  objects_count_frame_++;
-  DetectionCountMap current_detection_count_map;
-
-  geometry_msgs::msg::TransformStamped transform_stamped;
-  try {
-    transform_stamped = tf_buffer.lookupTransform(
-      "base_link", objects_frame_id, tf2::TimePointZero, tf2::durationFromSec(1.0));
-  } catch (const tf2::TransformException & ex) {
-    return;
-  }
-
-  for (const auto & object : objects.objects) {
-    const auto label = object_recognition_utils::getHighestProbLabel(object.classification);
-
-    geometry_msgs::msg::PoseStamped pose_in, pose_out;
-    pose_in.header.frame_id = objects_frame_id;
-    pose_in.pose = object.kinematics.initial_pose_with_covariance.pose;
-
-    // Transform the object's pose into the 'base_link' coordinate frame
-    tf2::doTransform(pose_in, pose_out, transform_stamped);
-
-    const double distance_to_base_link =
-      std::hypot(pose_out.pose.position.x, pose_out.pose.position.y);
-
-    // If the pose is within the detection_radius and below a detection_height, increment the count
-    const bool is_within_detection_radius = distance_to_base_link < parameters_->detection_radius;
-    const bool is_below_detection_height = pose_out.pose.position.z < parameters_->detection_height;
-    if (is_within_detection_radius && is_below_detection_height) {
-      historical_detection_count_map_[label]++;
-      current_detection_count_map[label]++;
-
-      detection_counter_.addDetection(
-        tier4_autoware_utils::toHexString(object.object_id), label, "100.0", objects.header.stamp);
-    }
-  }
-
-  detection_count_vector_.emplace_back(current_detection_count_map, current_stamp_);
-
-  // remove the data older than `objects_count_window_seconds` before the current time
-  const auto is_old = [&](const auto & pair) {
-    return pair.second < current_stamp_ - rclcpp::Duration::from_seconds(
-                                            parameters_->objects_count_window_seconds);
-  };
-  detection_count_vector_.erase(
-    std::remove_if(detection_count_vector_.begin(), detection_count_vector_.end(), is_old),
-    detection_count_vector_.end());
+  // store objects to calculate object count
+  detection_counter_.addObjects(objects, tf_buffer);
 }
 
 void MetricsCalculator::deleteOldObjects(const rclcpp::Time stamp)

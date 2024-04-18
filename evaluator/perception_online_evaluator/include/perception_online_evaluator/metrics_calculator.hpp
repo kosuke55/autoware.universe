@@ -15,6 +15,7 @@
 #ifndef PERCEPTION_ONLINE_EVALUATOR__METRICS_CALCULATOR_HPP_
 #define PERCEPTION_ONLINE_EVALUATOR__METRICS_CALCULATOR_HPP_
 
+#include "perception_online_evaluator/metrics/detection_count.hpp"
 #include "perception_online_evaluator/metrics/deviation_metrics.hpp"
 #include "perception_online_evaluator/metrics/metric.hpp"
 #include "perception_online_evaluator/parameters.hpp"
@@ -44,6 +45,7 @@ using autoware_auto_perception_msgs::msg::PredictedObject;
 using autoware_auto_perception_msgs::msg::PredictedObjects;
 using geometry_msgs::msg::Point;
 using geometry_msgs::msg::Pose;
+using metrics::DetectionCounter;
 using unique_identifier_msgs::msg::UUID;
 
 struct ObjectData
@@ -94,44 +96,11 @@ struct DetectionCountMap : std::unordered_map<std::uint8_t, int>
   }
 };
 
-class DetectionCounter
-{
-public:
-  DetectionCounter(
-    std::vector<std::string> ranges, double objects_count_window_seconds, double purge_seconds);
-
-  void addDetection(
-    const std::string uuid, const std::uint8_t classification, const std::string & range,
-    const rclcpp::Time & timestamp);
-  std::unordered_map<std::uint8_t, std::unordered_map<std::string, double>> getAverageCount(
-    double seconds) const;
-  std::unordered_map<std::uint8_t, std::unordered_map<std::string, double>>
-  getOverallAverageCount() const;
-  std::unordered_map<std::uint8_t, std::unordered_map<std::string, size_t>> getTotalCount() const;
-  std::set<rclcpp::Time> unique_timestamps_;
-
-private:
-  void purgeOldRecords(rclcpp::Time current_time);
-
-  std::vector<std::string> ranges_;
-  double objects_count_window_seconds_;
-  double purge_seconds_;
-
-  // Structures for storing detection counts and UUIDs for uniqueness checks
-  std::unordered_map<std::uint8_t, std::unordered_map<std::string, std::vector<rclcpp::Time>>>
-    time_series_counts_;
-  std::unordered_map<std::uint8_t, std::unordered_map<std::string, std::set<std::string>>>
-    seen_uuids_;
-};
-
 class MetricsCalculator
 {
 public:
   explicit MetricsCalculator(const std::shared_ptr<Parameters> & parameters)
-  : parameters_(parameters),
-    detection_counter_(
-      std::vector<std::string>{"50.0", "100.0", "150.0", "200.0"},
-      parameters->objects_count_window_seconds, 36000)
+  : parameters_(parameters), detection_counter_(parameters)
   {
   }
 
@@ -145,8 +114,9 @@ public:
   /**
    * @brief set the dynamic objects used to calculate obstacle metrics
    * @param [in] objects predicted objects
+   * @param [in] tf_buffer tf buffer
    */
-  void setPredictedObjects(const PredictedObjects & objects);
+  void setPredictedObjects(const PredictedObjects & objects, const tf2_ros::Buffer & tf_buffer);
 
   void setEgoPose(const geometry_msgs::msg::Pose & pose) { ego_pose_ = pose; }
 

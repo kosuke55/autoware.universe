@@ -28,7 +28,13 @@ namespace perception_diagnostics
 
 struct ObjectParameter
 {
-  bool check_deviation{false};
+  bool check_lateral_deviation{false};
+  bool check_yaw_deviation{false};
+  bool check_predicted_path_deviation{false};
+  bool check_yaw_rate{false};
+  bool check_total_objects_count{false};
+  bool check_average_objects_count{false};
+  bool check_interval_average_objects_count{false};
 };
 
 struct DebugMarkerParameter
@@ -49,8 +55,9 @@ struct Parameters
   size_t smoothing_window_size{0};
   std::vector<double> prediction_time_horizons;
   double stopped_velocity_threshold{0.0};
-  double detection_radius;
-  double detection_height;
+  std::vector<double> detection_radius_list;
+  std::vector<double> detection_height_list;
+  double detection_count_purge_seconds;
   double objects_count_window_seconds;
   DebugMarkerParameter debug_marker_parameters;
   // parameters depend on object class
