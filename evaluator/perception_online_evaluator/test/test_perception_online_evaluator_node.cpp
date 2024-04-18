@@ -416,8 +416,7 @@ TEST_F(EvalTest, testLateralDeviation_deviation0_PEDESTRIAN)
   }
 
   const auto last_objects =
-    makeDeviatedStraightPredictedObjects(time_delay_, deviation,
-    ObjectClassification::PEDESTRIAN);
+    makeDeviatedStraightPredictedObjects(time_delay_, deviation, ObjectClassification::PEDESTRIAN);
   EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), 0.0, epsilon);
 }
 // ==========================================================================================
@@ -569,8 +568,7 @@ TEST_F(EvalTest, testYawDeviation_deviation0_PEDESTRIAN)
   }
 
   const auto last_objects =
-    makeDeviatedStraightPredictedObjects(time_delay_, deviation,
-    ObjectClassification::PEDESTRIAN);
+    makeDeviatedStraightPredictedObjects(time_delay_, deviation, ObjectClassification::PEDESTRIAN);
   EXPECT_NEAR(publishObjectsAndGetMetric(last_objects), 0.0, epsilon);
 }
 
@@ -665,8 +663,7 @@ TEST_F(EvalTest, testPredictedPathDeviation_deviation0_PEDESTRIAN)
     publishObjects(objects);
   }
   const auto last_objects =
-    makeDeviatedStraightPredictedObjects(time_delay_, deviation,
-    ObjectClassification::PEDESTRIAN);
+    makeDeviatedStraightPredictedObjects(time_delay_, deviation, ObjectClassification::PEDESTRIAN);
 
   const double num_points = time_delay_ / time_step_ + 1;
   const double mean_deviation = deviation * (num_points - 1) / num_points;
