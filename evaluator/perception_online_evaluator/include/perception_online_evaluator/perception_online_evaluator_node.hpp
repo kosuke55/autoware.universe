@@ -59,22 +59,12 @@ public:
    */
   void onObjects(const PredictedObjects::ConstSharedPtr objects_msg);
 
-  /**
-   * @brief callback on receiving an odometry
-   * @param [in] odometry_msg received odometry message
-   */
-  // void onOdometry(const Odometry::ConstSharedPtr odom_msg)
-  // {
-  //   metrics_calculator_.setEgoPose(odometry_msg->pose.pose);
-  // }
-
   DiagnosticStatus generateDiagnosticStatus(
     const std::string metric, const Stat<double> & metric_stat) const;
 
 private:
   // Subscribers and publishers
   rclcpp::Subscription<PredictedObjects>::SharedPtr objects_sub_;
-  rclcpp::Subscription<Odometry>::SharedPtr odom_sub_;
   rclcpp::Publisher<DiagnosticArray>::SharedPtr metrics_pub_;
   rclcpp::Publisher<MarkerArray>::SharedPtr pub_marker_;
 
