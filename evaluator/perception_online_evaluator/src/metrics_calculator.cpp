@@ -15,6 +15,7 @@
 #include "perception_online_evaluator/metrics_calculator.hpp"
 
 #include "motion_utils/trajectory/trajectory.hpp"
+#include "object_recognition_utils/object_classification.hpp"
 #include "object_recognition_utils/object_recognition_utils.hpp"
 #include "tier4_autoware_utils/geometry/geometry.hpp"
 
@@ -23,6 +24,7 @@
 namespace perception_diagnostics
 {
 using object_recognition_utils::convertLabelToString;
+using tier4_autoware_utils::inverseTransformPoint;
 
 std::optional<MetricStatMap> MetricsCalculator::calculate(const Metric & metric) const
 {
@@ -58,6 +60,8 @@ std::optional<MetricStatMap> MetricsCalculator::calculate(const Metric & metric)
       return calcPredictedPathDeviationMetrics(class_moving_objects_map);
     case Metric::yaw_rate:
       return calcYawRateMetrics(class_stopped_objects_map);
+    case Metric::objects_count:
+      return calcObjectsCountMetrics();
     default:
       return {};
   }
@@ -423,7 +427,43 @@ MetricStatMap MetricsCalculator::calcYawRateMetrics(const ClassObjectsMap & clas
   return metric_stat_map;
 }
 
-void MetricsCalculator::setPredictedObjects(const PredictedObjects & objects)
+MetricStatMap MetricsCalculator::calcObjectsCountMetrics() const
+{
+  MetricStatMap metric_stat_map;
+
+  // calculate the average number of objects in the detection area in all past frames
+  const auto overall_average_count = detection_counter_.getOverallAverageCount();
+
+  for (const auto & [label, count] : historical_detection_count_map_) {
+    // metric_stat_map["historical_objects_count_" + convertLabelToString(label)].add(
+    //   static_cast<double>(count) / static_cast<double>(objects_count_frame_));
+    metric_stat_map["historical_objects_count_" + convertLabelToString(label)].add(
+      overall_average_count.at(label).at("100.0"));
+  }
+
+  // calculate the average number of objects in the detection area in the past
+  // `objects_count_window_seconds`
+
+  const auto average_count =
+    detection_counter_.getAverageCount(parameters_->objects_count_window_seconds);
+  DetectionCountMap interval_detection_count_map;
+  for (const auto & [detection_count_map, stamp] : detection_count_vector_) {
+    for (const auto & [label, count] : detection_count_map) {
+      interval_detection_count_map[label] += count;
+    }
+  }
+  for (const auto & [label, count] : interval_detection_count_map) {
+    Stat<double> stat;
+    // stat.add(static_cast<double>(count) / static_cast<double>(detection_count_vector_.size()));
+    stat.add(average_count.at(label).at("100.0"));
+    metric_stat_map["interval_objects_count_" + convertLabelToString(label)] = stat;
+  }
+
+  return metric_stat_map;
+}
+
+void MetricsCalculator::setPredictedObjects(
+  const PredictedObjects & objects, const tf2_ros::Buffer & tf_buffer);
 {
   current_stamp_ = objects.header.stamp;
 
@@ -439,6 +479,9 @@ void MetricsCalculator::setPredictedObjects(const PredictedObjects & objects)
     deleteOldObjects(current_stamp_);
     updateHistoryPath();
   }
+
+  // store objects to calculate object count
+  detection_counter_.addObjects(objects, tf_buffer_);
 }
 
 void MetricsCalculator::deleteOldObjects(const rclcpp::Time stamp)
