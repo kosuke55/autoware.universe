@@ -991,33 +991,35 @@ calcCurvature<std::vector<autoware_planning_msgs::msg::TrajectoryPoint>>(
  * curvature calculation
  */
 template <class T>
-std::vector<std::pair<double, double>> calcCurvatureAndArcLength(const T & points)
+std::vector<std::pair<double, std::pair<double, double>>> calcCurvatureAndArcLength(const T & points)
 {
   // Note that arclength is for the segment, not the sum.
-  std::vector<std::pair<double, double>> curvature_arc_length_vec;
-  curvature_arc_length_vec.emplace_back(0.0, 0.0);
+  std::vector<std::pair<double, std::pair<double, double>>> curvature_arc_length_vec;
+  // curvature_arc_length_vec.emplace_back(0.0, 0.0);
+  curvature_arc_length_vec.emplace_back(0.0, std::make_pair(0.0, 0.0));
   for (size_t i = 1; i < points.size() - 1; ++i) {
     const auto p1 = autoware::universe_utils::getPoint(points.at(i - 1));
     const auto p2 = autoware::universe_utils::getPoint(points.at(i));
     const auto p3 = autoware::universe_utils::getPoint(points.at(i + 1));
     const double curvature = autoware::universe_utils::calcCurvature(p1, p2, p3);
-    const double arc_length =
-      autoware::universe_utils::calcDistance2d(points.at(i - 1), points.at(i)) +
-      autoware::universe_utils::calcDistance2d(points.at(i), points.at(i + 1));
+    const std::pair<double, double> arc_length{
+      autoware::universe_utils::calcDistance2d(p1, p2),
+      autoware::universe_utils::calcDistance2d(p2, p3)};
     curvature_arc_length_vec.emplace_back(curvature, arc_length);
   }
-  curvature_arc_length_vec.emplace_back(0.0, 0.0);
+  // curvature_arc_length_vec.emplace_back(0.0, 0.0);
+  curvature_arc_length_vec.emplace_back(0.0, std::make_pair(0.0, 0.0));
 
   return curvature_arc_length_vec;
 }
 
-extern template std::vector<std::pair<double, double>>
+extern template std::vector<std::pair<double, std::pair<double, double>>>
 calcCurvatureAndArcLength<std::vector<autoware_planning_msgs::msg::PathPoint>>(
   const std::vector<autoware_planning_msgs::msg::PathPoint> & points);
-extern template std::vector<std::pair<double, double>>
+extern template std::vector<std::pair<double, std::pair<double, double>>>
 calcCurvatureAndArcLength<std::vector<tier4_planning_msgs::msg::PathPointWithLaneId>>(
   const std::vector<tier4_planning_msgs::msg::PathPointWithLaneId> & points);
-extern template std::vector<std::pair<double, double>>
+extern template std::vector<std::pair<double, std::pair<double, double>>>
 calcCurvatureAndArcLength<std::vector<autoware_planning_msgs::msg::TrajectoryPoint>>(
   const std::vector<autoware_planning_msgs::msg::TrajectoryPoint> & points);
 

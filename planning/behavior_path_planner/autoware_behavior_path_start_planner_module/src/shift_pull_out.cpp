@@ -229,6 +229,7 @@ std::vector<PullOutPath> ShiftPullOut::calcPullOutPaths(
   const double minimum_lateral_acc = parameters_.minimum_lateral_acc;
   const double maximum_lateral_acc = parameters_.maximum_lateral_acc;
   const double maximum_curvature = parameters_.maximum_curvature;
+  const double end_pose_curvature_threshold = parameters_.end_pose_curvature_threshold;
   const double minimum_shift_pull_out_distance = parameters_.minimum_shift_pull_out_distance;
   const int lateral_acceleration_sampling_num = parameters_.lateral_acceleration_sampling_num;
 
@@ -306,8 +307,35 @@ std::vector<PullOutPath> ShiftPullOut::calcPullOutPaths(
     // distance.
     const double pull_out_distance_converted = calcBeforeShiftedArcLength(
       road_lane_reference_path_from_ego, pull_out_distance, shift_length);
-    const double before_shifted_pull_out_distance =
+    const double before_shifted_pull_out_distance_tmp =
       std::max(pull_out_distance, pull_out_distance_converted);
+
+    const auto curvatures_and_segment_lengths =
+      autoware::motion_utils::calcCurvatureAndArcLength(road_lane_reference_path_from_ego.points);
+    std::cerr << "------------------------------------" << std::endl;
+    std::cerr << "lateral_acc: " << lateral_acc;
+    const double before_shifted_pull_out_distance = std::invoke([&]() -> double {
+      double arc_length = 0.0;
+      for (size_t i = 0; i < curvatures_and_segment_lengths.size(); ++i) {
+        const auto & [signed_curvature, segment_length] = curvatures_and_segment_lengths.at(i);
+
+        const double curvature = std::abs(signed_curvature);
+
+        arc_length += i == curvatures_and_segment_lengths.size()-1
+                       ? segment_length.first + segment_length.second
+                      : segment_length.first;
+        std::cerr << "curvature: " << curvature << ", arc_length: " << arc_length << std::endl;
+        if (arc_length > before_shifted_pull_out_distance_tmp) {
+          if (curvature < end_pose_curvature_threshold) {
+            std::cerr << "return arc_length: " << arc_length << " before_shifted_pull_out_distance_tmp: " << before_shifted_pull_out_distance_tmp << std::endl;
+            return arc_length;
+          }
+        }
+      }
+      std::cerr << "return before_shifted_pull_out_distance_tmp: " << before_shifted_pull_out_distance_tmp
+                << std::endl;
+      return before_shifted_pull_out_distance_tmp;
+    });
 
     // if before_shifted_pull_out_distance is too short, shifting path fails, so add non shifted
     if (
@@ -423,8 +451,17 @@ double ShiftPullOut::calcBeforeShiftedArcLength(
   double before_arc_length{0.0};
   double after_arc_length{0.0};
 
-  for (const auto & [k, segment_length] :
-       autoware::motion_utils::calcCurvatureAndArcLength(path.points)) {
+  // for (const auto & [k, segment_length_pair] :
+      //  autoware::motion_utils::calcCurvatureAndArcLength(path.points)) {
+
+  const auto curvatures_and_segment_lengths =
+  autoware::motion_utils::calcCurvatureAndArcLength(path.points);
+  for (size_t i = 0; i < curvatures_and_segment_lengths.size(); ++i) {
+    const auto & [k, segment_length_pair] = curvatures_and_segment_lengths.at(i);
+const double segment_length = i == curvatures_and_segment_lengths.size()-1
+                               ? segment_length_pair.first + segment_length_pair.second
+                               : segment_length_pair.first;
+    
     // after shifted segment length
     const double after_segment_length =
       k < 0 ? segment_length * (1 - k * dr) : segment_length / (1 + k * dr);

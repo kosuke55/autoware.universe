@@ -308,8 +308,16 @@ double ShiftPullOver::calcBeforeShiftedArcLength(
 
   double before_arc_length{0.0};
   double after_arc_length{0.0};
-  for (const auto & [k, segment_length] :
-       autoware::motion_utils::calcCurvatureAndArcLength(reversed_path.points)) {
+
+  const auto curvature_and_segment_length =
+  autoware::motion_utils::calcCurvatureAndArcLength(reversed_path.points);
+
+  for (size_t i = 1; i < curvature_and_segment_length.size(); ++i) {
+    const auto & [k, segment_length_pair] = curvature_and_segment_length[i];
+    const double segment_length = i == curvature_and_segment_length.size() - 1
+      ? segment_length_pair.first + segment_length_pair.second
+      : segment_length_pair.first;
+
     // after shifted segment length
     const double after_segment_length =
       k > 0 ? segment_length * (1 + k * dr) : segment_length / (1 - k * dr);
@@ -321,6 +329,9 @@ double ShiftPullOver::calcBeforeShiftedArcLength(
     before_arc_length += segment_length;
     after_arc_length += after_segment_length;
   }
+
+
+
 
   return before_arc_length;
 }
