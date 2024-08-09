@@ -1686,10 +1686,35 @@ BehaviorModuleOutput GoalPlannerModule::planPullOverAsOutput()
 
     // update thread_safe_data_
     if (path_and_goal_opt) {
+
+
       auto [pull_over_path, modified_goal] = *path_and_goal_opt;
+
+      const auto elapsed_seconds_3_0 = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                         std::chrono::system_clock::now() - start)
+                                         .count();
+      std::cerr << __func__ << " " << __LINE__ << " " << elapsed_seconds_3_0 << " ms" << std::endl;
+
+
+      const auto elapsed_seconds_3_1 = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                         std::chrono::system_clock::now() - start)
+                                         .count();
+      std::cerr << __func__ << " " << __LINE__ << " " << elapsed_seconds_3_1 << " ms" << std::endl;
+
       deceleratePath(pull_over_path);
-      thread_safe_data_.set(
-        goal_candidates, pull_over_path_candidates, pull_over_path, modified_goal);
+
+      const auto elapsed_seconds_3_2 = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                         std::chrono::system_clock::now() - start)
+                                         .count();
+      std::cerr << __func__ << " " << __LINE__ << " " << elapsed_seconds_3_2 << " ms" << std::endl;
+
+      thread_safe_data_.set(goal_candidates, pull_over_path, modified_goal);
+
+      const auto elapsed_seconds_3_3 = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                         std::chrono::system_clock::now() - start)
+                                         .count();
+      std::cerr << __func__ << " " << __LINE__ << " " << elapsed_seconds_3_3 << " ms" << std::endl; 
+
       RCLCPP_DEBUG(
         getLogger(), "selected pull over path: path_id: %ld, goal_id: %ld", pull_over_path.id,
         modified_goal.id);
