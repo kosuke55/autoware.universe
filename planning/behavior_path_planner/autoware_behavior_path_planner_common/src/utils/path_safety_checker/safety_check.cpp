@@ -820,4 +820,33 @@ std::pair<bool, bool> checkObjectsCollisionRough(
   return has_collision;
 }
 
+double calculateDistanceBetweenEgoAndObjectPoint(
+  const PathWithLaneId & path, const PredictedObjects & objects, const bool use_offset_ego_point)
+{
+  const auto & points = path.points;
+
+  // egoとobjectsのpoint同士の距離で最小のものを計算
+  double min_distance = std::numeric_limits<double>::max();
+  for (const auto & object : objects.objects) {
+    const Point & object_point = object.kinematics.initial_pose_with_covariance.pose.position;
+    const double distance = std::invoke([&]() -> double {
+      if (use_offset_ego_point) {
+        const size_t nearest_segment_idx = findNearestSegmentIndex(points, object_point);
+        const double offset_length =
+          calcLongitudinalOffsetToSegment(points, nearest_segment_idx, object_point);
+        const auto offset_point =
+          calcLongitudinalOffsetPoint(points, nearest_segment_idx, offset_length);
+        const Point ego_point =
+          offset_point ? offset_point.value()
+                       : points.at(findNearestIndex(points, object_point)).point.pose.position;
+        return autoware::universe_utils::calcDistance2d(ego_point, object_point);
+      }
+      const Point ego_point = points.at(findNearestIndex(points, object_point)).point.pose.position;
+      return autoware::universe_utils::calcDistance2d(ego_point, object_point);
+    });
+    min_distance = std::min(min_distance, distance);
+  }
+  return min_distance;
+}
+
 }  // namespace autoware::behavior_path_planner::utils::path_safety_checker

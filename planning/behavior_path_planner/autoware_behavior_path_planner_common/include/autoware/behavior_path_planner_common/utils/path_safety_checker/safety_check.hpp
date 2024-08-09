@@ -163,6 +163,9 @@ std::pair<bool, bool> checkObjectsCollisionRough(
   const PathWithLaneId & path, const PredictedObjects & objects, const double margin,
   const BehaviorPathPlannerParameters & parameters, const bool use_offset_ego_point);
 
+double calculateDistanceBetweenEgoAndObjectPoint(
+  const PathWithLaneId & path, const PredictedObjects & objects, const bool use_offset_ego_point);
+
 // debug
 CollisionCheckDebugPair createObjectDebug(const ExtendedPredictedObject & obj);
 void updateCollisionCheckDebugMap(
