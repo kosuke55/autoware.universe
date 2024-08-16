@@ -265,10 +265,14 @@ void declareVehicleInfoParams(rclcpp::NodeOptions & node_options)
   node_options.append_parameter_override("max_steer_angle", 0.7);
 }
 
+using DefaultParamType = std::tuple<CommandType, std::string>;
+using ActuationCmdParamType = std::tuple<CommandType, std::string, std::string>;
+using ParamType = std::variant<DefaultParamType, ActuationCmdParamType>;
+
 // Send a control command and run the simulation.
 // Then check if the vehicle is moving in the desired direction.
 class TestSimplePlanningSimulator
-: public ::testing::TestWithParam<std::tuple<CommandType, std::string>>
+: public ::testing::TestWithParam<ParamType>
 {
 };
 
@@ -277,8 +281,16 @@ TEST_P(TestSimplePlanningSimulator, TestIdealSteerVel)
   rclcpp::init(0, nullptr);
 
   const auto params = GetParam();
-  const auto command_type = std::get<0>(params);
-  const auto vehicle_model_type = std::get<1>(params);
+  CommandType command_type{};
+  std::string vehicle_model_type{};
+  std::string conversion_type{};
+  if (std::holds_alternative<DefaultParamType>(params)) {
+    std::tie(command_type, vehicle_model_type) = std::get<DefaultParamType>(params);
+  } else if (std::holds_alternative<ActuationCmdParamType>(params)) {
+    std::tie(command_type, vehicle_model_type, conversion_type) = std::get<ActuationCmdParamType>(params);
+  } else {
+    throw std::invalid_argument("parameter type is unexpected.");
+  }
 
   std::cout << "\n\n vehicle model = " << vehicle_model_type << std::endl << std::endl;
   rclcpp::NodeOptions node_options;
@@ -300,6 +312,12 @@ TEST_P(TestSimplePlanningSimulator, TestIdealSteerVel)
   node_options.append_parameter_override("accel_map_path", accel_map_path);
   node_options.append_parameter_override("brake_map_path", brake_map_path);
   node_options.append_parameter_override("steer_map_path", steer_map_path);
+  node_options.append_parameter_override("vgr_coef_a", 15.713);
+  node_options.append_parameter_override("vgr_coef_b", 0.053);
+  node_options.append_parameter_override("vgr_coef_c", 0.042);
+  // if (conversion_type.has_value()) {
+  //   node_options.append_parameter_override("convert_steer_cmd_method", conversion_type.value());
+  // }
 
   declareVehicleInfoParams(node_options);
   const auto sim_node = std::make_shared<SimplePlanningSimulator>(node_options);
