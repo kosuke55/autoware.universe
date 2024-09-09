@@ -24,6 +24,7 @@
 
 #include <diagnostic_updater/diagnostic_updater.hpp>
 
+#include "autoware_control_msgs/msg/control_horizon.hpp"
 #include "autoware_control_msgs/msg/lateral.hpp"
 #include "autoware_planning_msgs/msg/trajectory.hpp"
 #include "autoware_vehicle_msgs/msg/steering_report.hpp"
@@ -68,6 +69,8 @@ private:
 
   std::shared_ptr<diagnostic_updater::Updater>
     diag_updater_{};  // Diagnostic updater for publishing diagnostic data.
+  // vehicle_adaptor開発用のテンポラリ実装
+  rclcpp::Publisher<ControlHorizon>::SharedPtr m_pub_control_horizon;
 
   //!< @brief parameters for path smoothing
   TrajectoryFilteringParam m_trajectory_filtering_param;
