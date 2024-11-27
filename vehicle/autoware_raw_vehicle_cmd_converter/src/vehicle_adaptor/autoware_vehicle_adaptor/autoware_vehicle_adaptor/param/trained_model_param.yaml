@@ -1,0 +1,24 @@
+trained_model_parameter:
+    setting:
+        add_position_to_prediction: false
+        add_vel_to_prediction: true
+        add_yaw_to_prediction: true
+        use_position_observation: false
+        use_vel_observation: false
+        use_yaw_observation: false
+        integrate_states: false
+        integrate_vel: false
+        integrate_yaw: false
+    queue_size:
+        acc_queue_size: 15
+        steer_queue_size: 15
+    lstm:
+        update_lstm_len: 50
+        predict_lstm_len: 50
+    loss:
+        integration_len: 15
+        integration_weight: 1.0
+    attention:
+        prob_update_memory_bank: 0.03
+        memory_bank_size: 100
+        memory_bank_element_len: 10
