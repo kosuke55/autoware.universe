@@ -1753,7 +1753,7 @@ double PolynomialFilter::fit_transform(double timestamp, double sample)
     }
     use_controller_steer_input_schedule_ = optimization_param_node["optimization_parameter"]["autoware_alignment"]["use_controller_steer_input_schedule"].as<bool>();
     use_vehicle_adaptor_ = optimization_param_node["optimization_parameter"]["autoware_alignment"]["use_vehicle_adaptor"].as<bool>();
-    use_nonzero_initial_hidden_autoware_ = optimization_param_node["optimization_parameter"]["autoware_alignment"]["use_nonzero_initial_hidden"].as<bool>();
+    //use_nonzero_initial_hidden_autoware_ = optimization_param_node["optimization_parameter"]["autoware_alignment"]["use_nonzero_initial_hidden"].as<bool>();
     use_offline_features_autoware_ = optimization_param_node["optimization_parameter"]["autoware_alignment"]["use_offline_features"].as<bool>();
 
     use_acc_input_schedule_prediction_ = optimization_param_node["optimization_parameter"]["inputs_schedule_prediction_NN"]["use_acc_input_schedule_prediction"].as<bool>();
@@ -1775,18 +1775,22 @@ double PolynomialFilter::fit_transform(double timestamp, double sample)
     }
 
     double lambda_smooth_steer_ref_smoother = optimization_param_node["optimization_parameter"]["inputs_ref_smoother"]["lambda_smooth_steer_ref_smoother"].as<double>();
+    double terminal_lambda_smooth_steer_ref_smoother = optimization_param_node["optimization_parameter"]["inputs_ref_smoother"]["terminal_lambda_smooth_steer_ref_smoother"].as<double>();
+    
     double lambda_decay_steer_ref_smoother = optimization_param_node["optimization_parameter"]["inputs_ref_smoother"]["lambda_decay_steer_ref_smoother"].as<double>();
     double lambda_terminal_decay_steer_ref_smoother = optimization_param_node["optimization_parameter"]["inputs_ref_smoother"]["lambda_terminal_decay_steer_ref_smoother"].as<double>();
     bool use_steer_ref_smoother = optimization_param_node["optimization_parameter"]["inputs_ref_smoother"]["use_steer_ref_smoother"].as<bool>();
-    steer_input_ref_smoother_.set_params(control_dt_, lambda_smooth_steer_ref_smoother, lambda_decay_steer_ref_smoother, lambda_terminal_decay_steer_ref_smoother);
+    steer_input_ref_smoother_.set_params(control_dt_, lambda_smooth_steer_ref_smoother,terminal_lambda_smooth_steer_ref_smoother, lambda_decay_steer_ref_smoother, lambda_terminal_decay_steer_ref_smoother);
     steer_input_ref_smoother_.set_use_smoother(use_steer_ref_smoother);
 
     double lambda_smooth_acc_ref_smoother = optimization_param_node["optimization_parameter"]["inputs_ref_smoother"]["lambda_smooth_acc_ref_smoother"].as<double>();
+    double terminal_lambda_smooth_acc_ref_smoother = optimization_param_node["optimization_parameter"]["inputs_ref_smoother"]["terminal_lambda_smooth_acc_ref_smoother"].as<double>();
+    
     double lambda_decay_acc_ref_smoother = optimization_param_node["optimization_parameter"]["inputs_ref_smoother"]["lambda_decay_acc_ref_smoother"].as<double>();
     double lambda_terminal_decay_acc_ref_smoother = optimization_param_node["optimization_parameter"]["inputs_ref_smoother"]["lambda_terminal_decay_acc_ref_smoother"].as<double>();
     bool use_acc_ref_smoother = optimization_param_node["optimization_parameter"]["inputs_ref_smoother"]["use_acc_ref_smoother"].as<bool>();
 
-    acc_input_ref_smoother_.set_params(control_dt_, lambda_smooth_acc_ref_smoother, lambda_decay_acc_ref_smoother, lambda_terminal_decay_acc_ref_smoother);
+    acc_input_ref_smoother_.set_params(control_dt_, lambda_smooth_acc_ref_smoother, terminal_lambda_smooth_acc_ref_smoother, lambda_decay_acc_ref_smoother, lambda_terminal_decay_acc_ref_smoother);
     acc_input_ref_smoother_.set_use_smoother(use_acc_ref_smoother);
     if (use_acc_input_schedule_prediction_){
       acc_input_ref_smoother_.set_prediction_len(acc_input_schedule_prediction_len_);
@@ -1842,6 +1846,7 @@ double PolynomialFilter::fit_transform(double timestamp, double sample)
     num_layers_encoder_ = weight_lstm_encoder_ih.size();
     NN_prediction_target_dim_ = state_component_predicted.size();
   }
+  /*
   void VehicleAdaptor::set_initial_hidden_params(
     const Eigen::MatrixXd & weight_initial_hidden_acc_layer_1, const Eigen::MatrixXd & weight_initial_hidden_steer_layer_1,
     const Eigen::MatrixXd & weight_initial_hidden_acc_layer_2, const Eigen::MatrixXd & weight_initial_hidden_steer_layer_2,
@@ -1897,8 +1902,11 @@ double PolynomialFilter::fit_transform(double timestamp, double sample)
       bias_initial_hidden_gru_ih, bias_initial_hidden_gru_hh,
       bias_initial_hidden_final_layer, bias_initial_hidden_fusion_layer, bias_initial_hidden_only_online);
   }
+  */
   void VehicleAdaptor::set_offline_features(const Eigen::VectorXd & offline_features){
-    get_initial_hidden_.set_offline_features(offline_features);
+    //get_initial_hidden_.set_offline_features(offline_features);
+    offline_features_ = offline_features;
+    use_offline_features_ = true;
   }
   void VehicleAdaptor::set_offline_features_from_csv(std::string csv_dir){
     std::cout << "csv_dir: " << csv_dir << std::endl;
@@ -2235,7 +2243,7 @@ double PolynomialFilter::fit_transform(double timestamp, double sample)
     Eigen::Vector2d acc_steer_error = Eigen::Vector2d::Zero();
     Eigen::VectorXd previous_error_compensator = Eigen::VectorXd::Zero(previous_error_.size());
 
-
+    /*
     if (use_nonzero_initial_hidden_)
     {
       Eigen::VectorXd h_gru = Eigen::VectorXd::Zero(h_gru_dim_for_initial_hidden_);
@@ -2265,7 +2273,11 @@ double PolynomialFilter::fit_transform(double timestamp, double sample)
       c_lstm = initial_hidden.tail(h_dim_full_);
 
     }
-
+    */
+    if (use_offline_features_){
+      h_lstm = offline_features_.head(h_dim_full_);
+      c_lstm = offline_features_.tail(h_dim_full_);
+    }
 
     for (int i = 0; i<update_lstm_len_; i++) {
 
@@ -2652,7 +2664,7 @@ PYBIND11_MODULE(utils, m)
     .def(py::init())
     .def("set_NN_params", &VehicleAdaptor::set_NN_params)
     .def("set_NN_params_from_csv", &VehicleAdaptor::set_NN_params_from_csv)
-    .def("set_initial_hidden_params_from_csv", &VehicleAdaptor::set_initial_hidden_params_from_csv)
+    //.def("set_initial_hidden_params_from_csv", &VehicleAdaptor::set_initial_hidden_params_from_csv)
     .def("set_offline_features_from_csv", &VehicleAdaptor::set_offline_features_from_csv)
     .def("set_offline_data_set_for_compensation", &VehicleAdaptor::set_offline_data_set_for_compensation)
     .def("set_offline_data_set_for_compensation_from_csv", &VehicleAdaptor::set_offline_data_set_for_compensation_from_csv)

@@ -2,9 +2,10 @@
 
 InputsRefSmoother::InputsRefSmoother(){}
 InputsRefSmoother::~InputsRefSmoother(){}
-void InputsRefSmoother::set_params(const double control_dt, const double lambda_smooth, const double lambda_decay, const double lambda_terminal_decay){
+void InputsRefSmoother::set_params(const double control_dt, const double lambda_smooth, const double terminal_lambda_smooth, const double lambda_decay, const double lambda_terminal_decay){
     control_dt_ = control_dt;
     lambda_smooth_ = lambda_smooth;
+    terminal_lambda_smooth_ = terminal_lambda_smooth;
     lambda_decay_ = lambda_decay;
     lambda_terminal_decay_ = lambda_terminal_decay;
     initialized_ = false;
@@ -27,9 +28,13 @@ void InputsRefSmoother::calc_matrices(){
             integration_matrix_(i, j) = control_dt_;
         }
     }
+    Eigen::VectorXd lambda_smooth_vector = Eigen::VectorXd::LinSpaced(prediction_len_, lambda_smooth_, terminal_lambda_smooth_);
+    Eigen::MatrixXd lambda_smooth_matrix = lambda_smooth_vector.asDiagonal();
+    
     terminal_integration_vector_ = integration_matrix_.row(prediction_len_ - 1).transpose();
     A_ = (1 + lambda_decay_) * integration_matrix_.transpose() * integration_matrix_
-        + lambda_smooth_ * Eigen::MatrixXd::Identity(prediction_len_, prediction_len_)
+        + lambda_smooth_matrix
+        //+ lambda_smooth_ * Eigen::MatrixXd::Identity(prediction_len_, prediction_len_)
         + lambda_terminal_decay_ * terminal_integration_vector_ * terminal_integration_vector_.transpose();
     A_inv_ = A_.llt().solve(Eigen::MatrixXd::Identity(prediction_len_, prediction_len_));
     initialized_ = true;

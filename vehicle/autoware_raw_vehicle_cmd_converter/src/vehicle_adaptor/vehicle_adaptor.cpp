@@ -51,13 +51,10 @@ Control VehicleAdaptor::compensate(
     proxima_vehicle_adaptor_.set_NN_params_from_csv("vehicle_models/vehicle_model_4");
     proxima_vehicle_adaptor_.set_NN_params_from_csv("vehicle_models/vehicle_model_5");
     proxima_vehicle_adaptor_.send_initialized_flag();
-    if (proxima_vehicle_adaptor_.use_nonzero_initial_hidden_autoware_)
+
+    if (proxima_vehicle_adaptor_.use_offline_features_autoware_)
     {
-      proxima_vehicle_adaptor_.set_initial_hidden_params_from_csv("vehicle_models/vehicle_model_1");
-      if (proxima_vehicle_adaptor_.use_offline_features_autoware_)
-      {
-        proxima_vehicle_adaptor_.set_offline_features_from_csv("vehicle_models/vehicle_model_1");
-      }
+      proxima_vehicle_adaptor_.set_offline_features_from_csv("vehicle_models/vehicle_model_1");
     }
     initialized_ = true;
   }

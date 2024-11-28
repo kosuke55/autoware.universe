@@ -160,35 +160,40 @@ class GetInitialHiddenNN(nn.Module):
         )
 
         # fusion case
-        self.fusion = nn.Sequential(
-            nn.Linear(2*output_size, output_size),
-            nn.Tanh()
-        )
-        nn.init.uniform_(self.fusion[0].weight, a=lb, b=ub)
-        nn.init.uniform_(self.fusion[0].bias, a=lb, b=ub)
-
-        # only online case
-        self.only_online = nn.Sequential(
+        self.transform = nn.Sequential(
             nn.Linear(output_size, output_size),
             nn.Tanh()
         )
-        nn.init.uniform_(self.only_online[0].weight, a=lb, b=ub)
-        nn.init.uniform_(self.only_online[0].bias, a=lb, b=ub)
-    def forward(self, offline_out, online_x, mask, preprocessor):
+        nn.init.uniform_(self.transform[0].weight, a=lb, b=ub)
+        nn.init.uniform_(self.transform[0].bias, a=lb, b=ub)
+
+        # only online case
+        # self.only_online = nn.Sequential(
+        #     nn.Linear(output_size, output_size),
+        #     nn.Tanh()
+        # )
+        # nn.init.uniform_(self.only_online[0].weight, a=lb, b=ub)
+        # nn.init.uniform_(self.only_online[0].bias, a=lb, b=ub)
+    def forward(self, offline_out, mask=None): #online_x, mask, preprocessor):
         """
         mask: Tensor of shape (batch_size, 1), 1 if offline data is available, 0 otherwise
         """
-        online_combined_input = preprocessor(online_x)
-        online_gru_out = self.gru_online(online_combined_input)[1][0]
+        if mask is None:
+            return self.transform(offline_out)
+        else:
+            mask = mask.float().unsqueeze(1)
+            return mask * self.transform(offline_out)
+        #online_combined_input = preprocessor(online_x)
+        #online_gru_out = self.gru_online(online_combined_input)[1][0]
         #online_gru_out = self.gru_online(online_combined_input)[0]
         #online_attn = self.attn_online(online_gru_out) # (batch_size, seq_len, 1)
         #online_attn = torch.softmax(online_attn, dim=1)
         #online_context = torch.sum(online_attn * online_gru_out, dim=1)
-        online_out = self.final_layer_online(online_gru_out)
+        #online_out = self.final_layer_online(online_gru_out)
 
-        mask = mask.float().unsqueeze(1)
-        fused_out = self.fusion(torch.cat((offline_out, online_out), dim=1))
-        only_online_out = self.only_online(online_out)
+        #mask = mask.float().unsqueeze(1)
+        #fused_out = self.fusion(torch.cat((offline_out, online_out), dim=1))
+        #only_online_out = self.only_online(online_out)
         # print(mask.shape, fused_out.shape, only_online_out.shape)
-        return mask * fused_out + (1 - mask) * only_online_out       
+        # return mask * fused_out + (1 - mask) * only_online_out       
 

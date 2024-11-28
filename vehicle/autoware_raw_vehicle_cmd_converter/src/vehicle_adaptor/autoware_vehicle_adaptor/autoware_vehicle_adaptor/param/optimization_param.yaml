@@ -122,15 +122,16 @@ optimization_parameter:
         use_controller_inputs_as_target: false
     inputs_ref_smoother:
         lambda_smooth_acc_ref_smoother: 1e-1
+        terminal_lambda_smooth_acc_ref_smoother: 1e+0
         lambda_decay_acc_ref_smoother: 1e-8
         lambda_terminal_decay_acc_ref_smoother: 1e-3
         use_acc_ref_smoother: true
         lambda_smooth_steer_ref_smoother: 1e-1
+        terminal_lambda_smooth_steer_ref_smoother: 1e+0
         lambda_decay_steer_ref_smoother: 1e-8
         lambda_terminal_decay_steer_ref_smoother: 1e-3
         use_steer_ref_smoother: false
     autoware_alignment:
         use_controller_steer_input_schedule: true
         use_vehicle_adaptor: true
-        use_nonzero_initial_hidden: true
         use_offline_features: true

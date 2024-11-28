@@ -59,7 +59,7 @@ prob_update_memory_bank = 0.03
 memory_bank_size = 100
 memory_bank_element_len = 10
 
-offline_data_size = 100
+offline_data_size = 300 #100
 offline_data_len = 10
 
 def transform_to_sequence_data(X, seq_size, division_indices, prediction_step):
@@ -892,7 +892,8 @@ class TrainErrorPredictionNNWithOfflineData:
         randomize_scale_tensor = torch.tensor(randomize_previous_error).to(X.device)
         Y_for_lstm_encoder = Y[:,past_initial_hidden_length-past_length:past_initial_hidden_length,-2:]
         previous_error = Y_for_lstm_encoder + torch.mean(torch.abs(Y_for_lstm_encoder),dim=1).unsqueeze(1) * randomize_scale_tensor * torch.randn_like(Y_for_lstm_encoder)
-        hc_initial_concat = model_for_initial_hidden(offline_features, X[:, :past_initial_hidden_length], mask, preprocessor)
+        # hc_initial_concat = model_for_initial_hidden(offline_features, X[:, :past_initial_hidden_length], mask, preprocessor)
+        hc_initial_concat = model_for_initial_hidden(offline_features, mask)
         hc_initial = (hc_initial_concat[:, :model.lstm_hidden_total_size].unsqueeze(0).contiguous(),
                     hc_initial_concat[:, model.lstm_hidden_total_size:].unsqueeze(0).contiguous()) # initial hidden state
         X_for_lstm = X[:, past_initial_hidden_length-past_length:]
@@ -906,11 +907,14 @@ class TrainErrorPredictionNNWithOfflineData:
             random_vector_previous_error = torch.randn_like(previous_error)
             random_vector_X = torch.randn_like(X[:,:past_initial_hidden_length+calc_jacobian_len])
 
+            #hc_initial_perturbed_concat = model_for_initial_hidden(
+            #    offline_features + eps * random_vector_offline_features,
+            #    X[:, :past_initial_hidden_length] + eps * random_vector_X[:, :past_initial_hidden_length],
+            #    mask,
+            #    preprocessor)
             hc_initial_perturbed_concat = model_for_initial_hidden(
                 offline_features + eps * random_vector_offline_features,
-                X[:, :past_initial_hidden_length] + eps * random_vector_X[:, :past_initial_hidden_length],
-                mask,
-                preprocessor)
+                mask)
             hc_initial_perturbed = (hc_initial_perturbed_concat[:, :model.lstm_hidden_total_size].unsqueeze(0).contiguous(),
                                     hc_initial_perturbed_concat[:, model.lstm_hidden_total_size:].unsqueeze(0).contiguous())
             loss += alpha_jacobian_gru_attention * criterion((hc_initial_perturbed_concat - hc_initial_concat) / eps, torch.zeros_like(hc_initial_concat))
@@ -926,11 +930,14 @@ class TrainErrorPredictionNNWithOfflineData:
             Y_perturbed, _ = model(X_for_lstm[:, past_length: past_length + calc_jacobian_len] + eps * random_vector_X[:,past_initial_hidden_length:past_initial_hidden_length+calc_jacobian_len], hc=hc_perturbed, mode="predict_with_hc")
             loss += alpha_jacobian * criterion((Y_perturbed - Y_pred[:,:calc_jacobian_len]) / eps, torch.zeros_like(Y_perturbed))
             if alpha_hessian is not None:
+                #hc_initial_perturbed_minus_concat = model_for_initial_hidden(
+                #    offline_features - eps * random_vector_offline_features,
+                #    X[:, :past_initial_hidden_length] - eps * random_vector_X[:, :past_initial_hidden_length],
+                #    mask,
+                #    preprocessor)
                 hc_initial_perturbed_minus_concat = model_for_initial_hidden(
                     offline_features - eps * random_vector_offline_features,
-                    X[:, :past_initial_hidden_length] - eps * random_vector_X[:, :past_initial_hidden_length],
-                    mask,
-                    preprocessor)
+                    mask)
                 hc_initial_perturbed_minus = (hc_initial_perturbed_minus_concat[:, :model.lstm_hidden_total_size].unsqueeze(0).contiguous(),
                                             hc_initial_perturbed_minus_concat[:, model.lstm_hidden_total_size:].unsqueeze(0).contiguous())
                 loss += alpha_hessian_gru_attention * criterion((hc_initial_perturbed_concat - 2 * hc_initial_concat + hc_initial_perturbed_minus_concat) / eps ** 2, torch.zeros_like(hc_initial_concat))
@@ -1072,7 +1079,9 @@ class TrainErrorPredictionNNWithOfflineData:
                     indices_batch,
                     offline_feature_dim
                 )
-                hc_initial_concat = model_for_initial_hidden(offline_features_batch, X_batch[:, :past_initial_hidden_length], mask_batch, preprocessor)
+                #hc_initial_concat = model_for_initial_hidden(offline_features_batch, X_batch[:, :past_initial_hidden_length], mask_batch, preprocessor)
+                hc_initial_concat = model_for_initial_hidden(offline_features_batch, mask_batch)
+
                 hc_initial = (hc_initial_concat[:, :model.lstm_hidden_total_size].unsqueeze(0).contiguous(), hc_initial_concat[:, model.lstm_hidden_total_size:].unsqueeze(0).contiguous())
                 Y_pred, _ = model(X_batch[:,past_initial_hidden_length-past_length:], previous_error=Y_batch[:, past_initial_hidden_length-past_length:past_initial_hidden_length, -2:],hc=hc_initial, mode="get_lstm_states")
                 #Y_pred, _ = model(X_batch, previous_error=Y_batch[:, :past_length, -2:], mode="get_lstm_states")
@@ -1131,7 +1140,9 @@ class TrainErrorPredictionNNWithOfflineData:
                     offline_feature_dim
                 )
                 
-                hc_initial_concat = model_for_initial_hidden(offline_features_batch, X_batch[:, :past_initial_hidden_length], mask_batch, preprocessor)
+                # hc_initial_concat = model_for_initial_hidden(offline_features_batch, X_batch[:, :past_initial_hidden_length], mask_batch, preprocessor)
+                hc_initial_concat = model_for_initial_hidden(offline_features_batch, mask_batch)
+
                 hc_initial = (hc_initial_concat[:, :model.lstm_hidden_total_size].unsqueeze(0).contiguous(), hc_initial_concat[:, model.lstm_hidden_total_size:].unsqueeze(0).contiguous())
                 Y_pred, _ = model(X_batch[:,past_initial_hidden_length-past_length:], previous_error=Y_batch[:,past_initial_hidden_length-past_length:past_initial_hidden_length,-2:],hc=hc_initial, mode="get_lstm_states")
                 #Y_pred, _ = model(X_batch, previous_error=Y_batch[:, :past_length, -2:], mode="get_lstm_states")
@@ -1198,7 +1209,8 @@ class TrainErrorPredictionNNWithOfflineData:
                 indices_batch,
                 offline_feature_dim
             )
-            hc_initial_concat = model_for_initial_hidden(offline_features_batch, X_batch[:, :past_initial_hidden_length], mask_batch, preprocessor)
+            # hc_initial_concat = model_for_initial_hidden(offline_features_batch, X_batch[:, :past_initial_hidden_length], mask_batch, preprocessor)
+            hc_initial_concat = model_for_initial_hidden(offline_features_batch, mask_batch)
             hc_initial = (hc_initial_concat[:, :model.lstm_hidden_total_size].unsqueeze(0).contiguous(), hc_initial_concat[:, model.lstm_hidden_total_size:].unsqueeze(0).contiguous())
             _, hc = model(X_batch, previous_error=Y_batch[:,past_initial_hidden_length-past_length:past_initial_hidden_length,-2:],hc=hc_initial, mode="get_lstm_states")
             
@@ -1254,7 +1266,8 @@ class TrainErrorPredictionNNWithOfflineData:
                 offline_feature_dim
             )
 
-            hc_initial_concat = model_for_initial_hidden(offline_features_batch, X_batch[:, :past_initial_hidden_length], mask_batch, preprocessor)
+            # hc_initial_concat = model_for_initial_hidden(offline_features_batch, X_batch[:, :past_initial_hidden_length], mask_batch, preprocessor)
+            hc_initial_concat = model_for_initial_hidden(offline_features_batch, mask_batch)
             hc_initial = (hc_initial_concat[:, :model[0].lstm_hidden_total_size].unsqueeze(0).contiguous(), hc_initial_concat[:, model[0].lstm_hidden_total_size:].unsqueeze(0).contiguous())
             _, hc = model[0](X_batch[:,past_initial_hidden_length-past_length:], previous_error=Y_batch[:, past_initial_hidden_length-past_length:past_initial_hidden_length, -2:],hc=hc_initial, mode="get_lstm_states")
             

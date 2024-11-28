@@ -568,7 +568,7 @@ private:
   PolynomialFilter polynomial_filter_for_acc_inputs_, polynomial_filter_for_steer_inputs_;
   InputsSchedulePrediction acc_input_schedule_prediction_, steer_input_schedule_prediction_;
   InputsRefSmoother acc_input_ref_smoother_, steer_input_ref_smoother_;
-  GetInitialHidden get_initial_hidden_;
+  // GetInitialHidden get_initial_hidden_;
   bool use_nonzero_initial_hidden_ = false;
   double prob_update_memory_bank_;
   int memory_bank_size_;
@@ -701,11 +701,13 @@ private:
   bool acc_input_schedule_prediction_initialized_ = false;
   bool steer_input_schedule_prediction_initialized_ = false;
 
-  int h_gru_dim_for_initial_hidden_;
+  //int h_gru_dim_for_initial_hidden_;
+  Eigen::VectorXd offline_features_;
+  bool use_offline_features_ = false;
 public:
   bool use_controller_steer_input_schedule_ = false;
   bool use_vehicle_adaptor_;
-  bool use_nonzero_initial_hidden_autoware_;
+  //bool use_nonzero_initial_hidden_autoware_;
   bool use_offline_features_autoware_;
   VehicleAdaptor();
   virtual ~VehicleAdaptor();
@@ -728,20 +730,20 @@ public:
     const Eigen::VectorXd & bias_complimentary_layer,
     const Eigen::VectorXd & bias_linear_relu, const Eigen::VectorXd & bias_final_layer,
     const double vel_scaling, const double vel_bias, const std::vector<std::string> state_component_predicted);
-  void set_initial_hidden_params(
-    const Eigen::MatrixXd & weight_initial_hidden_acc_layer_1, const Eigen::MatrixXd & weight_initial_hidden_steer_layer_1,
-    const Eigen::MatrixXd & weight_initial_hidden_acc_layer_2, const Eigen::MatrixXd & weight_initial_hidden_steer_layer_2,
-    const Eigen::MatrixXd & weight_initial_hidden_gru_ih, const Eigen::MatrixXd & weight_initial_hidden_gru_hh,
-    const Eigen::MatrixXd & weight_initial_hidden_final_layer,
-    const Eigen::MatrixXd & weight_initial_hidden_fusion_layer, const Eigen::MatrixXd & weight_initial_hidden_only_online,
-    const Eigen::VectorXd & bias_initial_hidden_acc_layer_1, const Eigen::VectorXd & bias_initial_hidden_steer_layer_1,
-    const Eigen::VectorXd & bias_initial_hidden_acc_layer_2, const Eigen::VectorXd & bias_initial_hidden_steer_layer_2,
-    const Eigen::VectorXd & bias_initial_hidden_gru_ih, const Eigen::VectorXd & bias_initial_hidden_gru_hh,
-    const Eigen::VectorXd & bias_initial_hidden_final_layer,
-    const Eigen::VectorXd & bias_initial_hidden_fusion_layer, const Eigen::VectorXd & bias_initial_hidden_only_online);
+  //void set_initial_hidden_params(
+  //  const Eigen::MatrixXd & weight_initial_hidden_acc_layer_1, const Eigen::MatrixXd & weight_initial_hidden_steer_layer_1,
+  //  const Eigen::MatrixXd & weight_initial_hidden_acc_layer_2, const Eigen::MatrixXd & weight_initial_hidden_steer_layer_2,
+  //  const Eigen::MatrixXd & weight_initial_hidden_gru_ih, const Eigen::MatrixXd & weight_initial_hidden_gru_hh,
+  //  const Eigen::MatrixXd & weight_initial_hidden_final_layer,
+  //  const Eigen::MatrixXd & weight_initial_hidden_fusion_layer, const Eigen::MatrixXd & weight_initial_hidden_only_online,
+  //  const Eigen::VectorXd & bias_initial_hidden_acc_layer_1, const Eigen::VectorXd & bias_initial_hidden_steer_layer_1,
+  //  const Eigen::VectorXd & bias_initial_hidden_acc_layer_2, const Eigen::VectorXd & bias_initial_hidden_steer_layer_2,
+  //  const Eigen::VectorXd & bias_initial_hidden_gru_ih, const Eigen::VectorXd & bias_initial_hidden_gru_hh,
+  //  const Eigen::VectorXd & bias_initial_hidden_final_layer,
+  //  const Eigen::VectorXd & bias_initial_hidden_fusion_layer, const Eigen::VectorXd & bias_initial_hidden_only_online);
   void set_offline_features(const Eigen::VectorXd & offline_features);
   void set_NN_params_from_csv(std::string csv_dir);
-  void set_initial_hidden_params_from_csv(std::string csv_dir);
+  // void set_initial_hidden_params_from_csv(std::string csv_dir);
   void set_offline_features_from_csv(std::string csv_dir);
   void clear_NN_params();
   void set_offline_data_set_for_compensation(Eigen::MatrixXd XXT, Eigen::MatrixXd YYT);

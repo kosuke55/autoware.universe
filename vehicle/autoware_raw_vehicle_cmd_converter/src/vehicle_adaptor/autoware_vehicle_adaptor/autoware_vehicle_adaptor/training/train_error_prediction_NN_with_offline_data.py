@@ -700,7 +700,7 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
         torch.save(self.model_for_initial_hidden, path_for_initial_hidden)
         save_dir = path.replace(".pth","")
         convert_model_to_csv.convert_model_to_csv(self.model, save_dir)
-        convert_model_to_csv.convert_initial_hidden_with_offline_data_model_to_csv(self.preprocessor, self.model_for_initial_hidden, save_dir)
+        #convert_model_to_csv.convert_initial_hidden_with_offline_data_model_to_csv(self.preprocessor, self.model_for_initial_hidden, save_dir)
 
     def save_given_model(self,model,preprocessor,model_for_offline_features,model_for_initial_hidden,path="vehicle_model.pth", path_for_preprocessor="vehicle_model_for_preprocessor.pth", path_for_offline_features="vehicle_model_for_offline_features.pth", path_for_initial_hidden="vehicle_model_for_initial_hidden.pth"):
         torch.save(model, path)
@@ -709,9 +709,10 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
         torch.save(model_for_initial_hidden, path_for_initial_hidden)
         save_dir = path.replace(".pth","")
         convert_model_to_csv.convert_model_to_csv(model, save_dir)
-        convert_model_to_csv.convert_initial_hidden_with_offline_data_model_to_csv(preprocessor, model_for_initial_hidden, save_dir)
+        #convert_model_to_csv.convert_initial_hidden_with_offline_data_model_to_csv(preprocessor, model_for_initial_hidden, save_dir)
     def save_offline_features(self, path="offline_features.csv"):
         offline_features = get_offline_feature_dict(self.preprocessor,self.model_for_offline_features,self.offline_data_dict_train)[0]
+        offline_features = self.model_for_initial_hidden(offline_features.unsqueeze(0))[0]
         offline_features_np = offline_features.cpu().detach().numpy()
         np.savetxt(path, offline_features_np, delimiter=",")
     def update_adaptive_weight(
@@ -754,7 +755,8 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
                         indices_batch,
                         offline_feature_dim
                     )                    
-                    hc_initial_concat = model_for_initial_hidden(offline_features, X_batch[:,:past_initial_hidden_length],mask,preprocessor)
+                    #hc_initial_concat = model_for_initial_hidden(offline_features, X_batch[:,:past_initial_hidden_length],mask,preprocessor)
+                    hc_initial_concat = model_for_initial_hidden(offline_features,mask)
 
                     hc_initial = (hc_initial_concat[:, :model.lstm_hidden_total_size].unsqueeze(0).contiguous(), hc_initial_concat[:, model.lstm_hidden_total_size:].unsqueeze(0).contiguous())
                     Y_pred, _ = model(X_batch[:,past_length- past_initial_hidden_length:], previous_error=Y_batch[:, past_length- past_initial_hidden_length:past_initial_hidden_length, -2:],hc=hc_initial, mode="get_lstm_states")
