@@ -1,17 +1,15 @@
 import matplotlib.pyplot as plt
 from autoware_vehicle_adaptor.training import add_data_from_csv
 from autoware_vehicle_adaptor.training import training_utils
+from autoware_vehicle_adaptor.training import train_error_prediction_NN_with_offline_data
 from autoware_vehicle_adaptor.param import parameters
 import numpy as np
 import simplejson as json
 import torch
 past_length = parameters.past_length
-class NNModelEvaluator(add_data_from_csv.add_data_from_csv):
+class NNModelEvaluator(train_error_prediction_NN_with_offline_data.train_error_prediction_NN_with_offline_data):
     def __init__(self):
         super().__init__()
-        self.model = None
-        self.model_for_initial_hidden = None
-        self.models = None
     def reset_model(self):
         self.model = None
         self.model_for_initial_hidden = None
@@ -26,7 +24,7 @@ class NNModelEvaluator(add_data_from_csv.add_data_from_csv):
         if self.X_test_list is None:
             print("No test data")
             return
-        if self.model is None or self.models is None:
+        if self.model is None and self.models is None:
             print("No model")
             return
         if self.model_for_initial_hidden is None:
@@ -44,27 +42,26 @@ class NNModelEvaluator(add_data_from_csv.add_data_from_csv):
                     Y_pred_np += Y_pred_np_i / len(self.models)
                 model_prediction_error = training_utils.TrainErrorPredictionNNFunctions.get_models_signed_prediction_error(self.models, X_test, Y_test, window_size)
         else:
-            X_test_np, Y_test_np, memory_bank_test_np = training_utils.TrainErrorPredictionNNWithMemoryFunctions.get_sequence_data(self.X_test_list, self.Y_test_list, self.division_indices_test)
+            X_test_np, Y_test_np, indices_test = training_utils.TrainErrorPredictionNNWithOfflineData.get_sequence_data(self.X_test_list, self.Y_test_list, self.division_indices_test)
             X_test = torch.tensor(X_test_np, dtype=torch.float32)
             Y_test = torch.tensor(Y_test_np, dtype=torch.float32)
-            memory_bank_test = torch.tensor(memory_bank_test_np, dtype=torch.float32)
             if self.models is None:
-                Y_pred_np = training_utils.TrainErrorPredictionNNWithMemoryFunctions.get_Y_pred_np(self.model, self.model_for_initial_hidden, X_test, Y_test, memory_bank_test)
-                model_prediction_error = training_utils.TrainErrorPredictionNNWithMemoryFunctions.get_model_signed_prediction_error(self.model, self.model_for_initial_hidden, X_test, Y_test, memory_bank_test, window_size)
+                Y_pred_np = training_utils.TrainErrorPredictionNNWithOfflineData.get_Y_pred_np(self.model, self.model_for_initial_hidden, X_test, Y_test,self.offline_data_dict_test, indices_test)
+                model_prediction_error = training_utils.TrainErrorPredictionNNWithOfflineData.get_model_signed_prediction_error(self.model, self.model_for_initial_hidden, X_test, Y_test, self.offline_data_dict_test, indices_test, window_size)
             else:
-                Y_pred_np_0 = training_utils.TrainErrorPredictionNNWithMemoryFunctions.get_Y_pred_np(self.models[0], self.model_for_initial_hidden, X_test, Y_test, memory_bank_test)
+                Y_pred_np_0 = training_utils.TrainErrorPredictionNNWithOfflineData.get_Y_pred_np(self.models[0], self.model_for_initial_hidden, X_test, Y_test,self.offline_data_dict_test, indices_test)
                 Y_pred_np = Y_pred_np_0 / len(self.models)
                 for i in range(1, len(self.models)):
-                    Y_pred_np_i = training_utils.TrainErrorPredictionNNWithMemoryFunctions.get_Y_pred_np(self.models[i], self.model_for_initial_hidden, X_test, Y_test, memory_bank_test)
+                    Y_pred_np_i = training_utils.TrainErrorPredictionNNWithOfflineData.get_Y_pred_np(self.models[i], self.model_for_initial_hidden, X_test, Y_test,self.offline_data_dict_test, indices_test)
                     Y_pred_np += Y_pred_np_i / len(self.models)
-                model_prediction_error = training_utils.TrainErrorPredictionNNWithMemoryFunctions.get_models_signed_prediction_error(self.models, self.model_for_initial_hidden, X_test, Y_test, memory_bank_test, window_size)
+                model_prediction_error = training_utils.TrainErrorPredictionNNWithOfflineData.get_models_signed_prediction_error(self.models, self.model_for_initial_hidden, X_test, Y_test,self.offline_data_dict_test, indices_test, window_size)
         if self.models is None:
             state_component_predicted = self.model.state_component_predicted
         else:
             state_component_predicted = self.models[0].state_component_predicted
-        nominal_prediction_error = training_utils.TrainErrorPredictionNNFunctions.get_nominal_signed_prediction_error(X_test_np, window_size)
-        model_prediction_error = model_prediction_error.detach().to("cpu").numpy()
-        nominal_prediction_error = nominal_prediction_error.detach().to("cpu").numpy()
+        nominal_prediction_error = training_utils.get_nominal_signed_prediction_error(X_test, window_size)
+        #model_prediction_error = model_prediction_error.detach().to("cpu").numpy()
+        #nominal_prediction_error = nominal_prediction_error.detach().to("cpu").numpy()
         nominal_mae = np.abs(Y_test_np[:,past_length:]).mean(axis=(0, 1))
         model_mae = np.abs(Y_test_np[:,past_length:] - Y_pred_np).mean(axis=(0, 1))
         mae_ratio = model_mae / nominal_mae
@@ -79,7 +76,7 @@ class NNModelEvaluator(add_data_from_csv.add_data_from_csv):
         prediction_mse_ratio = model_prediction_mse / nominal_prediction_mse
 
         results_json = {}
-        for i in len(state_component_predicted):
+        for i in range(len(state_component_predicted)):
             results_json[state_component_predicted[i] + "_nominal_mae"] = nominal_mae[i]
             results_json[state_component_predicted[i] + "_model_mae"] = model_mae[i]
             results_json[state_component_predicted[i] + "_mae_ratio"] = mae_ratio[i]

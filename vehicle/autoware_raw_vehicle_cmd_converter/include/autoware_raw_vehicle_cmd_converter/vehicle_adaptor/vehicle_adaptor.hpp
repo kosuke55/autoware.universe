@@ -21,7 +21,7 @@
 #include <autoware_vehicle_msgs/msg/steering_report.hpp>
 #include <geometry_msgs/msg/accel_with_covariance_stamped.hpp>
 #include <nav_msgs/msg/odometry.hpp>
-#include "utils.h"
+#include "vehicle_adaptor_compensator.h"
 
 namespace autoware::raw_vehicle_cmd_converter
 {

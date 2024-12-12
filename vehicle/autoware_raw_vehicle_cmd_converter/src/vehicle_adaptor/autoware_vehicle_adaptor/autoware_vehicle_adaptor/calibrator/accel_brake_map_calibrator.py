@@ -1,11 +1,8 @@
 import numpy as np
 import scipy.interpolate
-from sklearn.preprocessing import PolynomialFeatures
-from sklearn.linear_model import ElasticNet
 from autoware_vehicle_adaptor.calibrator import actuation_map_csv_writer
 from autoware_vehicle_adaptor.src import actuation_map_2d
 from autoware_vehicle_adaptor.calibrator import collected_data_counter
-import GPy
 import os
 import torch
 from torch import nn
@@ -33,19 +30,10 @@ class AddDataFromCSV:
         self.accel_data_output = []
         self.brake_data_input = []
         self.brake_data_output = []
-        self.accel_data_input_for_poly = []
-        self.accel_data_output_for_poly = []
-        self.brake_data_input_for_poly = []
-        self.brake_data_output_for_poly = []
-        self.accel_data_input_for_GP = []
-        self.accel_data_output_for_GP = []
-        self.brake_data_input_for_GP = []
-        self.brake_data_output_for_GP = []
         self.accel_data_input_for_NN = []
         self.accel_data_output_for_NN = []
         self.brake_data_input_for_NN = []
         self.brake_data_output_for_NN = []
-        self.polynomial_regression_performed = False
         self.dataloader_weights_accel = None
         self.dataloader_weights_brake = None
         self.extracted_indices_accel = None
@@ -60,31 +48,17 @@ class AddDataFromCSV:
         self.accel_data_output_residual = []
         self.brake_data_output_residual = []
     def initialize_for_calibration(self):
-        # Polynomial
-        self.accel_data_input_for_poly = self.accel_data_input.copy()
-        self.accel_data_output_for_poly = self.accel_data_output.copy()
-        self.brake_data_input_for_poly = self.brake_data_input.copy()
-        self.brake_data_output_for_poly = self.brake_data_output.copy()
+        self.accel_data_input_for_NN = self.accel_data_input.copy()
+        self.accel_data_output_for_NN = self.accel_data_output.copy()
+        self.brake_data_input_for_NN = self.brake_data_input.copy()
+        self.brake_data_output_for_NN = self.brake_data_output.copy()
         self.dataloader_weights_accel = None
         self.dataloader_weights_brake = None
         self.extracted_indices_accel = None
         self.extracted_indices_brake = None
-        self.reset_GP_and_NN()
         if self.calc_base_map_error_performed:
             self.calc_base_map_error_performed = False
             print("calc_base_map_error is reset")
-    def reset_GP_and_NN(self):
-        self.accel_data_input_for_GP = self.accel_data_input_for_poly.copy()
-        self.accel_data_output_for_GP = self.accel_data_output_for_poly.copy()
-        self.brake_data_input_for_GP = self.brake_data_input_for_poly.copy()
-        self.brake_data_output_for_GP = self.brake_data_output_for_poly.copy()
-        self.accel_data_input_for_NN = self.accel_data_input_for_poly.copy()
-        self.accel_data_output_for_NN = self.accel_data_output_for_poly.copy()
-        self.brake_data_input_for_NN = self.brake_data_input_for_poly.copy()
-        self.brake_data_output_for_NN = self.brake_data_output_for_poly.copy()
-        if self.polynomial_regression_performed:
-           self.polynomial_regression_performed = False
-           print("polynomial regression as a preprocessing for GP and NN is reset")
     def add_data_from_csv(self, dir_name,smoothing_window = 10, acc_change_threshold=0.2, base_map_dir=None, control_cmd_mode=None):
         localization_kinematic_state = np.loadtxt(
             dir_name + "/localization_kinematic_state.csv", delimiter=",", usecols=[0, 1, 4, 5, 7, 8, 9, 10, 47]
@@ -275,17 +249,16 @@ class AddDataFromCSV:
         for i in range(len(self.brake_data_input)):
             self.collected_data_counter.add_data_point(self.brake_data_input[i][0], self.brake_data_output[i], i)
         self.extracted_indices_brake = self.collected_data_counter.get_extracted_indices(max_data_num)
-        self.accel_data_input_for_poly = []
-        self.accel_data_output_for_poly = []
-        self.brake_data_input_for_poly = []
-        self.brake_data_output_for_poly = []
+        self.accel_data_input_for_NN = []
+        self.accel_data_output_for_NN = []
+        self.brake_data_input_for_NN = []
+        self.brake_data_output_for_NN = []
         for i in self.extracted_indices_accel:
-            self.accel_data_input_for_poly.append(self.accel_data_input[i])
-            self.accel_data_output_for_poly.append(self.accel_data_output[i])
+            self.accel_data_input_for_NN.append(self.accel_data_input[i])
+            self.accel_data_output_for_NN.append(self.accel_data_output[i])
         for i in self.extracted_indices_brake:
-            self.brake_data_input_for_poly.append(self.brake_data_input[i])
-            self.brake_data_output_for_poly.append(self.brake_data_output[i])
-        self.reset_GP_and_NN()
+            self.brake_data_input_for_NN.append(self.brake_data_input[i])
+            self.brake_data_output_for_NN.append(self.brake_data_output[i])
         if self.dataloader_weights_accel is not None:
             self.dataloader_weights_accel = np.array(self.dataloader_weights_accel)[self.extracted_indices_accel].tolist()
         if self.dataloader_weights_brake is not None:
@@ -296,12 +269,11 @@ class AddDataFromCSV:
         self.base_accel_map = actuation_map_2d.ActuationMap2D(accel_map_path)
         self.base_brake_map = actuation_map_2d.ActuationMap2D(brake_map_path)
         for i in range(len(self.accel_data_input)):
-            accel_data = self.accel_data_input_for_poly[i]
-            self.accel_data_output_for_poly[i] = self.accel_data_output_for_poly[i] - self.base_accel_map.get_sim_actuation(accel_data[0], accel_data[1])
+            accel_data = self.accel_data_input_for_NN[i]
+            self.accel_data_output_for_NN[i] = self.accel_data_output_for_NN[i] - self.base_accel_map.get_sim_actuation(accel_data[0], accel_data[1])
         for i in range(len(self.brake_data_input)):
-            brake_data = self.brake_data_input_for_poly[i]
-            self.brake_data_output_for_poly[i] = self.brake_data_output_for_poly[i] - self.base_brake_map.get_sim_actuation(brake_data[0], brake_data[1])
-        self.reset_GP_and_NN()
+            brake_data = self.brake_data_input_for_NN[i]
+            self.brake_data_output_for_NN[i] = self.brake_data_output_for_NN[i] - self.base_brake_map.get_sim_actuation(brake_data[0], brake_data[1])
         self.calc_base_map_error_performed = True
     def calc_calibration_error(self,map_dir):
         accel_map_path = map_dir + "/accel_map.csv"
@@ -322,13 +294,13 @@ class AddDataFromCSV:
         print("brake_error: ", brake_error)
     def plot_training_data(self,save_dir=None):
         plt.scatter(
-            np.array(self.accel_data_input_for_poly)[:, 0],
-            np.array(self.accel_data_output_for_poly),
+            np.array(self.accel_data_input_for_NN)[:, 0],
+            np.array(self.accel_data_output_for_NN),
             label = "accel_data"
         )
         plt.scatter(
-            np.array(self.brake_data_input_for_poly)[:, 0],
-            np.array(self.brake_data_output_for_poly),
+            np.array(self.brake_data_input_for_NN)[:, 0],
+            np.array(self.brake_data_output_for_NN),
             label = "brake_data"
         )
         plt.title("vel vs acc plots")
@@ -343,7 +315,7 @@ class AddDataFromCSV:
 
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
-        ax.scatter(np.array(self.accel_data_input_for_poly)[:, 0], np.array(self.accel_data_input_for_poly)[:, 1], np.array(self.accel_data_output_for_poly))
+        ax.scatter(np.array(self.accel_data_input_for_NN)[:, 0], np.array(self.accel_data_input_for_NN)[:, 1], np.array(self.accel_data_output_for_NN))
         ax.set_xlabel("vel_obs [m/s]")
         ax.set_ylabel("accel_input [m/s^2]")
         ax.set_zlabel("acc_obs [m/s^2]")
@@ -355,7 +327,7 @@ class AddDataFromCSV:
 
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
-        ax.scatter(np.array(self.brake_data_input_for_poly)[:, 0], np.array(self.brake_data_input_for_poly)[:, 1], np.array(self.brake_data_output_for_poly))
+        ax.scatter(np.array(self.brake_data_input_for_NN)[:, 0], np.array(self.brake_data_input_for_NN)[:, 1], np.array(self.brake_data_output_for_NN))
         ax.set_xlabel("vel_obs [m/s]")
         ax.set_ylabel("brake_input [m/s^2]")
         ax.set_zlabel("acc_obs [m/s^2]")
@@ -379,164 +351,6 @@ class AddDataFromCSV:
                     print("map validator is applied at vel: ", map_vel[i], "brake: ", map_brake[j])
         return accel_map_matrix_valid, brake_map_matrix_valid
 
-
-
-class CalibratorByPolynomialRegression(AddDataFromCSV):
-    def __init__(self):
-        super().__init__()
-        self.accel_polynomial_model = None
-        self.brake_polynomial_model = None
-        self.degree = 3
-        self.alpha_1 = 1e-5
-        self.alpha_2 = 1e-5
-    def calibrate_by_polynomial_regression(self,degree=None, alpha_1=None, alpha_2=None):
-        if degree is not None:
-            self.degree = degree
-        if alpha_1 is not None:
-            self.alpha_1 = alpha_1
-        if alpha_2 is not None:
-            self.alpha_2 = alpha_2
-        alpha = self.alpha_1 + self.alpha_2
-        l1_ratio = self.alpha_1 / alpha
-        self.accel_data_output_for_NN.clear()
-        self.brake_data_output_for_NN.clear()
-        accel_data_output_poly_residual = []
-        brake_data_output_poly_residual = []
-        accel_data_input_poly = PolynomialFeatures(degree=self.degree).fit_transform(self.accel_data_input_for_poly)
-        brake_data_input_poly = PolynomialFeatures(degree=self.degree).fit_transform(self.brake_data_input_for_poly)
-        self.accel_polynomial_model = ElasticNet(alpha=alpha,l1_ratio=l1_ratio).fit(accel_data_input_poly, self.accel_data_output_for_poly)
-        self.brake_polynomial_model = ElasticNet(alpha=alpha,l1_ratio=l1_ratio).fit(brake_data_input_poly, self.brake_data_output_for_poly)
-        for i in range(len(self.accel_data_input_for_poly)):
-            accel_data_output_poly_residual.append(
-                self.accel_data_output_for_poly[i] - self.accel_polynomial_model.predict(accel_data_input_poly[i].reshape(1, -1))[0]
-            )
-        for i in range(len(self.brake_data_input_for_poly)):
-            brake_data_output_poly_residual.append(
-                self.brake_data_output_for_poly[i] - self.brake_polynomial_model.predict(brake_data_input_poly[i].reshape(1, -1))[0]
-            )
-        self.accel_data_input_for_GP = self.accel_data_input_for_poly.copy()
-        self.accel_data_output_for_GP = accel_data_output_poly_residual.copy()
-        self.brake_data_input_for_GP = self.brake_data_input_for_poly.copy()
-        self.brake_data_output_for_GP = brake_data_output_poly_residual.copy()
-        self.accel_data_input_for_NN = self.accel_data_input_for_poly.copy()
-        self.accel_data_output_for_NN = accel_data_output_poly_residual.copy()
-        self.brake_data_input_for_NN = self.brake_data_input_for_poly.copy()
-        self.brake_data_output_for_NN = brake_data_output_poly_residual.copy()
-        self.polynomial_regression_performed = True
-    def calc_accel_brake_map_poly(self, map_vel=default_map_vel, map_accel=default_map_accel, map_brake=default_map_brake):
-        self.accel_map_matrix_poly = np.zeros((len(map_accel), len(map_vel)))
-        self.brake_map_matrix_poly = np.zeros((len(map_brake), len(map_vel)))
-        for i in range(len(map_vel)):
-            for j in range(len(map_accel)):
-                self.accel_map_matrix_poly[j, i] = self.accel_polynomial_model.predict(
-                    PolynomialFeatures(degree=self.degree).fit_transform(np.array([[map_vel[i], map_accel[j]]]))
-                )[0]
-                if self.calc_base_map_error_performed:
-                    self.accel_map_matrix_poly[j, i] += self.base_accel_map.get_sim_actuation(map_vel[i], map_accel[j])
-            for j in range(len(map_brake)):
-                self.brake_map_matrix_poly[j, i] = self.brake_polynomial_model.predict(
-                    PolynomialFeatures(degree=self.degree).fit_transform(np.array([[map_vel[i], map_brake[j]]]))
-                )[0]
-                if self.calc_base_map_error_performed:
-                    self.brake_map_matrix_poly[j, i] += self.base_brake_map.get_sim_actuation(map_vel[i], map_brake[j])
-            self.accel_map_matrix_poly[0] = 0.5 * (self.brake_map_matrix_poly[0] + self.accel_map_matrix_poly[0])
-            self.brake_map_matrix_poly[0] = self.accel_map_matrix_poly[0]
-    def save_accel_brake_map_poly(self,map_vel, map_accel, map_brake, save_dir="."):
-        if not os.path.isdir(save_dir):
-            os.mkdir(save_dir)
-        self.calc_accel_brake_map_poly(map_vel, map_accel, map_brake)
-        actuation_map_csv_writer.map_csv_writer(map_vel, map_accel, self.accel_map_matrix_poly, save_dir + "/accel_map.csv")
-        actuation_map_csv_writer.map_csv_writer(map_vel, map_brake, self.brake_map_matrix_poly, save_dir + "/brake_map.csv")
-
-class CalibratorByGaussianProcessRegression(AddDataFromCSV):
-    def __init__(self):
-        super().__init__()
-        self.accel_GP_model = None
-        self.brake_GP_model = None
-    def calibrate_by_GP(self,inducting_num=100,):
-        induction_index_accel = np.random.choice(len(self.accel_data_input_for_GP), inducting_num, replace=False)
-        induction_index_brake = np.random.choice(len(self.brake_data_input_for_GP), inducting_num, replace=False)
-        kernel_accel = GPy.kern.RBF(input_dim=np.array(self.accel_data_input_for_GP)[0].shape[0], ARD=True)
-        kernel_brake = GPy.kern.RBF(input_dim=np.array(self.brake_data_input_for_GP)[0].shape[0], ARD=True)
-        X_accel = np.array(self.accel_data_input_for_GP)
-        Y_accel = np.array(self.accel_data_output_for_GP).reshape(-1, 1)
-        X_brake = np.array(self.brake_data_input_for_GP)
-        Y_brake = np.array(self.brake_data_output_for_GP).reshape(-1, 1)
-        self.accel_GP_model = GPy.models.SparseGPRegression(
-            X_accel, Y_accel, kernel_accel, Z=X_accel[induction_index_accel]
-        )
-        self.brake_GP_model = GPy.models.SparseGPRegression(
-            X_brake, Y_brake, kernel_brake, Z=X_brake[induction_index_brake]
-        )
-        self.accel_GP_model.optimize()
-        self.brake_GP_model.optimize()
-    def calc_accel_brake_map_GP(self, map_vel=default_map_vel, map_accel=default_map_accel, map_brake=default_map_brake):
-        self.accel_map_matrix_GP = np.zeros((len(map_accel), len(map_vel)))
-        self.brake_map_matrix_GP = np.zeros((len(map_brake), len(map_vel)))
-        for i in range(len(map_vel)):
-            for j in range(len(map_accel)):
-                self.accel_map_matrix_GP[j, i] = self.accel_GP_model.predict(
-                    np.array([[map_vel[i], map_accel[j]]])
-                )[0]
-                if self.polynomial_regression_performed:
-                    self.accel_map_matrix_GP[j, i] += self.accel_polynomial_model.predict(
-                        PolynomialFeatures(degree=self.degree).fit_transform(np.array([[map_vel[i], map_accel[j]]]))
-                    )[0]
-                if self.calc_base_map_error_performed:
-                    self.accel_map_matrix_GP[j, i] += self.base_accel_map.get_sim_actuation(map_vel[i], map_accel[j])
-            for j in range(len(map_brake)):
-                self.brake_map_matrix_GP[j, i] = self.brake_GP_model.predict(
-                    np.array([[map_vel[i], map_brake[j]]])
-                )[0]
-                if self.polynomial_regression_performed:
-                    self.brake_map_matrix_GP[j, i] += self.brake_polynomial_model.predict(
-                        PolynomialFeatures(degree=self.degree).fit_transform(np.array([[map_vel[i], map_brake[j]]]))
-                    )[0]
-                if self.calc_base_map_error_performed:
-                    self.brake_map_matrix_GP[j, i] += self.base_brake_map.get_sim_actuation(map_vel[i], map_brake[j])
-            self.accel_map_matrix_GP[0] = 0.5 * (self.accel_map_matrix_GP[0] + self.brake_map_matrix_GP[0])
-            self.brake_map_matrix_GP[0] = self.accel_map_matrix_GP[0]
-    def save_accel_brake_map_GP(self, map_vel=default_map_vel, map_accel=default_map_accel, map_brake=default_map_brake, save_dir="."):
-        if not os.path.isdir(save_dir):
-            os.mkdir(save_dir)
-        self.calc_accel_brake_map_GP(map_vel, map_accel, map_brake)
-        actuation_map_csv_writer.map_csv_writer(map_vel, map_accel, self.accel_map_matrix_GP, save_dir + "/accel_map.csv")
-        actuation_map_csv_writer.map_csv_writer(map_vel, map_brake, self.brake_map_matrix_GP, save_dir + "/brake_map.csv")
-    def data_augmentation_by_GP(self,map_vel=default_map_vel, map_accel=default_map_accel, map_brake=default_map_brake,minimum_cell_number=1):
-        cell_accel_count = np.zeros((len(map_accel)-1,len(map_vel)-1))
-        cell_brake_count = np.zeros((len(map_brake)-1,len(map_vel)-1))
-        for i in range(len(self.accel_data_input)):
-            for j in range(len(map_vel)-1):
-                for k in range(len(map_accel)-1):
-                    if map_vel[j] <= self.accel_data_input_for_NN[i][0] < map_vel[j+1] and map_accel[k] <= self.accel_data_input_for_NN[i][1] < map_accel[k+1]:
-                        cell_accel_count[k,j] += 1
-        for i in range(len(self.brake_data_input)):
-            for j in range(len(map_vel)-1):
-                for k in range(len(map_brake)-1):
-                    if map_vel[j] <= self.brake_data_input_for_NN[i][0] < map_vel[j+1] and map_brake[k] <= self.brake_data_input_for_NN[i][1] < map_brake[k+1]:
-                        cell_brake_count[k,j] += 1
-        for j in range(len(map_vel)-1):
-            for k in range(len(map_accel)-1):
-                if cell_accel_count[k,j] < minimum_cell_number:
-                    for i in range(minimum_cell_number-int(cell_accel_count[k,j])):
-                        new_accel_data_input = [np.random.uniform(map_vel[j],map_vel[j+1]),np.random.uniform(map_accel[k],map_accel[k+1])]
-                        self.accel_data_input_for_NN.append(new_accel_data_input)
-                        self.accel_data_output_for_NN.append(
-                            self.accel_GP_model.predict(np.array(new_accel_data_input).reshape(1,-1))[0][0,0]
-                        )
-                        if self.dataloader_weights_accel is not None:
-                            self.dataloader_weights_accel.append(np.array(self.dataloader_weights_accel).max())
-        for j in range(len(map_vel)-1):
-            for k in range(len(map_brake)-1):
-                if cell_brake_count[k,j] < minimum_cell_number:
-                    for i in range(minimum_cell_number-int(cell_brake_count[k,j])):
-                        new_brake_data_input = [np.random.uniform(map_vel[j],map_vel[j+1]),np.random.uniform(map_brake[k],map_brake[k+1])]
-                        self.brake_data_input_for_NN.append(new_brake_data_input)
-                        self.brake_data_output_for_NN.append(
-                            self.brake_GP_model.predict(np.array(new_brake_data_input).reshape(1,-1))[0][0,0]
-                        )
-                        if self.dataloader_weights_brake is not None:
-                            self.dataloader_weights_brake.append(np.array(self.dataloader_weights_brake).max())
                             
 def calc_monotone_constraint_cost(model, test_points, map_matrix, mode, monotone_margin=1e-3):
     if mode == "accel":
@@ -761,20 +575,12 @@ class CalibratorByNeuralNetwork(AddDataFromCSV):
                 self.accel_map_matrix_NN[j, i] = self.accel_NN_model(
                     torch.tensor([map_vel[i], map_accel[j]], dtype=torch.float32,device=self.device)
                 ).item()
-                if self.polynomial_regression_performed:
-                    self.accel_map_matrix_NN[j, i] += self.accel_polynomial_model.predict(
-                        PolynomialFeatures(degree=self.degree).fit_transform(np.array([[map_vel[i], map_accel[j]]]))
-                    )[0]
                 if self.calc_base_map_error_performed:
                     self.accel_map_matrix_NN[j, i] += self.base_accel_map.get_sim_actuation(map_vel[i], map_accel[j])
             for j in range(len(map_brake)):
                 self.brake_map_matrix_NN[j, i] = self.brake_NN_model(
                     torch.tensor([map_vel[i], map_brake[j]], dtype=torch.float32,device=self.device)
                 ).item()
-                if self.polynomial_regression_performed:
-                    self.brake_map_matrix_NN[j, i] += self.brake_polynomial_model.predict(
-                        PolynomialFeatures(degree=self.degree).fit_transform(np.array([[map_vel[i], map_brake[j]]]))
-                    )[0]
                 if self.calc_base_map_error_performed:
                     self.brake_map_matrix_NN[j, i] += self.base_brake_map.get_sim_actuation(map_vel[i], map_brake[j])
             self.accel_map_matrix_NN[0] = 0.5 * (self.accel_map_matrix_NN[0] + self.brake_map_matrix_NN[0])
@@ -871,20 +677,12 @@ class CalibratorByEnsembleNN(CalibratorByNeuralNetwork):
                     self.accel_map_matrix_ensemble_NN[k, j, i] = self.accel_NN_models[k](
                         torch.tensor([map_vel[i], map_accel[j]], dtype=torch.float32,device=self.device)
                     ).item()
-                    if self.polynomial_regression_performed:
-                        self.accel_map_matrix_ensemble_NN[k, j, i] += self.accel_polynomial_model.predict(
-                            PolynomialFeatures(degree=self.degree).fit_transform(np.array([[map_vel[i], map_accel[j]]]))
-                        )[0]
                     if self.calc_base_map_error_performed:
                         self.accel_map_matrix_ensemble_NN[k, j, i] += self.base_accel_map.get_sim_actuation(map_vel[i], map_accel[j])
                 for j in range(len(map_brake)):
                     self.brake_map_matrix_ensemble_NN[k, j, i] = self.brake_NN_models[k](
                         torch.tensor([map_vel[i], map_brake[j]], dtype=torch.float32,device=self.device)
                     ).item()
-                    if self.polynomial_regression_performed:
-                        self.brake_map_matrix_ensemble_NN[k, j, i] += self.brake_polynomial_model.predict(
-                            PolynomialFeatures(degree=self.degree).fit_transform(np.array([[map_vel[i], map_brake[j]]]))
-                        )[0]
                     if self.calc_base_map_error_performed:
                         self.brake_map_matrix_ensemble_NN[k, j, i] += self.base_brake_map.get_sim_actuation(map_vel[i], map_brake[j])
                 self.accel_map_matrix_ensemble_NN[k,0] = 0.5 * (self.accel_map_matrix_ensemble_NN[k,0] + self.brake_map_matrix_ensemble_NN[k,0])
@@ -1075,6 +873,6 @@ class DummyDataGenerator(AddDataFromCSV):
                 plt.savefig(save_dir + "/convex_hull.png")
                 plt.close()
 
-class Calibrator(CalibratorByPolynomialRegression,CalibratorByGaussianProcessRegression,CalibratorByEnsembleNN,DummyDataGenerator):
+class Calibrator(CalibratorByEnsembleNN,DummyDataGenerator):
     def __init__(self):
         super().__init__()

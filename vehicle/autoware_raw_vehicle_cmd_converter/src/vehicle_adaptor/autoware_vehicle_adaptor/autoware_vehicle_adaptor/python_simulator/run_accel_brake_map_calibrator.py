@@ -33,12 +33,7 @@ if not os.path.isdir(root_dir):
 train_dir = root_dir + "/test_python_pure_pursuit_train"
 test_dir = root_dir + "/test_python_pure_pursuit_test"
 test_nominal_dir = root_dir + "/test_nominal"
-test_NN_without_polynomial_dir = root_dir + "/test_NN_without_polynomial"
-test_GP_without_polynomial_dir = root_dir + "/test_GP_without_polynomial"
-test_polynomial_dir = root_dir + "/test_polynomial"
 test_NN_dir = root_dir + "/test_NN"
-test_GP_dir = root_dir + "/test_GP"
-test_NN_augmented_by_GP_dir = root_dir + "/test_NN_augmented_by_GP"
 correct_map_dir = "../actuation_cmd_maps/accel_brake_maps/default_parameter"
 low_quality_map_dir = "../actuation_cmd_maps/accel_brake_maps/low_quality_map"
 sim_setting_dict = {}
@@ -77,94 +72,29 @@ if not SKIP_CALIBRATION:
     calibrator.add_data_from_csv(train_dir)
     tester.add_data_from_csv(test_dir)
 
-    print("calibrate by NN without polynomial")
-    calibrator.calibrate_by_NN()
-    calibrator.save_accel_brake_map_NN(map_vel,map_accel,map_brake,test_NN_without_polynomial_dir)
-
-    print("calibrate by GP without polynomial")
-    calibrator.calibrate_by_GP()
-    calibrator.save_accel_brake_map_GP(map_vel,map_accel,map_brake,test_GP_without_polynomial_dir)
- 
-    print("calibrate by polynomial regression")
-    calibrator.calibrate_by_polynomial_regression()
-    calibrator.save_accel_brake_map_poly(map_vel,map_accel,map_brake,test_polynomial_dir)
 
     print("calibrate by NN")
     calibrator.calibrate_by_NN()
     calibrator.save_accel_brake_map_NN(map_vel,map_accel,map_brake,test_NN_dir)
 
-    print("calibrate by GP")
-    calibrator.calibrate_by_GP()
-    calibrator.save_accel_brake_map_GP(map_vel,map_accel,map_brake,test_GP_dir)
-
-    print("calibrate by NN augmented")
-    calibrator.data_augmentation_by_GP(map_vel,map_accel,map_brake)
-    calibrator.calibrate_by_NN()
-    calibrator.save_accel_brake_map_NN(map_vel,map_accel,map_brake,test_NN_augmented_by_GP_dir)
 
     print("nominal map")
     print("train data error")
     calibrator.calc_calibration_error(low_quality_map_dir)
     print("test data error")
     tester.calc_calibration_error(low_quality_map_dir)
-    print("NN without polynomial map")
-    print("train data error")
-    calibrator.calc_calibration_error(test_NN_without_polynomial_dir)
-    print("test data error")
-    tester.calc_calibration_error(test_NN_without_polynomial_dir)
-    print("GP without polynomial map")
-    print("train data error")
-    calibrator.calc_calibration_error(test_GP_without_polynomial_dir)
-    print("test data error")
-    tester.calc_calibration_error(test_GP_without_polynomial_dir)
-    print("polynomial map")
-    print("train data error")
-    calibrator.calc_calibration_error(test_polynomial_dir)
-    print("test data error")
-    tester.calc_calibration_error(test_polynomial_dir)
     print("NN map")
     print("train data error")
     calibrator.calc_calibration_error(test_NN_dir)
     print("test data error")
     tester.calc_calibration_error(test_NN_dir)
-    print("GP map")
-    print("train data error")
-    calibrator.calc_calibration_error(test_GP_dir)
-    print("test data error")
-    tester.calc_calibration_error(test_GP_dir)
-    print("NN augmented by GP map")
-    print("train data error")
-    calibrator.calc_calibration_error(test_NN_augmented_by_GP_dir)
-    print("test data error")
-    tester.calc_calibration_error(test_NN_augmented_by_GP_dir)
-
 
 print("nominal test")
 simulator.drive_sim(save_dir=test_nominal_dir)
-print("NN without polynomial test")
-sim_setting_dict["accel_brake_map_control_path"] = test_NN_without_polynomial_dir
-simulator.perturbed_sim(sim_setting_dict)
-simulator.drive_sim(save_dir=test_NN_without_polynomial_dir)
-print("GP without polynomial test")
-sim_setting_dict["accel_brake_map_control_path"] = test_GP_without_polynomial_dir
-simulator.perturbed_sim(sim_setting_dict)
-simulator.drive_sim(save_dir=test_GP_without_polynomial_dir)
-print("polynomial test")
-sim_setting_dict["accel_brake_map_control_path"] = test_polynomial_dir
-simulator.perturbed_sim(sim_setting_dict)
-simulator.drive_sim(save_dir=test_polynomial_dir)
 print("NN test")
 sim_setting_dict["accel_brake_map_control_path"] = test_NN_dir
 simulator.perturbed_sim(sim_setting_dict)
 simulator.drive_sim(save_dir=test_NN_dir)
-print("GP test")
-sim_setting_dict["accel_brake_map_control_path"] = test_GP_dir
-simulator.perturbed_sim(sim_setting_dict)
-simulator.drive_sim(save_dir=test_GP_dir)
-print("NN augmented by GP test")
-sim_setting_dict["accel_brake_map_control_path"] = test_NN_augmented_by_GP_dir
-simulator.perturbed_sim(sim_setting_dict)
-simulator.drive_sim(save_dir=test_NN_augmented_by_GP_dir)
 print("Correct map test")
 sim_setting_dict["accel_brake_map_control_path"] = correct_map_dir
 simulator.perturbed_sim(sim_setting_dict)

@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 
-from autoware_vehicle_adaptor.src import utils
+from autoware_vehicle_adaptor.src import vehicle_adaptor_compensator
 from autoware_vehicle_adaptor.calibrator import get_acc_input_from_csv_via_map
 import numpy as np
 import scipy.interpolate
@@ -81,7 +81,7 @@ class add_data_from_csv:
         self.division_indices_val = []
         self.division_indices_test = []
         self.division_indices_replay = []
-        self.nominal_dynamics = utils.NominalDynamics()
+        self.nominal_dynamics = vehicle_adaptor_compensator.NominalDynamics()
         self.nominal_dynamics.set_params(
             wheel_base,
             acc_time_delay,
@@ -334,7 +334,7 @@ class add_data_from_csv:
                 predict_error[vel_index] = pseudo_predict_error[vel_index]
             if not parameters.use_yaw_observation:
                 predict_error[yaw_index] = pseudo_predict_error[yaw_index]
-            predict_error = utils.rotate_data(predict_error, state[yaw_index])
+            predict_error = vehicle_adaptor_compensator.rotate_data(predict_error, state[yaw_index])
             if reverse_steer:
                 predict_error[y_index] = -predict_error[y_index]
                 predict_error[yaw_index] = -predict_error[yaw_index]

@@ -26,7 +26,6 @@ import time
 #torch.autograd.set_detect_anomaly(True)
 prediction_length = parameters.prediction_length
 past_length = parameters.past_length
-past_initial_hidden_length = past_length# + 50
 integration_length = parameters.integration_length
 integration_weight = parameters.integration_weight
 add_position_to_prediction = parameters.add_position_to_prediction
@@ -54,10 +53,6 @@ steer_index = 2
 prediction_step = parameters.mpc_predict_step
 acc_input_indices_nom =  np.arange(3 + acc_queue_size -acc_delay_step, 3 + acc_queue_size -acc_delay_step + prediction_step)
 steer_input_indices_nom = np.arange(3 + acc_queue_size + prediction_step + steer_queue_size -steer_delay_step, 3 + acc_queue_size + steer_queue_size -steer_delay_step + 2 * prediction_step)
-
-prob_update_memory_bank = 0.03
-memory_bank_size = 100
-memory_bank_element_len = 10
 
 offline_data_size = 300 #100
 offline_data_len = 10
@@ -100,38 +95,6 @@ def get_offline_data(X, division_indices, prediction_step, use_division_indices)
     for i in range(offline_data_size):
         offline_data.append(X[selected_index[i] + prediction_step * np.arange(offline_data_len)])
     return np.array(offline_data)
-def transform_to_sequence_data_with_memory_bank(X,seq_size,indices,prediction_step):
-    X_seq = []
-    memory_bank = []
-    start_num = 0
-    for i in range(len(indices)):
-        j = 0
-        memory_bank_indices = np.random.choice(np.arange(start_num,indices[i] - prediction_step * memory_bank_element_len),memory_bank_size)
-        #tmp_memory_bank = []
-        #for k in range(memory_bank_size):
-        #    tmp_memory_bank.append(X[memory_bank_indices[k] + prediction_step * np.arange(memory_bank_element_len)])
-        tmp_memory_bank = np.array([
-            X[memory_bank_indices[k] + prediction_step * np.arange(memory_bank_element_len)]
-            for k in range(memory_bank_size)
-        ])
-        while start_num + j + prediction_step * seq_size <= indices[i]:
-            X_seq.append(X[start_num + j + prediction_step * np.arange(seq_size)])
-            if random.random() < prob_update_memory_bank:
-                tmp_memory_bank[:-1] = tmp_memory_bank[1:]
-                tmp_memory_bank[-1] = X[start_num + j + prediction_step * np.arange(seq_size - memory_bank_element_len - 1, seq_size - 1)]
-                #tmp_memory_bank.pop(0)
-                #tmp_memory_bank.append(X[start_num + j + prediction_step * np.arange(seq_size - memory_bank_element_len,seq_size)])
-            memory_bank.append(np.array(tmp_memory_bank).copy())
-            j += 1
-        start_num = indices[i]
-    return np.array(X_seq),np.array(memory_bank)
-def get_random_memory_bank(X):
-    memory_bank_indices = np.random.choice(np.arange(X.shape[0] - prediction_step * memory_bank_element_len),memory_bank_size)
-    memory_bank = np.array([
-        X[memory_bank_indices[k] + prediction_step * np.arange(memory_bank_element_len)]
-        for k in range(memory_bank_size)
-    ])
-    return memory_bank
 def get_acc_steer_nominal_prediction(X,window_size=10,past_length=past_length):
     state_tmp = X[:,past_length, [acc_index, steer_index]]
     for i in range(window_size):
@@ -322,11 +285,11 @@ class TrainErrorPredictionNNFunctions:
                 X_batch = X[k*batch_size:(k+1)*batch_size]
                 Y_batch = Y[k*batch_size:(k+1)*batch_size]
             
-            _, hc = model[0](X_batch, previous_error=Y_batch[:, :past_length, -2:], mode="get_lstm_states")
+            _, hc = models[0](X_batch, previous_error=Y_batch[:, :past_length, -2:], mode="get_lstm_states")
             states_tmp=X_batch[:, past_length, [vel_index, acc_index, steer_index]].unsqueeze(1)
             for i in range(window_size):
                 states_tmp_with_input_history = torch.cat((states_tmp, X_batch[:,[past_length+i], 3:]), dim=2)
-                predicted_error_0, hc_next =  model[0](states_tmp_with_input_history, hc=hc, mode="predict_with_hc")
+                predicted_error_0, hc_next =  models[0](states_tmp_with_input_history, hc=hc, mode="predict_with_hc")
                 predicted_error = predicted_error_0 / len(models)
                 for j in range(1,len(models)):
                     predicted_error_j, _ =  models[j](states_tmp_with_input_history, hc=hc, mode="predict_with_hc")
@@ -400,57 +363,105 @@ class TrainErrorPredictionNNFunctions:
                 Z_seq_filtered.append(Z_seq[i])
         return np.array(X_seq_filtered), np.array(Y_seq_filtered), np.array(Z_seq_filtered)
 
+# with offline data
 
+class TrainErrorPredictionNNWithOfflineData:
+    @staticmethod
+    def get_initial_hidden_dict(
+        model_for_initial_hidden,
+        offline_data_dict
+    ): # get initial_hidden dict ind -> offline features
+        initial_hidden_dict = {}
+        for key in offline_data_dict.keys():
+            if next(model_for_initial_hidden.parameters()).device == "cpu":
+                offline_data_tensor = torch.tensor(offline_data_dict[key],dtype=torch.float32).unsqueeze(0)
+            else:
+                offline_data_tensor = torch.tensor(offline_data_dict[key],dtype=torch.float32,device=next(model_for_initial_hidden.parameters()).device).unsqueeze(0)
 
-
-
-class TrainErrorPredictionNNWithMemoryFunctions:
+            initial_hidden_dict[key] = model_for_initial_hidden(offline_data_tensor)[0]
+        return initial_hidden_dict
+    @staticmethod
+    def get_initial_hidden_batch(
+        initial_hidden_dict,
+        indices_batch, # index as np array indicating which division index is used
+        device,
+        initial_hidden_dim
+    ): # get initial_hidden as torch tensor from dict ind -> initial_hidden
+        initial_hidden_batch = torch.zeros(
+            (len(indices_batch),initial_hidden_dim),
+            dtype=torch.float32,
+            device=device
+        )
+        for i in range(indices_batch.shape[0]):
+            if indices_batch[i] in initial_hidden_dict.keys():
+                initial_hidden_batch[i] = initial_hidden_dict[indices_batch[i]]
+        return initial_hidden_batch
+    @staticmethod
+    def get_initial_hidden(
+        model_for_initial_hidden,
+        offline_data_dict,
+        indices_batch, # index as np array indicating which division index is used
+        initial_hidden_dim
+    ): # get initial_hidden as torch tensor from dict ind -> initial_hidden (before calculating initial_hidden)
+        initial_hidden_dict = TrainErrorPredictionNNWithOfflineData.get_initial_hidden_dict(model_for_initial_hidden,offline_data_dict)
+        initial_hidden = TrainErrorPredictionNNWithOfflineData.get_initial_hidden_batch(initial_hidden_dict,indices_batch,next(model_for_initial_hidden.parameters()).device,initial_hidden_dim)
+        return initial_hidden
+     
     @staticmethod
     def get_loss(
-            criterion,
-            model,
+        criterion,
+        model,
+        model_for_initial_hidden,
+        X,
+        Y,
+        offline_data_dict,
+        indices,
+        adaptive_weight,
+        tanh_gain=10,
+        tanh_weight=0.1,
+        first_order_weight=0.01,
+        second_order_weight=0.01,
+        randomize_previous_error=[0.5,0.1],
+        integral_prob=0.0,
+        alpha_jacobian=0.01,
+        alpha_jacobian_encoder=0.1,
+        alpha_jacobian_gru_attention=0.1,
+        alpha_hessian=0.01,
+        alpha_hessian_encoder=0.1,
+        alpha_hessian_gru_attention=0.1,
+        calc_jacobian_len=10,
+        eps=1e-6
+    ):
+        """ all tensor and model should be in the same device""" # index as np array indicating which division index is used # index as np array indicating which division index is used
+        initial_hidden_dim = 2 * model.lstm_hidden_total_size
+        hc_initial_concat = TrainErrorPredictionNNWithOfflineData.get_initial_hidden(
             model_for_initial_hidden,
-            X,
-            Y,
-            memory_bank,
-            adaptive_weight,
-            tanh_gain=10,
-            tanh_weight=0.1,
-            first_order_weight=0.01,
-            second_order_weight=0.01,
-            randomize_previous_error=[0.5,0.1],
-            integral_prob=0.0,
-            alpha_jacobian=0.01,
-            alpha_jacobian_encoder=0.1,
-            alpha_jacobian_gru_attention=0.1,
-            alpha_hessian=0.01,
-            alpha_hessian_encoder=0.1,
-            alpha_hessian_gru_attention=0.1,
-            calc_jacobian_len=10,
-            eps=1e-6
-        ):
-        """ all tensor and model should be in the same device"""
+            offline_data_dict,
+            indices,
+            initial_hidden_dim
+        )
         randomize_scale_tensor = torch.tensor(randomize_previous_error).to(X.device)
-        previous_error = Y[:, :past_length, -2:] + torch.mean(torch.abs(Y[:, :past_length, -2:]),dim=1).unsqueeze(1) * randomize_scale_tensor * torch.randn_like(Y[:, :past_length, -2:])
-        hc_initial_concat = model_for_initial_hidden(memory_bank)
+        Y_for_lstm_encoder = Y[:,:past_length,-2:]
+        previous_error = Y_for_lstm_encoder + torch.mean(torch.abs(Y_for_lstm_encoder),dim=1).unsqueeze(1) * randomize_scale_tensor * torch.randn_like(Y_for_lstm_encoder)
+
         hc_initial = (hc_initial_concat[:, :model.lstm_hidden_total_size].unsqueeze(0).contiguous(),
                     hc_initial_concat[:, model.lstm_hidden_total_size:].unsqueeze(0).contiguous()) # initial hidden state
         Y_pred, hc = model(X,previous_error=previous_error,hc=hc_initial,mode="get_lstm_states")
-        #Y_pred, hc = model(X,previous_error=previous_error,mode="get_lstm_states")
         
         # Calculate loss
         loss = criterion(Y_pred * adaptive_weight, Y[:,past_length:] * adaptive_weight)
         if alpha_jacobian is not None:
-            random_vector_memory_bank = torch.randn_like(memory_bank)
-            hc_initial_perturbed_concat = model_for_initial_hidden(memory_bank + eps * random_vector_memory_bank)
+            random_vector_hc_initial = torch.randn_like(hc_initial_concat)
+            random_vector_previous_error = torch.randn_like(previous_error)
+            random_vector_X = torch.randn_like(X[:,:past_length+calc_jacobian_len])
+
+            hc_initial_perturbed_concat = hc_initial_concat + eps * random_vector_hc_initial
             hc_initial_perturbed = (hc_initial_perturbed_concat[:, :model.lstm_hidden_total_size].unsqueeze(0).contiguous(),
                                     hc_initial_perturbed_concat[:, model.lstm_hidden_total_size:].unsqueeze(0).contiguous())
             loss += alpha_jacobian_gru_attention * criterion((hc_initial_perturbed_concat - hc_initial_concat) / eps, torch.zeros_like(hc_initial_concat))
-            random_vector_previous_error = torch.randn_like(previous_error)
-            random_vector_X = torch.randn_like(X[:,:past_length+calc_jacobian_len])
+
             hc_perturbed = model(X[:, :past_length] + eps * random_vector_X[:, :past_length],
                                 previous_error=previous_error + eps * random_vector_previous_error, hc=hc_initial_perturbed, mode="only_encoder")
-            #hc_perturbed = model(X[:, :past_length] + eps * random_vector_X[:, :past_length],previous_error=previous_error + eps * random_vector_previous_error, mode="only_encoder")
             
             loss += alpha_jacobian_encoder * criterion((hc_perturbed[0] - hc[0]) / eps, torch.zeros_like(hc_initial[0]))
             loss += alpha_jacobian_encoder * criterion((hc_perturbed[1] - hc[1]) / eps, torch.zeros_like(hc_initial[1]))
@@ -459,7 +470,7 @@ class TrainErrorPredictionNNWithMemoryFunctions:
             Y_perturbed, _ = model(X[:, past_length: past_length + calc_jacobian_len] + eps * random_vector_X[:,past_length:past_length+calc_jacobian_len], hc=hc_perturbed, mode="predict_with_hc")
             loss += alpha_jacobian * criterion((Y_perturbed - Y_pred[:,:calc_jacobian_len]) / eps, torch.zeros_like(Y_perturbed))
             if alpha_hessian is not None:
-                hc_initial_perturbed_minus_concat = model_for_initial_hidden(memory_bank - eps * random_vector_memory_bank)
+                hc_initial_perturbed_minus_concat = hc_initial_concat - eps * random_vector_hc_initial
                 hc_initial_perturbed_minus = (hc_initial_perturbed_minus_concat[:, :model.lstm_hidden_total_size].unsqueeze(0).contiguous(),
                                             hc_initial_perturbed_minus_concat[:, model.lstm_hidden_total_size:].unsqueeze(0).contiguous())
                 loss += alpha_hessian_gru_attention * criterion((hc_initial_perturbed_concat - 2 * hc_initial_concat + hc_initial_perturbed_minus_concat) / eps ** 2, torch.zeros_like(hc_initial_concat))
@@ -497,487 +508,7 @@ class TrainErrorPredictionNNWithMemoryFunctions:
         return total_loss
     @staticmethod
     def validate_in_batches(
-            model,
-            model_for_initial_hidden,
-            criterion,
-            X_val,
-            Y_val,
-            memory_bank_val,
-            adaptive_weight,
-            randomize_previous_error=[0.03,0.03],
-            batch_size=1000,
-            alpha_jacobian=None,
-            alpha_jacobian_encoder=0.1,
-            alpha_jacobian_gru_attention=0.1,
-            alpha_hessian=None,
-            alpha_hessian_encoder=0.1,
-            alpha_hessian_gru_attention=0.1,
-            calc_jacobian_len=10,
-            eps=1e-5
-        ):
-        """ tensors might be in the different device"""
-        device = next(model.parameters()).device
-        model.eval()
-        model_for_initial_hidden.eval()
-        val_loss = 0.0
-        num_batches = (X_val.size(0) + batch_size - 1) // batch_size
-
-        with torch.no_grad():
-            for i in range(num_batches):
-                start_idx = i * batch_size
-                end_idx = min((i + 1) * batch_size, X_val.size(0))
-                if X_val.device != device:
-                    X_batch = X_val[start_idx:end_idx].pin_memory().to(device, non_blocking=True)
-                    Y_batch = Y_val[start_idx:end_idx].pin_memory().to(device, non_blocking=True)
-                    memory_bank_batch = memory_bank_val[start_idx:end_idx].pin_memory().to(device, non_blocking=True)    
-                else:
-                    X_batch = X_val[start_idx:end_idx]
-                    Y_batch = Y_val[start_idx:end_idx]
-                    memory_bank_batch = memory_bank_val[start_idx:end_idx]
-                
-                loss = TrainErrorPredictionNNWithMemoryFunctions.get_loss(
-                    criterion, model, model_for_initial_hidden,
-                    X_batch, Y_batch, memory_bank_batch, adaptive_weight,
-                    randomize_previous_error=randomize_previous_error,
-                    alpha_jacobian=alpha_jacobian,alpha_jacobian_encoder=alpha_jacobian_encoder,
-                    alpha_jacobian_gru_attention=alpha_jacobian_gru_attention,
-                    alpha_hessian=alpha_hessian,alpha_hessian_encoder=alpha_hessian_encoder,
-                    alpha_hessian_gru_attention=alpha_hessian_gru_attention,
-                    calc_jacobian_len=calc_jacobian_len,eps=eps
-                )
-                val_loss += loss.item() * (end_idx - start_idx)
-        val_loss /= X_val.size(0)
-        return val_loss
-    @staticmethod
-    def get_each_component_loss(
-            model,
-            model_for_initial_hidden,
-            X_val,
-            Y_val,
-            memory_bank_val,
-            tanh_gain = 10,
-            tanh_weight = 0.1,
-            first_order_weight = 0.01,
-            second_order_weight = 0.01,
-            batch_size=1000,
-            window_size=10
-        ):
-        """ tensors might be in the different device"""
-        device = next(model.parameters()).device
-        model.eval()
-        model_for_initial_hidden.eval()
-        val_loss = np.zeros(Y_val.size(2))
-        tanh_loss = 0.0
-        first_order_loss = 0.0
-        second_order_loss = 0.0
-        num_batches = (X_val.size(0) + batch_size - 1) // batch_size
-        Y_pred_list = []
-        with torch.no_grad():
-            for i in range(num_batches):
-                start_idx = i * batch_size
-                end_idx = min((i + 1) * batch_size, X_val.size(0))
-                if X_val.device != device:
-                    X_batch = X_val[start_idx:end_idx].pin_memory().to(device, non_blocking=True)
-                    Y_batch = Y_val[start_idx:end_idx].pin_memory().to(device, non_blocking=True)
-                    memory_bank_batch = memory_bank_val[start_idx:end_idx].pin_memory().to(device, non_blocking=True)    
-                else:
-                    X_batch = X_val[start_idx:end_idx]
-                    Y_batch = Y_val[start_idx:end_idx]
-                    memory_bank_batch = memory_bank_val[start_idx:end_idx]
-                hc_initial_concat = model_for_initial_hidden(memory_bank_batch)
-                hc_initial = (hc_initial_concat[:, :model.lstm_hidden_total_size].unsqueeze(0).contiguous(), hc_initial_concat[:, model.lstm_hidden_total_size:].unsqueeze(0).contiguous())
-                Y_pred, _ = model(X_batch, previous_error=Y_batch[:, :past_length, -2:],hc=hc_initial, mode="get_lstm_states")
-                #Y_pred, _ = model(X_batch, previous_error=Y_batch[:, :past_length, -2:], mode="get_lstm_states")
-                
-                Y_pred_list.append(Y_pred[:,window_size])
-
-                # Calculate the loss
-                loss = torch.mean(torch.abs(Y_pred - Y_batch[:,past_length:]),dim=(0,1))
-                val_loss += loss.cpu().numpy() * (end_idx - start_idx)
-                tanh_loss += tanh_weight * torch.mean(torch.abs(torch.tanh(tanh_gain * (Y_pred[:,:,-1]-Y_batch[:,past_length:,-1])))).item() * (end_idx - start_idx)
-                first_order_loss += first_order_weight * torch.mean(torch.abs((Y_pred[:, 1:] - Y_pred[:, :-1]) - (Y_batch[:, past_length + 1:] - Y_batch[:, past_length:-1]))).item() * (end_idx - start_idx)
-                second_order_loss += second_order_weight * torch.mean(torch.abs((Y_pred[:, 2:] - 2 * Y_pred[:, 1:-1] + Y_pred[:, :-2]) - (Y_batch[:, past_length + 2:] - 2 * Y_batch[:, past_length + 1:-1] + Y_batch[:, past_length:-2]))).item() * (end_idx - start_idx)
-        val_loss /= X_val.size(0)
-        tanh_loss /= X_val.size(0)
-        first_order_loss /= X_val.size(0)
-        second_order_loss /= X_val.size(0)
-        Y_pred_np = torch.cat(Y_pred_list,dim=0).cpu().detach().numpy()
-        return np.concatenate((val_loss, [tanh_loss, first_order_loss, second_order_loss])), Y_pred_np
-    @staticmethod
-    def get_Y_pred_np(model, model_for_initial_hidden, X_val, Y_val, memory_bank_val, batch_size=1000):
-        """ tensors might be in the different device"""
-        device = next(model.parameters()).device
-        model.eval()
-        model_for_initial_hidden.eval()
-        num_batches = (X_val.size(0) + batch_size - 1) // batch_size
-        Y_pred_list = []
-        with torch.no_grad():
-            for i in range(num_batches):
-                start_idx = i * batch_size
-                end_idx = min((i + 1) * batch_size, X_val.size(0))
-                if X_val.device != device:
-                    X_batch = X_val[start_idx:end_idx].pin_memory().to(device, non_blocking=True)
-                    Y_batch = Y_val[start_idx:end_idx].pin_memory().to(device, non_blocking=True)
-                    memory_bank_batch = memory_bank_val[start_idx:end_idx].pin_memory().to(device, non_blocking=True)    
-                else:
-                    X_batch = X_val[start_idx:end_idx]
-                    Y_batch = Y_val[start_idx:end_idx]
-                    memory_bank_batch = memory_bank_val[start_idx:end_idx]
-                hc_initial_concat = model_for_initial_hidden(memory_bank_batch)
-                hc_initial = (hc_initial_concat[:, :model.lstm_hidden_total_size].unsqueeze(0).contiguous(), hc_initial_concat[:, model.lstm_hidden_total_size:].unsqueeze(0).contiguous())
-                Y_pred, _ = model(X_batch, previous_error=Y_batch[:, :past_length, -2:],hc=hc_initial, mode="get_lstm_states")
-                #Y_pred, _ = model(X_batch, previous_error=Y_batch[:, :past_length, -2:], mode="get_lstm_states")
-                Y_pred_list.append(Y_pred)
-        Y_pred_np = torch.cat(Y_pred_list,dim=0).cpu().detach().numpy()
-        return Y_pred_np
-    @staticmethod
-    def get_losses(
-            model,
-            model_for_initial_hidden,
-            criterion,
-            X,
-            Y,
-            memory_bank,
-            adaptive_weight
-        ):
-        loss = TrainErrorPredictionNNWithMemoryFunctions.validate_in_batches(
-            model, model_for_initial_hidden, criterion, X, Y, memory_bank, adaptive_weight=adaptive_weight
-        )
-        each_component_loss, Y_pred = TrainErrorPredictionNNWithMemoryFunctions.get_each_component_loss(
-            model, model_for_initial_hidden, X, Y, memory_bank
-        )
-        return loss, each_component_loss, Y_pred
-    @staticmethod
-    def get_acc_steer_model_prediction(model,model_for_initial_hidden,X,Y,memory_bank,window_size=10,batch_size=1000):
-        model.eval()
-        model_for_initial_hidden.eval()
-        device = next(model.parameters()).device
-        num_batches = (X.size(0) + batch_size - 1) // batch_size
-        prediction = []
-        for k in range(num_batches):
-            if X.device != device:
-                X_batch = X[k*batch_size:(k+1)*batch_size].pin_memory().to(device, non_blocking=True)
-                Y_batch = Y[k*batch_size:(k+1)*batch_size].pin_memory().to(device, non_blocking=True)
-                memory_bank_batch = memory_bank[k*batch_size:(k+1)*batch_size].pin_memory().to(device, non_blocking=True)
-            else:
-                X_batch = X[k*batch_size:(k+1)*batch_size]
-                Y_batch = Y[k*batch_size:(k+1)*batch_size]
-                memory_bank_batch = memory_bank[k*batch_size:(k+1)*batch_size]
-            hc_initial_concat = model_for_initial_hidden(memory_bank_batch)
-            hc_initial = (hc_initial_concat[:, :model.lstm_hidden_total_size].unsqueeze(0).contiguous(), hc_initial_concat[:, model.lstm_hidden_total_size:].unsqueeze(0).contiguous())
-            _, hc = model(X_batch, previous_error=Y_batch[:, :past_length, -2:],hc=hc_initial, mode="get_lstm_states")
-            
-            states_tmp=X_batch[:,past_length, [vel_index, acc_index, steer_index]].unsqueeze(1)
-            for i in range(window_size):
-                states_tmp_with_input_history = torch.cat((states_tmp, X_batch[:,[past_length+i], 3:]), dim=2)
-                predicted_error, hc =  model(states_tmp_with_input_history, hc=hc, mode="predict_with_hc")
-                states_tmp[:,0,0] = X_batch[:,past_length + i + 1, 0]
-                for j in range(prediction_step):
-                    states_tmp[:,0,1] = states_tmp[:,0,1] + (X_batch[:,past_length + i, acc_input_indices_nom[j]] - states_tmp[:,0,1]) * (1 - np.exp(- control_dt / acc_time_constant))
-                    states_tmp[:,0,2] = states_tmp[:,0,2] + (X_batch[:,past_length + i, steer_input_indices_nom[j]] - states_tmp[:,0,2]) * (1 - np.exp(- control_dt / steer_time_constant))
-                states_tmp[:,0,1] = states_tmp[:,0,1] + predicted_error[:,0,state_name_to_predicted_index["acc"]] * control_dt * prediction_step
-                states_tmp[:,0,2] = states_tmp[:,0,2] + predicted_error[:,0,state_name_to_predicted_index["steer"]] * control_dt * prediction_step                
-            prediction.append(states_tmp[:,0,[1,2]].detach().to("cpu").numpy())
-        prediction = np.concatenate(prediction,axis=0)
-        return prediction
-    @staticmethod
-    def get_acc_steer_models_prediction(models,model_for_initial_hidden,X,Y,memory_bank,window_size=10,batch_size=1000):
-        for model in models:
-            model.eval()
-        model_for_initial_hidden.eval()
-        device = next(model[0].parameters()).device
-        num_batches = (X.size(0) + batch_size - 1) // batch_size
-        prediction = []
-        for k in range(num_batches):
-            if X.device != device:
-                X_batch = X[k*batch_size:(k+1)*batch_size].pin_memory().to(device, non_blocking=True)
-                Y_batch = Y[k*batch_size:(k+1)*batch_size].pin_memory().to(device, non_blocking=True)
-                memory_bank_batch = memory_bank[k*batch_size:(k+1)*batch_size].pin_memory().to(device, non_blocking=True)
-            else:
-                X_batch = X[k*batch_size:(k+1)*batch_size]
-                Y_batch = Y[k*batch_size:(k+1)*batch_size]
-                memory_bank_batch = memory_bank[k*batch_size:(k+1)*batch_size]
-            hc_initial_concat = model_for_initial_hidden(memory_bank_batch)
-            hc_initial = (hc_initial_concat[:, :model[0].lstm_hidden_total_size].unsqueeze(0).contiguous(), hc_initial_concat[:, model[0].lstm_hidden_total_size:].unsqueeze(0).contiguous())
-            _, hc = model[0](X_batch, previous_error=Y_batch[:, :past_length, -2:],hc=hc_initial, mode="get_lstm_states")
-            
-            states_tmp=X_batch[:,past_length, [vel_index, acc_index, steer_index]].unsqueeze(1)
-            for i in range(window_size):
-                states_tmp_with_input_history = torch.cat((states_tmp, X_batch[:,[past_length+i], 3:]), dim=2)
-                predicted_error_0, hc_next =  model[0](states_tmp_with_input_history, hc=hc, mode="predict_with_hc")
-                predicted_error = predicted_error_0 / len(models)
-                for j in range(1,len(models)):
-                    predicted_error_j, _ =  model[j](states_tmp_with_input_history, hc=hc, mode="predict_with_hc")
-                    predicted_error += predicted_error_j / len(models)
-                hc = hc_next
-                states_tmp[:,0,0] = X_batch[:,past_length + i + 1, 0]
-                for j in range(prediction_step):
-                    states_tmp[:,0,1] = states_tmp[:,0,1] + (X_batch[:,past_length + i, acc_input_indices_nom[j]] - states_tmp[:,0,1]) * (1 - np.exp(- control_dt / acc_time_constant))
-                    states_tmp[:,0,2] = states_tmp[:,0,2] + (X_batch[:,past_length + i, steer_input_indices_nom[j]] - states_tmp[:,0,2]) * (1 - np.exp(- control_dt / steer_time_constant))
-                states_tmp[:,0,1] = states_tmp[:,0,1] + predicted_error[:,0,state_name_to_predicted_index["acc"]] * control_dt * prediction_step
-                states_tmp[:,0,2] = states_tmp[:,0,2] + predicted_error[:,0,state_name_to_predicted_index["steer"]] * control_dt * prediction_step                
-            prediction.append(states_tmp[:,0,[1,2]].detach().to("cpu").numpy())
-        prediction = np.concatenate(prediction,axis=0)
-    @staticmethod
-    def get_model_signed_prediction_error(model,model_for_initial_hidden,X,Y,memory_bank,window_size=10,batch_size=1000):
-        model_prediction = TrainErrorPredictionNNWithMemoryFunctions.get_acc_steer_model_prediction(model,model_for_initial_hidden,X,Y,memory_bank,window_size,batch_size)
-        model_prediction_error = X[:,past_length+window_size, [acc_index, steer_index]].detach().to("cpu").numpy() - model_prediction
-        return model_prediction_error
-    @staticmethod
-    def get_models_signed_prediction_error(models,model_for_initial_hidden,X,Y,memory_bank,window_size=10,batch_size=1000):
-        model_prediction = TrainErrorPredictionNNWithMemoryFunctions.get_acc_steer_models_prediction(models,model_for_initial_hidden,X,Y,memory_bank,window_size,batch_size)
-        model_prediction_error = X[:,past_length+window_size, [acc_index, steer_index]].detach().to("cpu").numpy() - model_prediction
-        return model_prediction_error
-    @staticmethod
-    def get_signed_prediction_error(model,model_for_initial_hidden,relearned_model,relearned_model_for_initial_hidden,X,Y,memory_bank,window_size=10,batch_size=1000):
-        nominal_prediction_error = get_nominal_signed_prediction_error(X,window_size)
-        model_prediction_error = TrainErrorPredictionNNWithMemoryFunctions.get_model_signed_prediction_error(model,model_for_initial_hidden,X,Y,memory_bank,window_size,batch_size)
-        relearned_model_prediction_error = TrainErrorPredictionNNWithMemoryFunctions.get_model_signed_prediction_error(relearned_model,relearned_model_for_initial_hidden,X,Y,memory_bank,window_size,batch_size)
-        return nominal_prediction_error,model_prediction_error,relearned_model_prediction_error
-    @staticmethod
-    def get_sequence_data(X,Y,division_indices, acc_threshold=2.0, steer_threshold=0.7, acc_change_threshold=3.5, steer_change_threshold=0.8, acc_change_window=10, steer_change_window=10):
-        X_seq, memory_bank = transform_to_sequence_data_with_memory_bank(
-            np.array(X),
-            past_length+prediction_length,
-            division_indices,
-            prediction_step
-        )
-        Y_seq = transform_to_sequence_data(
-            np.array(Y)[:, state_component_predicted_index],
-            past_length + prediction_length,
-            division_indices,
-            prediction_step,
-        )
-        X_seq_filtered = []
-        Y_seq_filtered = []
-        memory_bank_filtered = []
-        for i in range(X_seq.shape[0]):
-            acc = X_seq[i, :, 1]
-            steer = X_seq[i, :, 2]
-            acc_input = X_seq[i, :, acc_input_indices_nom]
-            steer_input = X_seq[i, :, steer_input_indices_nom]
-            acc_change = (acc[acc_change_window:] - acc[:-acc_change_window]) / (acc_change_window * control_dt)
-            steer_change = (steer[steer_change_window:] - steer[:-steer_change_window]) / (steer_change_window * control_dt)
-            if (
-                (np.abs(acc).max() < acc_threshold) and
-                (np.abs(steer).max() < steer_threshold) and
-                (np.abs(acc_input).max() < acc_threshold) and
-                (np.abs(steer_input).max() < steer_threshold) and
-                (np.abs(acc_change).max() < acc_change_threshold) and
-                (np.abs(steer_change).max() < steer_change_threshold)
-            ):
-                X_seq_filtered.append(X_seq[i])
-                Y_seq_filtered.append(Y_seq[i])
-                memory_bank_filtered.append(memory_bank[i])
-        return np.array(X_seq_filtered), np.array(Y_seq_filtered), np.array(memory_bank_filtered)
-    @staticmethod
-    def get_sequence_data_as_file(X,Y,division_indices,file_path):
-        X_seq, Y_seq, memory_bank = TrainErrorPredictionNNWithMemoryFunctions.get_sequence_data(X,Y,division_indices)
-        np.savez(file_path, X=X_seq, Y=Y_seq, memory_bank=memory_bank)
-    @staticmethod
-    def get_sequence_data_tensor(X,Y,division_indices):
-        with tempfile.NamedTemporaryFile(suffix=".npz", delete=False) as tmp_file:
-            file_path = tmp_file.name
-        p = Process(target=TrainErrorPredictionNNWithMemoryFunctions.get_sequence_data_as_file, args=(X,Y,division_indices,file_path))
-        p.start()
-        p.join()
-        # Retry mechanism to ensure the file is completely written before loading
-        retries = 5
-        while retries > 0:
-            try:
-                with np.load(file_path) as data:
-                    X_tensor = torch.from_numpy(data['X']).to(torch.float32)
-                    Y_tensor = torch.from_numpy(data['Y']).to(torch.float32)
-                    memory_bank_tensor = torch.from_numpy(data['memory_bank']).to(torch.float32)
-                    # X_tensor = torch.tensor(data['X'], dtype=torch.float32)
-                    # Y_tensor = torch.tensor(data['Y'], dtype=torch.float32)
-                    # memory_bank_tensor = torch.tensor(data['memory_bank'], dtype=torch.float32)
-                break  # Exit loop if loading is successful
-            except (IOError, ValueError):
-                time.sleep(0.1)  # Wait briefly before retrying
-                retries -= 1
-        else:
-            raise IOError("Failed to load data from file.")
-
-        # Remove the file after successful loading
-        os.remove(file_path)
-        return X_tensor, Y_tensor, memory_bank_tensor
-    
-
-
-# with offline data
-
-class TrainErrorPredictionNNWithOfflineData:
-    @staticmethod
-    def get_offline_feature_dict(
-        preprocessor,
-        model_for_offline_features,
-        offline_data_dict
-    ): # get offline features dict ind -> offline features
-        offline_feature_dict = {}
-        for key in offline_data_dict.keys():
-            if next(model_for_offline_features.parameters()).device == "cpu":
-                offline_data_tensor = torch.tensor(offline_data_dict[key],dtype=torch.float32).unsqueeze(0)
-            else:
-                offline_data_tensor = torch.tensor(offline_data_dict[key],dtype=torch.float32,device=next(model_for_offline_features.parameters()).device).unsqueeze(0)
-
-            offline_feature_dict[key] = model_for_offline_features(offline_data_tensor,preprocessor)[0]
-        return offline_feature_dict
-    @staticmethod
-    def get_offline_features_batch(
-        offline_feature_dict,
-        indices_batch, # index as np array indicating which division index is used
-        device,
-        offline_feature_dim
-    ): # get offline features as torch tensor from dict ind -> offline features
-        offline_features_batch = torch.zeros(
-            (len(indices_batch),offline_feature_dim),
-            dtype=torch.float32,
-            device=device
-        )
-        mask_batch = torch.zeros(len(indices_batch),dtype=torch.bool,device=device)
-        for i in range(indices_batch.shape[0]):
-            if indices_batch[i] in offline_feature_dict.keys():
-                offline_features_batch[i] = offline_feature_dict[indices_batch[i]]
-                mask_batch[i] = True
-        return offline_features_batch, mask_batch
-    @staticmethod
-    def get_offline_features(
-        preprocessor,
-        model_for_offline_features,
-        offline_data_dict,
-        indices_batch, # index as np array indicating which division index is used
-        offline_feature_dim
-    ): # get offline features as torch tensor from dict ind -> offline data (before calculating offline features)
-        offline_feature_dict = TrainErrorPredictionNNWithOfflineData.get_offline_feature_dict(preprocessor,model_for_offline_features,offline_data_dict)
-        offline_features, mask = TrainErrorPredictionNNWithOfflineData.get_offline_features_batch(offline_feature_dict,indices_batch,next(model_for_offline_features.parameters()).device,offline_feature_dim)
-        return offline_features, mask
-                
-    @staticmethod
-    def get_loss(
-        criterion,
         model,
-        preprocessor,
-        model_for_offline_features,
-        model_for_initial_hidden,
-        X,
-        Y,
-        offline_data_dict,
-        indices,
-        adaptive_weight,
-        tanh_gain=10,
-        tanh_weight=0.1,
-        first_order_weight=0.01,
-        second_order_weight=0.01,
-        randomize_previous_error=[0.5,0.1],
-        integral_prob=0.0,
-        alpha_jacobian=0.01,
-        alpha_jacobian_encoder=0.1,
-        alpha_jacobian_gru_attention=0.1,
-        alpha_hessian=0.01,
-        alpha_hessian_encoder=0.1,
-        alpha_hessian_gru_attention=0.1,
-        calc_jacobian_len=10,
-        eps=1e-6
-    ):
-        """ all tensor and model should be in the same device""" # index as np array indicating which division index is used # index as np array indicating which division index is used
-        offline_feature_dim = 2 * model.lstm_hidden_total_size
-        offline_features, mask = TrainErrorPredictionNNWithOfflineData.get_offline_features(
-            preprocessor,
-            model_for_offline_features,
-            offline_data_dict,
-            indices,
-            offline_feature_dim
-        )
-        randomize_scale_tensor = torch.tensor(randomize_previous_error).to(X.device)
-        Y_for_lstm_encoder = Y[:,past_initial_hidden_length-past_length:past_initial_hidden_length,-2:]
-        previous_error = Y_for_lstm_encoder + torch.mean(torch.abs(Y_for_lstm_encoder),dim=1).unsqueeze(1) * randomize_scale_tensor * torch.randn_like(Y_for_lstm_encoder)
-        # hc_initial_concat = model_for_initial_hidden(offline_features, X[:, :past_initial_hidden_length], mask, preprocessor)
-        hc_initial_concat = model_for_initial_hidden(offline_features, mask)
-        hc_initial = (hc_initial_concat[:, :model.lstm_hidden_total_size].unsqueeze(0).contiguous(),
-                    hc_initial_concat[:, model.lstm_hidden_total_size:].unsqueeze(0).contiguous()) # initial hidden state
-        X_for_lstm = X[:, past_initial_hidden_length-past_length:]
-        Y_pred, hc = model(X_for_lstm,previous_error=previous_error,hc=hc_initial,mode="get_lstm_states")
-        #Y_pred, hc = model(X,previous_error=previous_error,mode="get_lstm_states")
-        
-        # Calculate loss
-        loss = criterion(Y_pred * adaptive_weight, Y[:,past_initial_hidden_length:] * adaptive_weight)
-        if alpha_jacobian is not None:
-            random_vector_offline_features = torch.randn_like(offline_features)
-            random_vector_previous_error = torch.randn_like(previous_error)
-            random_vector_X = torch.randn_like(X[:,:past_initial_hidden_length+calc_jacobian_len])
-
-            #hc_initial_perturbed_concat = model_for_initial_hidden(
-            #    offline_features + eps * random_vector_offline_features,
-            #    X[:, :past_initial_hidden_length] + eps * random_vector_X[:, :past_initial_hidden_length],
-            #    mask,
-            #    preprocessor)
-            hc_initial_perturbed_concat = model_for_initial_hidden(
-                offline_features + eps * random_vector_offline_features,
-                mask)
-            hc_initial_perturbed = (hc_initial_perturbed_concat[:, :model.lstm_hidden_total_size].unsqueeze(0).contiguous(),
-                                    hc_initial_perturbed_concat[:, model.lstm_hidden_total_size:].unsqueeze(0).contiguous())
-            loss += alpha_jacobian_gru_attention * criterion((hc_initial_perturbed_concat - hc_initial_concat) / eps, torch.zeros_like(hc_initial_concat))
-
-            hc_perturbed = model(X_for_lstm[:, :past_length] + eps * random_vector_X[:, past_initial_hidden_length-past_length:past_initial_hidden_length],
-                                previous_error=previous_error + eps * random_vector_previous_error, hc=hc_initial_perturbed, mode="only_encoder")
-            #hc_perturbed = model(X[:, :past_length] + eps * random_vector_X[:, :past_length],previous_error=previous_error + eps * random_vector_previous_error, mode="only_encoder")
-            
-            loss += alpha_jacobian_encoder * criterion((hc_perturbed[0] - hc[0]) / eps, torch.zeros_like(hc_initial[0]))
-            loss += alpha_jacobian_encoder * criterion((hc_perturbed[1] - hc[1]) / eps, torch.zeros_like(hc_initial[1]))
-
-
-            Y_perturbed, _ = model(X_for_lstm[:, past_length: past_length + calc_jacobian_len] + eps * random_vector_X[:,past_initial_hidden_length:past_initial_hidden_length+calc_jacobian_len], hc=hc_perturbed, mode="predict_with_hc")
-            loss += alpha_jacobian * criterion((Y_perturbed - Y_pred[:,:calc_jacobian_len]) / eps, torch.zeros_like(Y_perturbed))
-            if alpha_hessian is not None:
-                #hc_initial_perturbed_minus_concat = model_for_initial_hidden(
-                #    offline_features - eps * random_vector_offline_features,
-                #    X[:, :past_initial_hidden_length] - eps * random_vector_X[:, :past_initial_hidden_length],
-                #    mask,
-                #    preprocessor)
-                hc_initial_perturbed_minus_concat = model_for_initial_hidden(
-                    offline_features - eps * random_vector_offline_features,
-                    mask)
-                hc_initial_perturbed_minus = (hc_initial_perturbed_minus_concat[:, :model.lstm_hidden_total_size].unsqueeze(0).contiguous(),
-                                            hc_initial_perturbed_minus_concat[:, model.lstm_hidden_total_size:].unsqueeze(0).contiguous())
-                loss += alpha_hessian_gru_attention * criterion((hc_initial_perturbed_concat - 2 * hc_initial_concat + hc_initial_perturbed_minus_concat) / eps ** 2, torch.zeros_like(hc_initial_concat))
-                hc_perturbed_minus = model(X_for_lstm[:, :past_length] - eps * random_vector_X[:, past_initial_hidden_length-past_length:past_initial_hidden_length],
-                                        previous_error=previous_error - eps * random_vector_previous_error,hc=hc_initial_perturbed_minus, mode="only_encoder")
-                loss += alpha_hessian_encoder * criterion((hc_perturbed[0] - 2 * hc[0] + hc_perturbed_minus[0]) / eps ** 2, torch.zeros_like(hc[0]))
-                loss += alpha_hessian_encoder * criterion((hc_perturbed[1] - 2 * hc[1] + hc_perturbed_minus[1]) / eps ** 2, torch.zeros_like(hc[1]))
-                Y_perturbed_minus, _ = model(X_for_lstm[:, past_length: past_length + calc_jacobian_len] - eps * random_vector_X[:,past_initial_hidden_length:past_initial_hidden_length+calc_jacobian_len], hc=hc_perturbed_minus, mode="predict_with_hc")
-                loss += alpha_hessian * criterion((Y_perturbed - 2 * Y_pred[:,:calc_jacobian_len] + Y_perturbed_minus) / eps ** 2, torch.zeros_like(Y_perturbed))
-        # Calculate the integrated loss
-        if random.random() < integral_prob:
-            predicted_states = X_for_lstm[:,past_length, [vel_index,acc_index,steer_index]].unsqueeze(1)
-            for i in range(integration_length):
-                if i > 0:
-                    predicted_states[:,0,0] = X_for_lstm[:,past_length + i, vel_index]
-
-                predicted_states_with_input_history = torch.cat((predicted_states, X_for_lstm[:,[past_length + i], 3:]), dim=2)
-                predicted_error, hc =  model(predicted_states_with_input_history, hc=hc, mode="predict_with_hc")
-                for j in range(prediction_step):
-                    predicted_states[:,0,1] = predicted_states[:,0,1] + (X_for_lstm[:,past_length + i, acc_input_indices_nom[j]] - predicted_states[:,0,1]) * (1 - np.exp(- control_dt / acc_time_constant))
-                    predicted_states[:,0,2] = predicted_states[:,0,2] + (X_for_lstm[:,past_length + i, steer_input_indices_nom[j]] - predicted_states[:,0,2]) * (1 - np.exp(- control_dt / steer_time_constant))
-                predicted_states[:,0,-2] = predicted_states[:,0,-2] + predicted_error[:,0,-2] * control_dt * prediction_step
-                predicted_states[:,0,-1] = predicted_states[:,0,-1] + predicted_error[:,0,-1] * control_dt * prediction_step
-            
-            loss += adaptive_weight[-2] * integration_weight * criterion(predicted_states[:,0,-2], X_for_lstm[:,past_length + integration_length, acc_index])
-            loss += adaptive_weight[-1] * integration_weight * criterion(predicted_states[:,0,-1], X_for_lstm[:,past_length + integration_length, steer_index])
-        # Calculate the tanh loss
-        loss += tanh_weight * criterion(torch.tanh(tanh_gain * (Y_pred[:,:,-1]-Y[:,past_initial_hidden_length:,-1])),torch.zeros_like(Y_pred[:,:,-1]))
-        # Calculate the first order loss
-        first_order_loss = first_order_weight * criterion(Y_pred[:, 1:] - Y_pred[:, :-1], torch.zeros_like(Y_pred[:, 1:]))
-        # Calculate the second order loss
-        second_order_loss = second_order_weight * criterion(Y_pred[:, 2:] - 2 * Y_pred[:, 1:-1] + Y_pred[:, :-2], torch.zeros_like(Y_pred[:, 2:]))
-        # Calculate the total loss
-        total_loss = loss + first_order_loss + second_order_loss
-        return total_loss
-    @staticmethod
-    def validate_in_batches(
-        model,
-        preprocessor,
-        model_for_offline_features,
         model_for_initial_hidden,
         criterion,
         X_val,
@@ -999,8 +530,6 @@ class TrainErrorPredictionNNWithOfflineData:
         """ tensors might be in the different device"""
         device = next(model.parameters()).device
         model.eval()
-        preprocessor.eval()
-        model_for_offline_features.eval()
         model_for_initial_hidden.eval()
         val_loss = 0.0
         num_batches = (X_val.size(0) + batch_size - 1) // batch_size
@@ -1018,7 +547,7 @@ class TrainErrorPredictionNNWithOfflineData:
                     Y_batch = Y_val[start_idx:end_idx]
                 
                 loss = TrainErrorPredictionNNWithOfflineData.get_loss(
-                    criterion, model, preprocessor, model_for_offline_features, model_for_initial_hidden,
+                    criterion, model, model_for_initial_hidden,
                     X_batch, Y_batch, offline_data_dict_val, indices_batch,
                     adaptive_weight, randomize_previous_error=randomize_previous_error,
                     alpha_jacobian=alpha_jacobian,alpha_jacobian_encoder=alpha_jacobian_encoder,
@@ -1033,8 +562,6 @@ class TrainErrorPredictionNNWithOfflineData:
     @staticmethod
     def get_each_component_loss(
         model,
-        preprocessor,
-        model_for_offline_features,
         model_for_initial_hidden,
         X_val,
         Y_val,
@@ -1050,10 +577,8 @@ class TrainErrorPredictionNNWithOfflineData:
         """ tensors might be in the different device"""
         device = next(model.parameters()).device
         model.eval()
-        preprocessor.eval()
-        model_for_offline_features.eval()
         model_for_initial_hidden.eval()
-        offline_feature_dim = 2 * model.lstm_hidden_total_size
+        initial_hidden_dim = 2 * model.lstm_hidden_total_size
 
         val_loss = np.zeros(Y_val.size(2))
         tanh_loss = 0.0
@@ -1072,26 +597,21 @@ class TrainErrorPredictionNNWithOfflineData:
                 else:
                     X_batch = X_val[start_idx:end_idx]
                     Y_batch = Y_val[start_idx:end_idx]
-                offline_features_batch, mask_batch = TrainErrorPredictionNNWithOfflineData.get_offline_features(
-                    preprocessor,
-                    model_for_offline_features,
+                hc_initial_concat = TrainErrorPredictionNNWithOfflineData.get_initial_hidden(
+                    model_for_initial_hidden,
                     offline_data_val,
                     indices_batch,
-                    offline_feature_dim
+                    initial_hidden_dim
                 )
-                #hc_initial_concat = model_for_initial_hidden(offline_features_batch, X_batch[:, :past_initial_hidden_length], mask_batch, preprocessor)
-                hc_initial_concat = model_for_initial_hidden(offline_features_batch, mask_batch)
-
                 hc_initial = (hc_initial_concat[:, :model.lstm_hidden_total_size].unsqueeze(0).contiguous(), hc_initial_concat[:, model.lstm_hidden_total_size:].unsqueeze(0).contiguous())
-                Y_pred, _ = model(X_batch[:,past_initial_hidden_length-past_length:], previous_error=Y_batch[:, past_initial_hidden_length-past_length:past_initial_hidden_length, -2:],hc=hc_initial, mode="get_lstm_states")
-                #Y_pred, _ = model(X_batch, previous_error=Y_batch[:, :past_length, -2:], mode="get_lstm_states")
+                Y_pred, _ = model(X_batch, previous_error=Y_batch[:, :past_length, -2:],hc=hc_initial, mode="get_lstm_states")
                 
                 Y_pred_list.append(Y_pred[:,window_size])
 
                 # Calculate the loss
-                loss = torch.mean(torch.abs(Y_pred - Y_batch[:,past_initial_hidden_length:]),dim=(0,1))
+                loss = torch.mean(torch.abs(Y_pred - Y_batch[:,past_length:]),dim=(0,1))
                 val_loss += loss.cpu().numpy() * (end_idx - start_idx)
-                tanh_loss += tanh_weight * torch.mean(torch.abs(torch.tanh(tanh_gain * (Y_pred[:,:,-1]-Y_batch[:,past_initial_hidden_length:,-1])))).item() * (end_idx - start_idx)
+                tanh_loss += tanh_weight * torch.mean(torch.abs(torch.tanh(tanh_gain * (Y_pred[:,:,-1]-Y_batch[:,past_length:,-1])))).item() * (end_idx - start_idx)
                 first_order_loss += first_order_weight * torch.mean(torch.abs(Y_pred[:, 1:] - Y_pred[:, :-1])).item() * (end_idx - start_idx)
                 second_order_loss += second_order_weight * torch.mean(torch.abs(Y_pred[:, 2:] - 2 * Y_pred[:, 1:-1] + Y_pred[:, :-2])).item() * (end_idx - start_idx)
         val_loss /= X_val.size(0)
@@ -1103,8 +623,6 @@ class TrainErrorPredictionNNWithOfflineData:
     @staticmethod
     def get_Y_pred_np(
         model,
-        preprocessor,
-        model_for_offline_features,
         model_for_initial_hidden,
         X_val,
         Y_val,
@@ -1115,10 +633,8 @@ class TrainErrorPredictionNNWithOfflineData:
         """ tensors might be in the different device"""
         device = next(model.parameters()).device
         model.eval()
-        preprocessor.eval()
-        model_for_offline_features.eval()
         model_for_initial_hidden.eval()
-        offline_feature_dim = 2 * model.lstm_hidden_total_size        
+        initial_hidden_dim = 2 * model.lstm_hidden_total_size        
         num_batches = (X_val.size(0) + batch_size - 1) // batch_size
         Y_pred_list = []
         with torch.no_grad():
@@ -1132,19 +648,16 @@ class TrainErrorPredictionNNWithOfflineData:
                 else:
                     X_batch = X_val[start_idx:end_idx]
                     Y_batch = Y_val[start_idx:end_idx]
-                offline_features_batch, mask_batch = TrainErrorPredictionNNWithOfflineData.get_offline_features(
-                    preprocessor,
-                    model_for_offline_features,
+                hc_initial_concat = TrainErrorPredictionNNWithOfflineData.get_offline_features(
+                    model_for_initial_hidden, 
                     offline_data_val,
                     indices_batch,
-                    offline_feature_dim
+                    initial_hidden_dim
                 )
                 
-                # hc_initial_concat = model_for_initial_hidden(offline_features_batch, X_batch[:, :past_initial_hidden_length], mask_batch, preprocessor)
-                hc_initial_concat = model_for_initial_hidden(offline_features_batch, mask_batch)
 
                 hc_initial = (hc_initial_concat[:, :model.lstm_hidden_total_size].unsqueeze(0).contiguous(), hc_initial_concat[:, model.lstm_hidden_total_size:].unsqueeze(0).contiguous())
-                Y_pred, _ = model(X_batch[:,past_initial_hidden_length-past_length:], previous_error=Y_batch[:,past_initial_hidden_length-past_length:past_initial_hidden_length,-2:],hc=hc_initial, mode="get_lstm_states")
+                Y_pred, _ = model(X_batch, previous_error=Y_batch[:,:past_length,-2:],hc=hc_initial, mode="get_lstm_states")
                 #Y_pred, _ = model(X_batch, previous_error=Y_batch[:, :past_length, -2:], mode="get_lstm_states")
                 Y_pred_list.append(Y_pred)
         Y_pred_np = torch.cat(Y_pred_list,dim=0).cpu().detach().numpy()
@@ -1152,8 +665,6 @@ class TrainErrorPredictionNNWithOfflineData:
     @staticmethod
     def get_losses(
             model,
-            preprocessor,
-            model_for_offline_features,
             model_for_initial_hidden,
             criterion,
             X,
@@ -1163,19 +674,17 @@ class TrainErrorPredictionNNWithOfflineData:
             adaptive_weight
         ):
         loss = TrainErrorPredictionNNWithOfflineData.validate_in_batches(
-            model, preprocessor, model_for_offline_features, model_for_initial_hidden, criterion, X, Y,
+            model, model_for_initial_hidden, criterion, X, Y,
             offline_data, indices, adaptive_weight=adaptive_weight
         )
         each_component_loss, Y_pred = TrainErrorPredictionNNWithOfflineData.get_each_component_loss(
-            model, preprocessor, model_for_offline_features, model_for_initial_hidden, X, Y,
+            model, model_for_initial_hidden, X, Y,
             offline_data, indices
         )
         return loss, each_component_loss, Y_pred
     @staticmethod
     def get_acc_steer_model_prediction(
         model,
-        preprocessor,
-        model_for_offline_features,
         model_for_initial_hidden,
         X,
         Y,
@@ -1186,10 +695,8 @@ class TrainErrorPredictionNNWithOfflineData:
     ):
         device = next(model.parameters()).device
         model.eval()
-        preprocessor.eval()
-        model_for_offline_features.eval()
         model_for_initial_hidden.eval()
-        offline_feature_dim = 2 * model.lstm_hidden_total_size
+        initial_hidden_dim = 2 * model.lstm_hidden_total_size
         num_batches = (X.size(0) + batch_size - 1) // batch_size
         prediction = []
         for k in range(num_batches):
@@ -1202,26 +709,23 @@ class TrainErrorPredictionNNWithOfflineData:
             else:
                 X_batch = X[start_idx:end_idx]
                 Y_batch = Y[start_idx:end_idx]
-            offline_features_batch, mask_batch = TrainErrorPredictionNNWithOfflineData.get_offline_features(
-                preprocessor,
-                model_for_offline_features,
+            hc_initial_concat = TrainErrorPredictionNNWithOfflineData.get_initial_hidden(
+                model_for_initial_hidden,
                 offline_data,
                 indices_batch,
-                offline_feature_dim
+                initial_hidden_dim
             )
-            # hc_initial_concat = model_for_initial_hidden(offline_features_batch, X_batch[:, :past_initial_hidden_length], mask_batch, preprocessor)
-            hc_initial_concat = model_for_initial_hidden(offline_features_batch, mask_batch)
             hc_initial = (hc_initial_concat[:, :model.lstm_hidden_total_size].unsqueeze(0).contiguous(), hc_initial_concat[:, model.lstm_hidden_total_size:].unsqueeze(0).contiguous())
-            _, hc = model(X_batch, previous_error=Y_batch[:,past_initial_hidden_length-past_length:past_initial_hidden_length,-2:],hc=hc_initial, mode="get_lstm_states")
+            _, hc = model(X_batch, previous_error=Y_batch[:,:past_length,-2:],hc=hc_initial, mode="get_lstm_states")
             
-            states_tmp=X_batch[:,past_initial_hidden_length, [vel_index, acc_index, steer_index]].unsqueeze(1)
+            states_tmp=X_batch[:,past_length, [vel_index, acc_index, steer_index]].unsqueeze(1)
             for i in range(window_size):
-                states_tmp_with_input_history = torch.cat((states_tmp, X_batch[:,[past_initial_hidden_length+i], 3:]), dim=2)
+                states_tmp_with_input_history = torch.cat((states_tmp, X_batch[:,[past_length+i], 3:]), dim=2)
                 predicted_error, hc =  model(states_tmp_with_input_history, hc=hc, mode="predict_with_hc")
-                states_tmp[:,0,0] = X_batch[:,past_initial_hidden_length + i + 1, 0]
+                states_tmp[:,0,0] = X_batch[:,past_length + i + 1, 0]
                 for j in range(prediction_step):
-                    states_tmp[:,0,1] = states_tmp[:,0,1] + (X_batch[:,past_initial_hidden_length + i, acc_input_indices_nom[j]] - states_tmp[:,0,1]) * (1 - np.exp(- control_dt / acc_time_constant))
-                    states_tmp[:,0,2] = states_tmp[:,0,2] + (X_batch[:,past_initial_hidden_length + i, steer_input_indices_nom[j]] - states_tmp[:,0,2]) * (1 - np.exp(- control_dt / steer_time_constant))
+                    states_tmp[:,0,1] = states_tmp[:,0,1] + (X_batch[:,past_length + i, acc_input_indices_nom[j]] - states_tmp[:,0,1]) * (1 - np.exp(- control_dt / acc_time_constant))
+                    states_tmp[:,0,2] = states_tmp[:,0,2] + (X_batch[:,past_length + i, steer_input_indices_nom[j]] - states_tmp[:,0,2]) * (1 - np.exp(- control_dt / steer_time_constant))
                 states_tmp[:,0,1] = states_tmp[:,0,1] + predicted_error[:,0,state_name_to_predicted_index["acc"]] * control_dt * prediction_step
                 states_tmp[:,0,2] = states_tmp[:,0,2] + predicted_error[:,0,state_name_to_predicted_index["steer"]] * control_dt * prediction_step                
             prediction.append(states_tmp[:,0,[1,2]].detach().to("cpu").numpy())
@@ -1230,8 +734,6 @@ class TrainErrorPredictionNNWithOfflineData:
     @staticmethod
     def get_acc_steer_models_prediction(
             models,
-            preprocessor,
-            model_for_offline_features,
             model_for_initial_hidden,
             X,
             Y,
@@ -1242,10 +744,8 @@ class TrainErrorPredictionNNWithOfflineData:
         device = next(models[0].parameters()).device
         for model in models:
             model.eval()
-        preprocessor.eval()
-        model_for_offline_features.eval()
         model_for_initial_hidden.eval()
-        offline_feature_dim = 2 * models[0].lstm_hidden_total_size
+        initial_hidden_dim = 2 * models[0].lstm_hidden_total_size
         num_batches = (X.size(0) + batch_size - 1) // batch_size
         prediction = []
         for k in range(num_batches):
@@ -1258,32 +758,29 @@ class TrainErrorPredictionNNWithOfflineData:
             else:
                 X_batch = X[start_idx:end_idx]
                 Y_batch = Y[start_idx:end_idx]
-            offline_features_batch, mask_batch = TrainErrorPredictionNNWithOfflineData.get_offline_features(
-                preprocessor,
-                model_for_offline_features,
+            hc_initial_concat = TrainErrorPredictionNNWithOfflineData.get_initial_hidden(
+                model_for_initial_hidden,
                 offline_data,
                 indices_batch,
-                offline_feature_dim
+                initial_hidden_dim,
             )
 
-            # hc_initial_concat = model_for_initial_hidden(offline_features_batch, X_batch[:, :past_initial_hidden_length], mask_batch, preprocessor)
-            hc_initial_concat = model_for_initial_hidden(offline_features_batch, mask_batch)
-            hc_initial = (hc_initial_concat[:, :model[0].lstm_hidden_total_size].unsqueeze(0).contiguous(), hc_initial_concat[:, model[0].lstm_hidden_total_size:].unsqueeze(0).contiguous())
-            _, hc = model[0](X_batch[:,past_initial_hidden_length-past_length:], previous_error=Y_batch[:, past_initial_hidden_length-past_length:past_initial_hidden_length, -2:],hc=hc_initial, mode="get_lstm_states")
+            hc_initial = (hc_initial_concat[:, :models[0].lstm_hidden_total_size].unsqueeze(0).contiguous(), hc_initial_concat[:, models[0].lstm_hidden_total_size:].unsqueeze(0).contiguous())
+            _, hc = models[0](X_batch, previous_error=Y_batch[:, :past_length, -2:],hc=hc_initial, mode="get_lstm_states")
             
-            states_tmp=X_batch[:,past_initial_hidden_length, [vel_index, acc_index, steer_index]].unsqueeze(1)
+            states_tmp=X_batch[:,past_length, [vel_index, acc_index, steer_index]].unsqueeze(1)
             for i in range(window_size):
-                states_tmp_with_input_history = torch.cat((states_tmp, X_batch[:,[past_initial_hidden_length+i], 3:]), dim=2)
-                predicted_error_0, hc_next =  model[0](states_tmp_with_input_history, hc=hc, mode="predict_with_hc")
+                states_tmp_with_input_history = torch.cat((states_tmp, X_batch[:,[past_length+i], 3:]), dim=2)
+                predicted_error_0, hc_next =  models[0](states_tmp_with_input_history, hc=hc, mode="predict_with_hc")
                 predicted_error = predicted_error_0 / len(models)
                 for j in range(1,len(models)):
-                    predicted_error_j, _ =  model[j](states_tmp_with_input_history, hc=hc, mode="predict_with_hc")
+                    predicted_error_j, _ =  models[j](states_tmp_with_input_history, hc=hc, mode="predict_with_hc")
                     predicted_error += predicted_error_j / len(models)
                 hc = hc_next
                 states_tmp[:,0,0] = X_batch[:,past_length + i + 1, 0]
                 for j in range(prediction_step):
-                    states_tmp[:,0,1] = states_tmp[:,0,1] + (X_batch[:,past_initial_hidden_length + i, acc_input_indices_nom[j]] - states_tmp[:,0,1]) * (1 - np.exp(- control_dt / acc_time_constant))
-                    states_tmp[:,0,2] = states_tmp[:,0,2] + (X_batch[:,past_initial_hidden_length + i, steer_input_indices_nom[j]] - states_tmp[:,0,2]) * (1 - np.exp(- control_dt / steer_time_constant))
+                    states_tmp[:,0,1] = states_tmp[:,0,1] + (X_batch[:,past_length + i, acc_input_indices_nom[j]] - states_tmp[:,0,1]) * (1 - np.exp(- control_dt / acc_time_constant))
+                    states_tmp[:,0,2] = states_tmp[:,0,2] + (X_batch[:,past_length + i, steer_input_indices_nom[j]] - states_tmp[:,0,2]) * (1 - np.exp(- control_dt / steer_time_constant))
                 states_tmp[:,0,1] = states_tmp[:,0,1] + predicted_error[:,0,state_name_to_predicted_index["acc"]] * control_dt * prediction_step
                 states_tmp[:,0,2] = states_tmp[:,0,2] + predicted_error[:,0,state_name_to_predicted_index["steer"]] * control_dt * prediction_step                
             prediction.append(states_tmp[:,0,[1,2]].detach().to("cpu").numpy())
@@ -1291,8 +788,6 @@ class TrainErrorPredictionNNWithOfflineData:
     @staticmethod
     def get_model_signed_prediction_error(
             model,
-            preprocessor,
-            model_for_offline_features,
             model_for_initial_hidden,
             X,
             Y,
@@ -1302,15 +797,13 @@ class TrainErrorPredictionNNWithOfflineData:
             batch_size=1000
         ):
         model_prediction = TrainErrorPredictionNNWithOfflineData.get_acc_steer_model_prediction(
-            model, preprocessor, model_for_offline_features, model_for_initial_hidden, X, Y, offline_data, indices, window_size=window_size, batch_size=batch_size
+            model, model_for_initial_hidden, X, Y, offline_data, indices, window_size=window_size, batch_size=batch_size
         )
-        model_prediction_error = X[:,past_initial_hidden_length+window_size, [acc_index, steer_index]].detach().to("cpu").numpy() - model_prediction
+        model_prediction_error = X[:,past_length+window_size, [acc_index, steer_index]].detach().to("cpu").numpy() - model_prediction
         return model_prediction_error
     @staticmethod
     def get_models_signed_prediction_error(
             models,
-            preprocessor,
-            model_for_offline_features,
             model_for_initial_hidden,
             X,
             Y,
@@ -1320,19 +813,15 @@ class TrainErrorPredictionNNWithOfflineData:
             batch_size=1000
         ):
         model_prediction = TrainErrorPredictionNNWithOfflineData.get_acc_steer_models_prediction(
-            models, preprocessor, model_for_offline_features, model_for_initial_hidden, X, Y, offline_data, indices, window_size, batch_size
+            models, model_for_initial_hidden, X, Y, offline_data, indices, window_size, batch_size
         )
-        model_prediction_error = X[:,past_initial_hidden_length+window_size, [acc_index, steer_index]].detach().to("cpu").numpy() - model_prediction
+        model_prediction_error = X[:,past_length+window_size, [acc_index, steer_index]].detach().to("cpu").numpy() - model_prediction
         return model_prediction_error
     @staticmethod
     def get_signed_prediction_error(
         model,
-        preprocessor,
-        model_for_offline_features,
         model_for_initial_hidden,
         relearned_model,
-        relearned_preprocessor,
-        relearned_model_for_offline_features,
         relearned_model_for_initial_hidden,
         X,  
         Y,
@@ -1341,25 +830,25 @@ class TrainErrorPredictionNNWithOfflineData:
         window_size=10,
         batch_size=1000
     ):
-        nominal_prediction_error = get_nominal_signed_prediction_error(X,window_size,past_length=past_initial_hidden_length)
+        nominal_prediction_error = get_nominal_signed_prediction_error(X,window_size,past_length=past_length)
         model_prediction_error = TrainErrorPredictionNNWithOfflineData.get_model_signed_prediction_error(
-            model,preprocessor, model_for_offline_features,model_for_initial_hidden,
+            model,model_for_initial_hidden,
             X,Y, offline_data, indices, window_size,batch_size)
         relearned_model_prediction_error = TrainErrorPredictionNNWithOfflineData.get_model_signed_prediction_error(
-            relearned_model,relearned_preprocessor, relearned_model_for_offline_features,
-            relearned_model_for_initial_hidden,X,Y,offline_data, indices,window_size,batch_size)
+            relearned_model, relearned_model_for_initial_hidden,
+            X,Y,offline_data, indices,window_size,batch_size)
         return nominal_prediction_error,model_prediction_error,relearned_model_prediction_error
     @staticmethod
     def get_sequence_data(X, Y, division_indices, acc_threshold=2.0, steer_threshold=0.7, acc_change_threshold=3.5, steer_change_threshold=0.8, acc_change_window=10, steer_change_window=10):
         X_seq, indices =transform_to_sequence_data_with_index(
             np.array(X),
-            past_initial_hidden_length + prediction_length,
+            past_length + prediction_length,
             division_indices,
             prediction_step,
         )
         Y_seq = transform_to_sequence_data(
             np.array(Y)[:, state_component_predicted_index],
-            past_initial_hidden_length + prediction_length,
+            past_length + prediction_length,
             division_indices,
             prediction_step,
         )

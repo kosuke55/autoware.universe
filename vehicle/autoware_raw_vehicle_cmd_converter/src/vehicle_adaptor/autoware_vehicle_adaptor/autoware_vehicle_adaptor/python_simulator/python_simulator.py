@@ -3,7 +3,7 @@ import os
 import numpy as np
 import scipy.interpolate
 from autoware_vehicle_adaptor.param import parameters
-from autoware_vehicle_adaptor.src import utils
+from autoware_vehicle_adaptor.src import vehicle_adaptor_compensator
 from autoware_vehicle_adaptor.src import actuation_map_2d
 #from utils.density_estimation import KinematicStates
 #from utils.density_estimation import visualize_speed_acc
@@ -116,7 +116,7 @@ class PythonSimulator:
             self.controller = nominal_ilqr.NominalILQRController()
         self.pure_pursuit_controller = pure_pursuit_controller.PurePursuitController(self.wheel_base)
         self.log_updater = data_collection_utils.driving_log_updater()
-        self.vehicle_adaptor = utils.VehicleAdaptor()
+        self.vehicle_adaptor = vehicle_adaptor_compensator.VehicleAdaptor()
         self.perturbed_sim_flag = False
         self.nominal_setting_dict = {}
         self.sim_setting_dict = {}
@@ -339,9 +339,8 @@ class PythonSimulator:
         control_type: ControlType = ControlType.mpc,
         use_vehicle_adaptor=False,
         vehicle_adaptor_model_path="vehicle_model.pth",
-        use_nonzero_initial_hidden=False,
-        use_offline_features=True,
-        initial_hidden_dir="vehicle_model",
+        use_offline_features=False,
+        offline_feature_dir="vehicle_model",
         states_ref_mode="predict_by_polynomial_regression",
         course_csv_data="slalom_course_data.csv", # "slalom_course_data.csv" or "mpc_figure_eight_course_data.csv"
         offline_data_dir=None,
@@ -380,8 +379,8 @@ class PythonSimulator:
         if use_vehicle_adaptor:
             self.vehicle_adaptor.clear_NN_params()
             self.set_NN_params(vehicle_adaptor_model_path)
-            if use_nonzero_initial_hidden:
-                self.set_initial_hidden_params(initial_hidden_dir, use_offline_features)
+            if use_offline_features:
+                self.set_offline_features(offline_feature_dir)
             self.vehicle_adaptor.send_initialized_flag()
             self.vehicle_adaptor.unset_offline_data_set_for_compensation()
             self.vehicle_adaptor.unset_projection_matrix_for_compensation()
@@ -736,10 +735,8 @@ class PythonSimulator:
             vehicle_model.vel_bias,
             state_component_predicted,
         )
-    def set_initial_hidden_params(self, csv_dir,use_offline_features):
-        self.vehicle_adaptor.set_initial_hidden_params_from_csv(csv_dir)
-        if use_offline_features:
-            self.vehicle_adaptor.set_use_offline_features_from_csv(csv_dir)
+    def set_offline_features(self, csv_dir):
+        self.vehicle_adaptor.set_offline_features_from_csv(csv_dir)
 
     def save_pp_eight_record(self, t_current,save_dir):
             t_current = math.ceil(t_current * 100 / 60) / 100

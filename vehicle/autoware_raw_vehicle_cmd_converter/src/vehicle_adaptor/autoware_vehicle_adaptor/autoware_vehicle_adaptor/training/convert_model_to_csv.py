@@ -58,65 +58,6 @@ def convert_model_to_csv(model,save_dir):
         writer = csv.writer(file)
         writer.writerow(model.state_component_predicted)
 
-def convert_initial_hidden_model_to_csv(model_for_initial_hidden,save_dir):
-    model_for_initial_hidden.to("cpu")
-
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-    np.savetxt(save_dir + "/weight_initial_hidden_acc_layer_1.csv", model_for_initial_hidden.acc_layer_1[0].weight.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/weight_initial_hidden_steer_layer_1.csv", model_for_initial_hidden.steer_layer_1[0].weight.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/weight_initial_hidden_acc_layer_2.csv", model_for_initial_hidden.acc_layer_2[0].weight.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/weight_initial_hidden_steer_layer_2.csv", model_for_initial_hidden.steer_layer_2[0].weight.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/weight_initial_hidden_gru_ih.csv", model_for_initial_hidden.gru.weight_ih_l0.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/weight_initial_hidden_gru_hh.csv", model_for_initial_hidden.gru.weight_hh_l0.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/initial_hidden_query.csv", model_for_initial_hidden.query.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/weight_initial_hidden_key_layer.csv", model_for_initial_hidden.key_layer.weight.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/weight_initial_hidden_value_layer.csv", model_for_initial_hidden.value_layer.weight.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/weight_initial_hidden_final_layer.csv", model_for_initial_hidden.final_layer[0].weight.detach().numpy().astype(np.float64),delimiter=',')
-
-    np.savetxt(save_dir + "/bias_initial_hidden_acc_layer_1.csv",model_for_initial_hidden.acc_layer_1[0].bias.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/bias_initial_hidden_steer_layer_1.csv",model_for_initial_hidden.steer_layer_1[0].bias.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/bias_initial_hidden_acc_layer_2.csv",model_for_initial_hidden.acc_layer_2[0].bias.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/bias_initial_hidden_steer_layer_2.csv",model_for_initial_hidden.steer_layer_2[0].bias.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/bias_initial_hidden_gru_ih.csv",model_for_initial_hidden.gru.bias_ih_l0.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/bias_initial_hidden_gru_hh.csv",model_for_initial_hidden.gru.bias_hh_l0.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/bias_initial_hidden_value_layer.csv",model_for_initial_hidden.value_layer.bias.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/bias_initial_hidden_final_layer.csv",model_for_initial_hidden.final_layer[0].bias.detach().numpy().astype(np.float64),delimiter=',')
-
-    np.savetxt(save_dir + "/attention_info.csv",np.array([model_for_initial_hidden.num_heads,model_for_initial_hidden.key_size,model_for_initial_hidden.value_size]), fmt='%d', delimiter=',')
-    np.savetxt(save_dir + "/gru_info.csv",np.array([model_for_initial_hidden.mean_steps]), fmt='%d', delimiter=',')
-def convert_initial_hidden_with_offline_data_model_to_csv(preprocessor,model_for_initial_hidden,save_dir):
-    preprocessor.to("cpu")
-    model_for_initial_hidden.to("cpu")
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-    np.savetxt(save_dir + "/weight_initial_hidden_acc_layer_1.csv", preprocessor.acc_layer_1[0].weight.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/weight_initial_hidden_steer_layer_1.csv", preprocessor.steer_layer_1[0].weight.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/weight_initial_hidden_acc_layer_2.csv", preprocessor.acc_layer_2[0].weight.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/weight_initial_hidden_steer_layer_2.csv", preprocessor.steer_layer_2[0].weight.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/weight_initial_hidden_gru_ih.csv", model_for_initial_hidden.gru_online.weight_ih_l0.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/weight_initial_hidden_gru_hh.csv", model_for_initial_hidden.gru_online.weight_hh_l0.detach().numpy().astype(np.float64),delimiter=',')
-    #np.savetxt(save_dir + "/weight_initial_hidden_attn.csv", model_for_initial_hidden.attn_online[0].weight.detach().numpy().astype(np.float64),delimiter=',')
-    #np.savetxt(save_dir + "/weight_initial_hidden_attn_summarize.csv", model_for_initial_hidden.attn_online[2].weight.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/weight_initial_hidden_final_layer.csv", model_for_initial_hidden.final_layer_online[0].weight.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/weight_initial_hidden_fusion_layer.csv", model_for_initial_hidden.fusion[0].weight.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/weight_initial_hidden_only_online.csv", model_for_initial_hidden.only_online[0].weight.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/bias_initial_hidden_acc_layer_1.csv",preprocessor.acc_layer_1[0].bias.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/bias_initial_hidden_steer_layer_1.csv",preprocessor.steer_layer_1[0].bias.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/bias_initial_hidden_acc_layer_2.csv",preprocessor.acc_layer_2[0].bias.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/bias_initial_hidden_steer_layer_2.csv",preprocessor.steer_layer_2[0].bias.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/bias_initial_hidden_gru_ih.csv",model_for_initial_hidden.gru_online.bias_ih_l0.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/bias_initial_hidden_gru_hh.csv",model_for_initial_hidden.gru_online.bias_hh_l0.detach().numpy().astype(np.float64),delimiter=',')
-    #np.savetxt(save_dir + "/bias_initial_hidden_attn.csv",model_for_initial_hidden.attn_online[0].bias.detach().numpy().astype(np.float64),delimiter=',')
-    #np.savetxt(save_dir + "/bias_initial_hidden_attn_summarize.csv",model_for_initial_hidden.attn_online[2].bias.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/bias_initial_hidden_final_layer.csv",model_for_initial_hidden.final_layer_online[0].bias.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/bias_initial_hidden_fusion_layer.csv",model_for_initial_hidden.fusion[0].bias.detach().numpy().astype(np.float64),delimiter=',')
-    np.savetxt(save_dir + "/bias_initial_hidden_only_online.csv",model_for_initial_hidden.only_online[0].bias.detach().numpy().astype(np.float64),delimiter=',')
-
-
-    
-
-
 def convert_inputs_schedule_model_to_csv(model,save_dir):
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)

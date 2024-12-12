@@ -30,9 +30,9 @@ get_losses = TrainErrorPredictionNNWithOfflineData.get_losses
 get_signed_prediction_error = TrainErrorPredictionNNWithOfflineData.get_signed_prediction_error
 get_sequence_data = TrainErrorPredictionNNWithOfflineData.get_sequence_data
 
-get_offline_feature_dict = TrainErrorPredictionNNWithOfflineData.get_offline_feature_dict
-get_offline_features_batch = TrainErrorPredictionNNWithOfflineData.get_offline_features_batch
-get_offline_features = TrainErrorPredictionNNWithOfflineData.get_offline_features
+get_initial_hidden_dict = TrainErrorPredictionNNWithOfflineData.get_initial_hidden_dict
+get_initial_hidden_batch = TrainErrorPredictionNNWithOfflineData.get_initial_hidden_batch
+get_initial_hidden = TrainErrorPredictionNNWithOfflineData.get_initial_hidden
 
 
 
@@ -68,7 +68,6 @@ steer_input_indices_nom = np.arange(3 + acc_queue_size + prediction_step + steer
 
 
 
-past_initial_hidden_length = past_length
 offline_data_size = 100
 offline_data_len = 10
 class CustomDataset(Dataset):
@@ -109,11 +108,11 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
         self.alpha_hessian_encoder = alpha_hessian_encoder
         self.alpha_hessian_gru_attention = alpha_hessian_gru_attention
 
+        self.model = None
         self.models = None
         self.model_for_initial_hidden = None
 
         self.past_length = past_length
-        self.past_initial_hidden_length = past_initial_hidden_length
         self.prediction_length = prediction_length
         self.prediction_step = prediction_step
         self.acc_queue_size = acc_queue_size
@@ -161,8 +160,6 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
     def train_model(
         self,
         model,
-        preprocessor,
-        model_for_offline_features,
         model_for_initial_hidden,
         X_train,
         Y_train,
@@ -184,8 +181,6 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
     ):
         # Initialize the model
         model = model.to(self.device)
-        preprocessor = preprocessor.to(self.device)
-        model_for_offline_features = model_for_offline_features.to(self.device)
         model_for_initial_hidden = model_for_initial_hidden.to(self.device)
 
 
@@ -197,7 +192,7 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
         # freeze the shallow layers
         if freeze_shallow_layers:
             self.freeze_shallow_layers(
-                model,preprocessor,model_for_offline_features,model_for_initial_hidden,
+                model,model_for_initial_hidden,
                 randomize=randomize_remaining_layers)
         # save the original adaptive weight
         original_adaptive_weight = self.adaptive_weight.clone()
@@ -206,10 +201,6 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
         params_to_optimize = list(
             param for param in model.parameters() if param.requires_grad
         ) + list(
-            param for param in preprocessor.parameters() if param.requires_grad
-        ) + list(
-            param for param in model_for_offline_features.parameters() if param.requires_grad
-        ) + list(
             param for param in model_for_initial_hidden.parameters() if param.requires_grad
         ) 
         optimizer = torch.optim.Adam(params_to_optimize, lr=learning_rates[0])
@@ -217,8 +208,6 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
         # Initial loss
         initial_loss = validate_in_batches(
             model,
-            preprocessor,
-            model_for_offline_features,
             model_for_initial_hidden,
             criterion,
             X_val,
@@ -242,8 +231,6 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
         # Training loop
         for i in range(self.max_iter):
             model.train()
-            preprocessor.train()
-            model_for_offline_features.train()
             model_for_initial_hidden.train()
             for j in range(len(domains)):
                 self.set_offline_data(domains[j],targets[j],domain_indices[j],target_indices[j])
@@ -252,7 +239,7 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
                 Y_batch = Y_batch.pin_memory().to(self.device, non_blocking=True)
                 optimizer.zero_grad()
                 loss = get_loss(
-                    criterion,model,preprocessor,model_for_offline_features,model_for_initial_hidden,
+                    criterion,model,model_for_initial_hidden,
                     X_batch,Y_batch,self.offline_data_dict_train,Ind_batch,
                     adaptive_weight=self.adaptive_weight,
                     integral_prob=integration_prob,
@@ -269,7 +256,7 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
                     Y_replay_batch = Y_replay[replay_indices_tensor].pin_memory().to(self.device, non_blocking=True)
                     Ind_replay_batch = indices_replay[replay_indices]
                     loss += get_loss(
-                        criterion,model,preprocessor,model_for_offline_features,model_for_initial_hidden,
+                        criterion,model,model_for_initial_hidden,
                         X_replay_batch,Y_replay_batch,self.offline_data_dict_replay,Ind_replay_batch,
                         adaptive_weight=self.adaptive_weight,
                         integral_prob=integration_prob,
@@ -281,13 +268,9 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
                 optimizer.step()
             # Validation the model
             model.eval()
-            preprocessor.eval()
-            model_for_offline_features.eval()
             model_for_initial_hidden.eval()
             val_loss = validate_in_batches(
                 model,
-                preprocessor,
-                model_for_offline_features,
                 model_for_initial_hidden,
                 criterion,
                 X_val,
@@ -298,8 +281,6 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
             )
             val_loss_with_original_weight = validate_in_batches(
                 model,
-                preprocessor,
-                model_for_offline_features,
                 model_for_initial_hidden,
                 criterion,
                 X_val,
@@ -326,8 +307,6 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
                 if learning_rates[learning_rate_index - 1] < 3e-4:
                     self.update_adaptive_weight(
                         model,
-                        preprocessor,
-                        model_for_offline_features,
                         model_for_initial_hidden,
                         X_train,
                         Y_train,
@@ -339,8 +318,6 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
     def relearn_model(
         self,
         model,
-        preprocessor,
-        model_for_offline_features,
         model_for_initial_hidden,
         X_train,
         Y_train,
@@ -371,8 +348,6 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
         print("randomize: ", randomize)
         self.update_adaptive_weight(
             model,
-            preprocessor,
-            model_for_offline_features,
             model_for_initial_hidden,
             X_train,
             Y_train,
@@ -383,8 +358,6 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
         criterion = nn.L1Loss()
         original_train_loss, original_each_component_train_loss, Y_train_pred_origin = get_losses(
             model,
-            preprocessor,
-            model_for_offline_features,
             model_for_initial_hidden,
             criterion,
             X_train,
@@ -394,8 +367,6 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
             adaptive_weight = original_adaptive_weight)
         original_val_loss, original_each_component_val_loss, Y_val_pred_origin = get_losses(
             model,
-            preprocessor,
-            model_for_offline_features,
             model_for_initial_hidden,
             criterion,
             X_val,
@@ -406,8 +377,6 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
         if X_test is not None:
             original_test_loss, original_each_component_test_loss, Y_test_pred_origin = get_losses(
                 model,
-                preprocessor,
-                model_for_offline_features,
                 model_for_initial_hidden,
                 criterion,
                 X_test,
@@ -423,36 +392,22 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
             relearned_model = error_prediction_NN.ErrorPredictionNN(
                 prediction_length=prediction_length, state_component_predicted=state_component_predicted
             )
-            relearned_preprocessor = get_initial_hidden_NN_with_offline_data.Preprocess()
-            relearned_model_for_offline_features = get_initial_hidden_NN_with_offline_data.GetOfflineFeatures(
-                input_size = relearned_model.combined_input_size,
-                output_size = 2 * relearned_model.lstm_hidden_total_size,
-            ).to(self.device)
             relearned_model_for_initial_hidden = get_initial_hidden_NN_with_offline_data.GetInitialHiddenNN(
-                input_size = relearned_model.combined_input_size,
                 output_size = 2 * relearned_model.lstm_hidden_total_size,
             ).to(self.device)
         else:
             relearned_model = copy.deepcopy(model)
             relearned_model.lstm_encoder.flatten_parameters()
             relearned_model.lstm.flatten_parameters()
-            relearned_preprocessor = copy.deepcopy(preprocessor)
-            relearned_model_for_offline_features = copy.deepcopy(model_for_offline_features)
             relearned_model_for_initial_hidden = copy.deepcopy(model_for_initial_hidden)
             with torch.no_grad():
                 if not freeze_shallow_layers:
                     for w in relearned_model.parameters():
                         w = w + randomize * torch.randn_like(w)
-                    for w in relearned_preprocessor.parameters():
-                        w = w + randomize * torch.randn_like(w)
-                    for w in relearned_model_for_offline_features.parameters():
-                        w = w + randomize * torch.randn_like(w)
                     for w in relearned_model_for_initial_hidden.parameters():
                         w = w + randomize * torch.randn_like(w)
         self.train_model(
             relearned_model,
-            relearned_preprocessor,
-            relearned_model_for_offline_features,
             relearned_model_for_initial_hidden,
             X_train,
             Y_train,
@@ -473,31 +428,31 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
             domains=domains, targets=targets, domain_indices=domain_indices, target_indices=target_indices
         )
         relearned_train_loss, relearned_each_component_train_loss, Y_train_pred_relearned = get_losses(
-            relearned_model, relearned_preprocessor, relearned_model_for_offline_features, relearned_model_for_initial_hidden,
+            relearned_model, relearned_model_for_initial_hidden,
             criterion, X_train, Y_train, self.offline_data_dict_train, indices_train, adaptive_weight = original_adaptive_weight)
         relearned_val_loss, relearned_each_component_val_loss, Y_val_pred_relearned = get_losses(
-            relearned_model, relearned_preprocessor, relearned_model_for_offline_features, relearned_model_for_initial_hidden,
+            relearned_model, relearned_model_for_initial_hidden,
             criterion, X_val, Y_val, self.offline_data_dict_val, indices_val, adaptive_weight = original_adaptive_weight)
         if X_test is not None:
             relearned_test_loss, relearned_each_component_test_loss, Y_test_pred_relearned = get_losses(
-                relearned_model, relearned_preprocessor, relearned_model_for_offline_features, relearned_model_for_initial_hidden,
+                relearned_model, relearned_model_for_initial_hidden,
                 criterion, X_test, Y_test, self.offline_data_dict_test, indices_test, adaptive_weight = original_adaptive_weight)
         else:
             relearned_test_loss = None
             relearned_each_component_test_loss = None
             Y_test_pred_relearned = None
         nominal_signed_train_prediction_error, original_signed_train_prediction_error, relearned_signed_train_prediction_error = get_signed_prediction_error(
-            model, preprocessor, model_for_offline_features, model_for_initial_hidden,
-            relearned_model, relearned_preprocessor, relearned_model_for_offline_features, relearned_model_for_initial_hidden,
+            model, model_for_initial_hidden,
+            relearned_model, relearned_model_for_initial_hidden,
             X_train, Y_train, self.offline_data_dict_train, indices_train)
         nominal_signed_val_prediction_error, original_signed_val_prediction_error, relearned_signed_val_prediction_error = get_signed_prediction_error(
-            model, preprocessor, model_for_offline_features, model_for_initial_hidden,
-            relearned_model, relearned_preprocessor, relearned_model_for_offline_features, relearned_model_for_initial_hidden,
+            model, model_for_initial_hidden,
+            relearned_model, relearned_model_for_initial_hidden,
             X_val, Y_val, self.offline_data_dict_val, indices_val)
         if X_test is not None:
             nominal_signed_test_prediction_error, original_signed_test_prediction_error, relearned_signed_test_prediction_error = get_signed_prediction_error(
-                model, preprocessor, model_for_offline_features, model_for_initial_hidden,
-                relearned_model, relearned_preprocessor, relearned_model_for_offline_features, relearned_model_for_initial_hidden,
+                model, model_for_initial_hidden,
+                relearned_model, relearned_model_for_initial_hidden,
                 X_test, Y_test, self.offline_data_dict_test, indices_test)
         else:
             nominal_signed_test_prediction_error = None
@@ -536,16 +491,15 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
                 Y_test_pred_origin,
                 Y_test_pred_relearned,
                 plt_save_dir,
-                past_length=past_initial_hidden_length
+                past_length=past_length
             )
         if model_save_path is not None:
-            self.save_given_model(relearned_model,relearned_preprocessor,relearned_model_for_offline_features,relearned_model_for_initial_hidden,
-                                  model_save_path,model_save_path.replace(".pth","_for_preprocessor.pth"),
-                                  model_save_path.replace(".pth","_for_offline_features.pth"), model_save_path.replace(".pth","_for_initial_hidden.pth"))
+            self.save_given_model(relearned_model,relearned_model_for_initial_hidden,
+                                  model_save_path.replace(".pth","_for_initial_hidden.pth"))
         if relearned_val_loss < original_val_loss or always_update_model:
-            return relearned_model, relearned_preprocessor, relearned_model_for_offline_features, relearned_model_for_initial_hidden, True
+            return relearned_model, relearned_model_for_initial_hidden, True
         else:
-            return model, preprocessor, model_for_offline_features, model_for_initial_hidden, False
+            return model, model_for_initial_hidden, False
 
 
 
@@ -559,21 +513,11 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
         self.model = error_prediction_NN.ErrorPredictionNN(
             prediction_length=prediction_length, state_component_predicted=state_component_predicted
         ).to(self.device)
-        self.preprocessor = get_initial_hidden_NN_with_offline_data.Preprocess().to(self.device)
-        combined_input_size = self.preprocessor.combined_input_size
-        
-        self.model_for_offline_features = get_initial_hidden_NN_with_offline_data.GetOfflineFeatures(
-            input_size = combined_input_size,
-            output_size = 2 * self.model.lstm_hidden_total_size
-        ).to(self.device)
         self.model_for_initial_hidden = get_initial_hidden_NN_with_offline_data.GetInitialHiddenNN(
-            input_size = combined_input_size,
             output_size = 2 * self.model.lstm_hidden_total_size
         ).to(self.device)
         self.train_model(
             self.model,
-            self.preprocessor,
-            self.model_for_offline_features,
             self.model_for_initial_hidden,
             X_train,
             Y_train,
@@ -592,8 +536,6 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
                             use_replay_data=False, replay_data_rate=0.05, always_update_model=False, freeze_shallow_layers=False,
                             domains=[],targets=[],domain_indices=[],target_indices=[]):
         self.model.to(self.device)
-        self.preprocessor.to(self.device)
-        self.model_for_offline_features.to(self.device)
         self.model_for_initial_hidden.to(self.device)
         # Define Time Series Data
         X_train, Y_train, indices_train = get_sequence_data(self.X_train_list,self.Y_train_list,self.division_indices_train)
@@ -610,10 +552,8 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
             X_replay = None
             Y_replay = None
             indices_replay = None
-        self.model, self.preprocessor, self.model_for_offline_features, self.model_for_initial_hidden, updated = self.relearn_model(
+        self.model, self.model_for_initial_hidden, updated = self.relearn_model(
             self.model,
-            self.preprocessor,
-            self.model_for_offline_features,
             self.model_for_initial_hidden,
             X_train,
             Y_train,
@@ -645,8 +585,6 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
     def freeze_shallow_layers(
             self,
             model,
-            preprocessor,
-            model_for_offline_features,
             model_for_initial_hidden,
             randomize=0.001
         ):
@@ -674,13 +612,6 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
             param.requires_grad = False
 
 
-
-        # freeze preprocessor
-        for param in preprocessor.parameters():
-            param.requires_grad = False
-        # freeze model for offline features
-        for param in model_for_offline_features.parameters():
-            param.requires_grad = False
         # freeze model for initial hidden
         for param in model_for_initial_hidden.parameters():
             param.requires_grad = False
@@ -693,33 +624,25 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
             model.final_layer.weight += randomize * torch.randn_like(model.final_layer.weight)
             model.final_layer.bias += randomize * torch.randn_like(model.final_layer.bias)
         
-    def save_model(self, path="vehicle_model.pth", path_for_preprocessor="vehicle_model_for_preprocessor.pth", path_for_offline_features="vehicle_model_for_offline_features.pth", path_for_initial_hidden="vehicle_model_for_initial_hidden.pth"):
+    def save_model(self, path="vehicle_model.pth", path_for_initial_hidden="vehicle_model_for_initial_hidden.pth"):
         torch.save(self.model, path)
-        torch.save(self.preprocessor, path_for_preprocessor)
-        torch.save(self.model_for_offline_features, path_for_offline_features)
         torch.save(self.model_for_initial_hidden, path_for_initial_hidden)
         save_dir = path.replace(".pth","")
         convert_model_to_csv.convert_model_to_csv(self.model, save_dir)
-        #convert_model_to_csv.convert_initial_hidden_with_offline_data_model_to_csv(self.preprocessor, self.model_for_initial_hidden, save_dir)
 
-    def save_given_model(self,model,preprocessor,model_for_offline_features,model_for_initial_hidden,path="vehicle_model.pth", path_for_preprocessor="vehicle_model_for_preprocessor.pth", path_for_offline_features="vehicle_model_for_offline_features.pth", path_for_initial_hidden="vehicle_model_for_initial_hidden.pth"):
+    def save_given_model(self,model,model_for_initial_hidden,path="vehicle_model.pth", path_for_initial_hidden="vehicle_model_for_initial_hidden.pth"):
         torch.save(model, path)
-        torch.save(preprocessor, path_for_preprocessor)
-        torch.save(model_for_offline_features, path_for_offline_features)
         torch.save(model_for_initial_hidden, path_for_initial_hidden)
         save_dir = path.replace(".pth","")
         convert_model_to_csv.convert_model_to_csv(model, save_dir)
-        #convert_model_to_csv.convert_initial_hidden_with_offline_data_model_to_csv(preprocessor, model_for_initial_hidden, save_dir)
+
     def save_offline_features(self, path="offline_features.csv"):
-        offline_features = get_offline_feature_dict(self.preprocessor,self.model_for_offline_features,self.offline_data_dict_train)[0]
-        offline_features = self.model_for_initial_hidden(offline_features.unsqueeze(0))[0]
-        offline_features_np = offline_features.cpu().detach().numpy()
-        np.savetxt(path, offline_features_np, delimiter=",")
+        initial_hidden =get_initial_hidden_dict(self.model_for_initial_hidden,self.offline_data_dict_train)[0]
+        initial_hidden_np = initial_hidden.cpu().detach().numpy()
+        np.savetxt(path, initial_hidden_np, delimiter=",")
     def update_adaptive_weight(
             self,
             model,
-            preprocessor,
-            model_for_offline_features,
             model_for_initial_hidden, 
             X,
             Y,
@@ -732,7 +655,7 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
             model_for_initial_hidden.to(self.device)
             model.eval()
             model_for_initial_hidden.eval()
-            offline_feature_dim = 2 * model.lstm_hidden_total_size
+            initial_hidden_dim = 2 * model.lstm_hidden_total_size
 
         num_batches = (X.size(0) + batch_size - 1) // batch_size
         prediction_error = torch.zeros(self.adaptive_weight.shape[0], device=self.device)
@@ -748,22 +671,18 @@ class train_error_prediction_NN_with_offline_data(add_data_from_csv.add_data_fro
                     X_batch = X[start_idx:end_idx]
                     Y_batch = Y[start_idx:end_idx]
                 if model is not None:
-                    offline_features, mask = get_offline_features(
-                        preprocessor,
-                        model_for_offline_features,
+                    hc_initial_concat = get_initial_hidden(
+                        model_for_initial_hidden,
                         offline_data_dict,
                         indices_batch,
-                        offline_feature_dim
+                        initial_hidden_dim
                     )                    
-                    #hc_initial_concat = model_for_initial_hidden(offline_features, X_batch[:,:past_initial_hidden_length],mask,preprocessor)
-                    hc_initial_concat = model_for_initial_hidden(offline_features,mask)
-
                     hc_initial = (hc_initial_concat[:, :model.lstm_hidden_total_size].unsqueeze(0).contiguous(), hc_initial_concat[:, model.lstm_hidden_total_size:].unsqueeze(0).contiguous())
-                    Y_pred, _ = model(X_batch[:,past_length- past_initial_hidden_length:], previous_error=Y_batch[:, past_length- past_initial_hidden_length:past_initial_hidden_length, -2:],hc=hc_initial, mode="get_lstm_states")
+                    Y_pred, _ = model(X_batch, previous_error=Y_batch[:, :past_length, -2:],hc=hc_initial, mode="get_lstm_states")
                     # Y_pred, _ = model(X_batch, previous_error=Y_batch[:, :past_length, -2:], mode="get_lstm_states")
-                    prediction_error += torch.mean(torch.abs(Y_pred - Y_batch[:,past_initial_hidden_length:]),dim=(0,1)) * (end_idx - start_idx)
+                    prediction_error += torch.mean(torch.abs(Y_pred - Y_batch[:,past_length:]),dim=(0,1)) * (end_idx - start_idx)
                 else:
-                    prediction_error += torch.mean(torch.abs(Y_batch[:,past_initial_hidden_length:]),dim=(0,1)) * (end_idx - start_idx)
+                    prediction_error += torch.mean(torch.abs(Y_batch[:,past_length:]),dim=(0,1)) * (end_idx - start_idx)
             prediction_error /= X.size(0)
         print("prediction_error:", prediction_error)
         self.adaptive_weight = 1.0 / (prediction_error + 1e-4)

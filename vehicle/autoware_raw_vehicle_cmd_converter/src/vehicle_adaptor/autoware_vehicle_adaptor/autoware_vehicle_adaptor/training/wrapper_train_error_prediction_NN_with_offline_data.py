@@ -24,8 +24,6 @@ def get_trained_model_wrapper(learning_rates, batch_sizes, train_dirs, val_dirs,
     model_trainer.get_trained_model(learning_rates=learning_rates, batch_sizes=batch_sizes,
                                     domains=domains_reset, targets=targets_reset, domain_indices=domain_indices_reset, target_indices=target_indices_reset)
     model_trainer.save_model(path=model_save_dir+"/vehicle_model.pth",
-                             path_for_preprocessor=model_save_dir+"/vehicle_model_for_preprocessor.pth",
-                             path_for_offline_features=model_save_dir+"/vehicle_model_for_offline_features.pth",
                              path_for_initial_hidden=model_save_dir+"/vehicle_model_for_initial_hidden.pth")
     if save_with_train_0:
         model_trainer.save_offline_features(path=model_save_dir + "/offline_features.csv")
@@ -75,8 +73,6 @@ def get_relearned_model_wrapper(
     for i in range(len(domains)):
         model_trainer.set_offline_data(domains[i], targets[i], domain_indices[i], target_indices[i])
     model_trainer.model = torch.load(model_load_dir+"/vehicle_model.pth")
-    model_trainer.preprocessor = torch.load(model_load_dir+"/vehicle_model_for_preprocessor.pth")
-    model_trainer.model_for_offline_features = torch.load(model_load_dir+"/vehicle_model_for_offline_features.pth")
     model_trainer.model_for_initial_hidden = torch.load(model_load_dir+"/vehicle_model_for_initial_hidden.pth")
     model_trainer.get_relearned_model(
         learning_rates=learning_rates, batch_sizes=batch_sizes, patience=patience,
@@ -87,8 +83,6 @@ def get_relearned_model_wrapper(
         plt_save_dir=model_save_dir, model_save_path=model_save_dir+"/tmp_vehicle_model.pth",
         domains=domains_reset, targets=targets_reset, domain_indices=domain_indices_reset, target_indices=target_indices_reset)
     model_trainer.save_model(path=model_save_dir+"/vehicle_model.pth",
-                             path_for_preprocessor=model_save_dir+"/vehicle_model_for_preprocessor.pth",
-                             path_for_offline_features=model_save_dir+"/vehicle_model_for_offline_features.pth",
                              path_for_initial_hidden=model_save_dir+"/vehicle_model_for_initial_hidden.pth")
     if save_with_train_0:
         model_trainer.save_offline_features(path=model_save_dir + "/offline_features.csv")

@@ -4,7 +4,7 @@
 #include <Eigen/Core>
 #include <Eigen/Dense>
 #include <vector>
-#include "inputs_prediction.h"
+#include "vehicle_adaptor_utils.h"
 
 ///////////////// LinearRegressionCompensator /////////////////////// 
 class LinearRegressionCompensator
