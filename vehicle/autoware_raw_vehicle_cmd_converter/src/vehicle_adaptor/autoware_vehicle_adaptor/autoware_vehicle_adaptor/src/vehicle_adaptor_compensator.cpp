@@ -2122,11 +2122,11 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
       past_acc_input_change_ = past_acc_input_change_decay_rate_ * past_acc_input_change_;
       past_acc_input_change_ += (1 - past_acc_input_change_decay_rate_) * std::abs(acc_controller_input_history_[acc_controller_input_history_.size()-1]
                               - acc_controller_input_history_[acc_controller_input_history_.size()-1-acc_input_change_window_size_])
-                              / acc_input_change_window_size_;
+                              / (acc_input_change_window_size_ * control_dt_);
       past_steer_input_change_ = past_steer_input_change_decay_rate_ * past_steer_input_change_;
       past_steer_input_change_ += (1 - past_steer_input_change_decay_rate_) * std::abs(steer_controller_input_history_[steer_controller_input_history_.size()-1]
                                 - steer_controller_input_history_[steer_controller_input_history_.size()-1-steer_input_change_window_size_])
-                                / steer_input_change_window_size_;
+                                / (steer_input_change_window_size_ * control_dt_);
       if (use_sg_for_d_inputs_schedule_){
         d_inputs_schedule_ = sg_filter_for_d_inputs_schedule_.sg_filter(d_inputs_schedule_);
       }
