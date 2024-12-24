@@ -218,6 +218,9 @@ using namespace vehicle_adaptor_constants;
     Eigen::VectorXd & h_lstm, Eigen::VectorXd & c_lstm, Eigen::VectorXd & previous_error, const int horizon,
     Eigen::MatrixXd & A, Eigen::MatrixXd & B, Eigen::MatrixXd & C)
   {
+    // A ノミナル stateに関する微分
+    // B ノミナル inputsに関する微分
+    // C LSTM内部状態を含むモデルに関する微分
     Eigen::VectorXd states_next = nominal_dynamics_.F_with_input_history_and_diff(
       states, acc_input_history, steer_input_history, acc_input_history_concat,
       steer_input_history_concat, d_inputs, A, B);
@@ -235,6 +238,7 @@ using namespace vehicle_adaptor_constants;
       2*h_dim_ + states.size(),
       2*h_dim_ + states.size() + acc_queue_size_ + steer_queue_size_ + 2 * predict_step_);
     for (int i = 0; i< int(state_component_predicted_index_.size()); i++) {
+      // x, yがNNはpredictしていないので呼ばれない。
       if (state_component_predicted_index_[i] == x_index_) {
         C(2 * h_dim_ + state_component_predicted_index_[i], 2 * h_dim_ + 2) += dF_d_states_with_history(i, 0) * predict_dt_ * std::cos(yaw);
         C(2 * h_dim_ + state_component_predicted_index_[i], 2 * h_dim_ + 2) -= dF_d_states_with_history(i + 1, 0) * predict_dt_ * std::sin(yaw);
@@ -250,6 +254,9 @@ using namespace vehicle_adaptor_constants;
         C.block(2 * h_dim_ + state_component_predicted_index_[i], 0, 1, 2 * h_dim_) += dF_dhc.row(i - 1) * predict_dt_ * std::sin(yaw);
         C.block(2 * h_dim_ + state_component_predicted_index_[i], 0, 1, 2 * h_dim_) += dF_dhc.row(i) * predict_dt_ * std::cos(yaw);
       } else {
+        // ここだけ呼ばれる。
+        // dF_d_states_with_history NNoutのNNinput(入力履歴 state)に関する微分
+        // ilqrにとって入力の変化率がinput, 入力履歴がstate
         C(2 * h_dim_ + state_component_predicted_index_[i], 2 * h_dim_+2) += dF_d_states_with_history(i, 0) * predict_dt_;
         C.block(2 * h_dim_ + state_component_predicted_index_[i], 2 * h_dim_ + 4, 1, states.size() - 3 - 1 + acc_queue_size_ + steer_queue_size_ + 2*predict_step_) += dF_d_states_with_history.block(i, 1, 1, states.size() - 3 - 1 + acc_queue_size_ + steer_queue_size_ + 2 * predict_step_) * predict_dt_;
         C.block(2 * h_dim_ + state_component_predicted_index_[i], 0, 1, 2 * h_dim_) += dF_dhc.row(i) * predict_dt_;
@@ -1111,6 +1118,7 @@ using namespace vehicle_adaptor_constants;
   {
     std::vector<Eigen::MatrixXd> dF_d_states, dF_d_inputs;
     std::vector<Eigen::Vector2d> inputs_schedule;
+    // forward trajectoryしてから微分すると重複計算多いので、一緒に計算しちゃう。
     trained_dynamics_.calc_forward_trajectory_with_diff(states, acc_input_history, steer_input_history, d_inputs_schedule,
                       h_lstm, c_lstm, previous_error, states_prediction, dF_d_states, dF_d_inputs, inputs_schedule);
 
@@ -1121,6 +1129,7 @@ using namespace vehicle_adaptor_constants;
     double initial_prediction_x_weight_coef, initial_prediction_y_weight_coef, initial_prediction_vel_weight_coef,
            initial_prediction_yaw_weight_coef, initial_prediction_acc_weight_coef, initial_prediction_steer_weight_coef;
 
+    // 全部のコストの調整するためのcoefを計算
     calc_inputs_ref_info(
       states, acc_input_history, steer_input_history, h_lstm, c_lstm, previous_error, states_ref,
       acc_controller_input_schedule, steer_controller_input_schedule,
@@ -1137,6 +1146,7 @@ using namespace vehicle_adaptor_constants;
     std::vector<Eigen::VectorXd> k;
     double prev_acc_rate = (acc_input_history[acc_queue_size_ - 1] - acc_input_history[acc_queue_size_ - 2])/control_dt_;
     double prev_steer_rate = (steer_input_history[steer_queue_size_ - 1] - steer_input_history[steer_queue_size_ - 2])/control_dt_;
+    // backward
     compute_ilqr_coefficients(dF_d_states, dF_d_inputs, states_prediction, d_inputs_schedule, states_ref, d_input_ref, prev_acc_rate, prev_steer_rate,
     inputs_ref,
     std::min(x_weight_coef,initial_prediction_x_weight_coef), 
@@ -1150,9 +1160,11 @@ using namespace vehicle_adaptor_constants;
     inputs_schedule, K, k);
     Eigen::VectorXd ls_points = Eigen::VectorXd::LinSpaced(11, 0.0, 1.0);
 
+    // D_inputs_scheduleはK,kから計算するinputの変化率の候補
     std::vector<Eigen::MatrixXd> D_inputs_schedule = calc_line_search_candidates(K, k, dF_d_states, dF_d_inputs, d_inputs_schedule, ls_points);
     Eigen::VectorXd Cost;
     std::vector<Eigen::MatrixXd> States_prediction;
+    // 複数input変化を入力してコストが低いものを採用
     calc_forward_trajectory_with_cost(states, acc_input_history, steer_input_history, D_inputs_schedule, h_lstm, c_lstm, previous_error, States_prediction, states_ref, d_input_ref,
       inputs_ref,
       x_weight_coef, y_weight_coef, vel_weight_coef, yaw_weight_coef, acc_weight_coef, steer_weight_coef,
@@ -1684,10 +1696,12 @@ using namespace vehicle_adaptor_constants;
       Eigen::Map<Eigen::VectorXd> acc_input_history_obs_eigen(acc_input_history_obs_.data(), acc_input_history_obs_.size());
       Eigen::Map<Eigen::VectorXd> steer_input_history_obs_eigen(steer_input_history_obs_.data(), steer_input_history_obs_.size());
 
+      // LSTMの入力と最適化に使う
+      // acc_input_history_obs_eigen はobsはタイムスタンプのobsの意味。accはvehicle_adaptor補正後
       acc_input_history_ = interpolate_eigen(acc_input_history_obs_eigen, time_stamp_obs_, time_stamp_acc_input_history);
       steer_input_history_ = interpolate_eigen(steer_input_history_obs_eigen, time_stamp_obs_, time_stamp_steer_input_history);
-      
 
+      // LSTMの5秒間の入力に使う。↑の5秒分。15次元 * 50(50秒) * 3(controllerが30hz, vehicle_adaptorの内部ひとつのhorizonが10hz)
       state_history_lstm_ = interpolate_vector(state_history_lstm_obs_, time_stamp_obs_, time_stamp_state_history_lstm);
       acc_input_history_lstm_ = interpolate_vector(acc_input_history_lstm_obs_, time_stamp_obs_, time_stamp_input_history_lstm);
       steer_input_history_lstm_ = interpolate_vector(steer_input_history_lstm_obs_, time_stamp_obs_, time_stamp_input_history_lstm);
@@ -1708,6 +1722,8 @@ using namespace vehicle_adaptor_constants;
         steer_input_history_lstm_obs_.erase(steer_input_history_lstm_obs_.begin());
       }
 
+      // controller生の入力
+      // 入力予定の予測などにつかう。最適化に使う。
       Eigen::Map<Eigen::VectorXd> acc_controller_input_history_obs_eigen(acc_controller_input_history_obs_.data(), acc_controller_input_history_obs_.size());
       Eigen::Map<Eigen::VectorXd> steer_controller_input_history_obs_eigen(steer_controller_input_history_obs_.data(), steer_controller_input_history_obs_.size());
 
@@ -1722,6 +1738,7 @@ using namespace vehicle_adaptor_constants;
       past_steer_input_change_ += (1 - past_steer_input_change_decay_rate_) * std::abs(steer_controller_input_history_[steer_controller_input_history_.size()-1]
                                 - steer_controller_input_history_[steer_controller_input_history_.size()-1-steer_input_change_window_size_])
                                 / (steer_input_change_window_size_ * control_dt_);
+      // d_inputs_schedule_MPCの解。前回の結果を平滑化して今回の初期解につかっている。
       if (use_sg_for_d_inputs_schedule_){
         d_inputs_schedule_ = sg_filter_for_d_inputs_schedule_.sg_filter(d_inputs_schedule_);
       }
@@ -1735,10 +1752,13 @@ using namespace vehicle_adaptor_constants;
     Eigen::Vector2d acc_steer_error = Eigen::Vector2d::Zero();
 
     if (use_offline_features_){
+      // どっちも18次元
       h_lstm = offline_features_.head(h_dim_full_);
       c_lstm = offline_features_.tail(h_dim_full_);
     }
 
+    // update_lstm_len_ 50 (5s)
+    // エンコーダーのh,cを5秒分入力で更新
     for (int i = 0; i<update_lstm_len_; i++) {
 
       Eigen::VectorXd states_tmp = state_history_lstm_[predict_step_*i];
@@ -1761,6 +1781,7 @@ using namespace vehicle_adaptor_constants;
         acc_steer_error = (states
                                  - adaptor_ilqr_.nominal_prediction(states_tmp, acc_input_history_concat, steer_input_history_concat)).tail(2) / predict_dt_;
       }
+      // c, hを更新
       adaptor_ilqr_.update_lstm_states(states_tmp, acc_input_history_concat, steer_input_history_concat, h_lstm_encoder, c_lstm_encoder, acc_steer_error);
     }
     h_lstm = h_lstm_encoder[num_layers_encoder_-1];
@@ -1782,7 +1803,7 @@ using namespace vehicle_adaptor_constants;
     Eigen::VectorXd steer_input_schedule_predictor_states(2);
     acc_input_schedule_predictor_states << states[vel_index_], acc_controller_input;
     steer_input_schedule_predictor_states << states[vel_index_], steer_controller_input;
-    if (acc_input_schedule_prediction_mode_ == "NN")
+    if (acc_input_schedule_prediction_mode_ == "NN") // autowareで使う
     {
       std::vector<double> controller_acc_input_prediction_by_NN = acc_input_schedule_prediction_.get_inputs_schedule_predicted(acc_input_schedule_predictor_states, time_stamp);
       for (int i = 0; i < acc_input_schedule_prediction_len_; i++)
@@ -1812,9 +1833,13 @@ using namespace vehicle_adaptor_constants;
       }
     }
 
-    if (states_ref_mode_ == "controller_d_steer_schedule")
+    // use_controller_steer_input_schedule_ trueだとset_controller_steer_input_scheduleよばれて、このmodeになる
+    if (states_ref_mode_ == "controller_d_steer_schedule") // autowareで使う.
     {
       for (int i = 0; i<int(d_inputs_schedule_.size()); i++){
+        // d_inputs_schedule_ vehicle_adaptorの前回の解
+        // steer_controller_d_inputs_schedule_ 今回のcontrollerの入力の予定
+        // reflect_controller_d_input_ratio_はデフォルトは0.0
         d_inputs_schedule_[i][1] = (1 - reflect_controller_d_input_ratio_)*d_inputs_schedule_[i][1];
         d_inputs_schedule_[i][1] += reflect_controller_d_input_ratio_*steer_controller_d_inputs_schedule_[i];
       }
@@ -1822,7 +1847,7 @@ using namespace vehicle_adaptor_constants;
       past_steer_input_change_weight_ = 0.5;
 
       Eigen::VectorXd acc_controller_input_prediction(horizon_len_*predict_step_-1);
-      if (acc_input_schedule_prediction_mode_ == "NN")
+      if (acc_input_schedule_prediction_mode_ == "NN") // autowareで使う.
       {
         acc_controller_input_prediction = acc_controller_inputs_prediction_by_NN; 
       }
@@ -1926,13 +1951,14 @@ using namespace vehicle_adaptor_constants;
       steer_controller_input_history_with_schedule.tail(predict_step_*horizon_len_ - 1) = steer_controller_input_prediction;
     }
       // calculate states_ref by controller inputs history with schedule //
-    if (states_ref_mode_ == "input_schedule_prediction" || states_ref_mode_ == "controller_d_inputs_schedule" || states_ref_mode_ == "controller_d_steer_schedule")
+    if (states_ref_mode_ == "input_schedule_prediction" || states_ref_mode_ == "controller_d_inputs_schedule" || states_ref_mode_ == "controller_d_steer_schedule") // autowareで使う
     {
       states_ref[0] = states;
       Eigen::VectorXd states_ref_tmp = states;
       for (int i = 0; i < horizon_len_; i++) {
         for (int j = 0; j < predict_step_; j++) {
           Eigen::Vector2d inputs_tmp;
+          // 入力の予定を予定をdelay分戻したもの
           inputs_tmp << acc_controller_input_history_with_schedule[controller_acc_input_history_len + i*predict_step_ + j - acc_delay_step_controller_ - 1], steer_controller_input_history_with_schedule[controller_steer_input_history_len + i*predict_step_ + j - steer_delay_step_controller_ - 1];
           states_ref_tmp = nominal_dynamics_controller_.F_nominal(states_ref_tmp, inputs_tmp);
           if (steer_controller_prediction_aided_){
@@ -1957,11 +1983,11 @@ using namespace vehicle_adaptor_constants;
         states_ref[i][steer_index_] =steer_controller_prediction_[i];
       }
     }
-    
 
-
+    // Uが決定変数。Uのターゲットを定めている。デフォルト0
     std::vector<Eigen::VectorXd> d_input_ref(horizon_len_, Eigen::VectorXd::Zero(2));
     double acc_input, steer_input;
+    // つかっていない。
     if (states_ref_mode_ == "controller_d_inputs_schedule" and use_controller_inputs_as_target_){
       for (int i = 0; i<horizon_len_;i++){
         d_input_ref[i][0] = acc_controller_d_inputs_schedule_[i];
@@ -1970,6 +1996,7 @@ using namespace vehicle_adaptor_constants;
     }
 
     // calculate future inputs change rate
+    // controllerのinputの変化率。controller_d_input_scheduleと似たもの。degayさせて重み付けしてつくったもの。
     Eigen::VectorXd acc_controller_input_schedule = acc_controller_input_history_with_schedule.tail(predict_step_*horizon_len_);
     Eigen::VectorXd steer_controller_input_schedule = steer_controller_input_history_with_schedule.tail(predict_step_*horizon_len_);
 
@@ -2000,7 +2027,6 @@ using namespace vehicle_adaptor_constants;
 
 
 
-
     adaptor_ilqr_.compute_optimal_control(
       states, acc_input_history_, steer_input_history_, d_inputs_schedule_, h_lstm, c_lstm, states_ref, d_input_ref, 
       acc_input_change_rate, steer_input_change_rate,
@@ -2009,7 +2035,7 @@ using namespace vehicle_adaptor_constants;
       acc_input, steer_input
       );
 
-    if (input_filter_mode_ == "butterworth"){
+    if (input_filter_mode_ == "butterworth"){ // デフォルトnoneでskip
       Eigen::Vector2d inputs_tmp = Eigen::Vector2d(acc_input, steer_input);
       inputs_tmp = butterworth_filter_.apply(inputs_tmp);
       acc_input = inputs_tmp[0];

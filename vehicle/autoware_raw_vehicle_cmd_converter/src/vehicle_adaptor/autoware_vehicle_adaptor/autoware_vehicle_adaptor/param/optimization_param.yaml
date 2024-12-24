@@ -78,8 +78,10 @@ optimization_parameter:
     mix_ratio:
         mix_ratio_vel_target_table: [0.0,0.0,1.0]
         mix_ratio_vel_domain_table: [0.0,0.5,2.0]
+
         mix_ratio_time_target_table: [0.0,1.0]
         mix_ratio_time_domain_table: [0.0,3.0]
+        
     steering:
         steer_dead_band: 0.0001
     ilqr:

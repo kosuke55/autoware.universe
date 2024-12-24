@@ -225,6 +225,7 @@
       Eigen::MatrixXd dy_d_lstm_output =
         d_relu_product(dy_d_linear_relu, u_linear_relu[i]) * weight_linear_relu_[i];
 
+      // yのhに関する微分
       dy_d_lstm +=
         dy_d_lstm_output.block(0, 0, dy_d_lstm_output.rows(), h_dim_)/model_num_;
       Eigen::MatrixXd dy_d_complimentary_layer = dy_d_lstm_output.block(
@@ -240,11 +241,12 @@
 
     Eigen::MatrixXd dy_dc_lstm_next = d_tanh_product(dy_d_lstm * o_lstm.asDiagonal(), c_lstm_next_head);
 
-      
     Eigen::MatrixXd dy_dh1 =
       d_sigmoid_product(dy_d_o_lstm, u_o_lstm) *
       weight_lstm_ih_.block(3 * h_dim_, 0, h_dim_, h1_size);
 
+    // https://pytorch.org/docs/stable/generated/torch.nn.LSTM.html
+    // xtにあたるのh1
     dy_dh1 += d_sigmoid_product(dy_dc_lstm_next * c_lstm_next_head.asDiagonal(), u_f_lstm) *
               weight_lstm_ih_.block(1 * h_dim_, 0, h_dim_, h1_size);
 
