@@ -43,8 +43,8 @@ x^+[0] =& x[0] + x[2]\cos(x[3])dt_{\mathrm{ctrl}}\\
 x^+[1] =& x[1] + x[2]\sin(x[3])dt_{\mathrm{ctrl}}\\
 x^+[2] =& x[2] + x[4]dt_{\mathrm{ctrl}}\\
 x^+[3] =& x[3] + x[2]\frac{\tan(x[5])}{L}dt_{\mathrm{ctrl}}\\
-x^+[4] =& x[4] - \frac{x[4]-\alpha}{\tau_{\mathrm{acc}}}dt_{\mathrm{ctrl}}\\
-x^+[5] =& x[5] - \frac{x[5]-\delta}{\tau_{\mathrm{steer}}}dt_{\mathrm{ctrl}}\\
+x^+[4] =& \mathrm{exp}\left(-\frac{dt}{\tau_{\mathrm{acc}}}\right) x[4] + \left(1 - \mathrm{exp}\left(-\frac{dt}{\tau_{\mathrm{acc}}}\right) \right)\alpha\\
+x^+[5] =& \mathrm{exp}\left(-\frac{dt}{\tau_{\mathrm{steer}}}\right) x[5] + \left(1 - \mathrm{exp}\left(-\frac{dt}{\tau_{\mathrm{steer}}}\right) \right)\delta\\
 \end{split}
 \end{equation*}
 $$
@@ -446,20 +446,23 @@ $$
 
 こうして得られた平滑化された入力の予測値 $(\bar u_1,\ldots,\bar u_N)$ をVehicle Adaptorに渡す。
 
-## 最適化設計
+## 学習モデルに基づいた入力値の補正のための最適化設計
 
 MPCでは1ステップ $0.1 s$で $N=12$ステップ先まで予測している。
 MPCにおける決定変数 $U\in \mathbb{R}^{N\times 2}$は各時刻における入力の変化率である。
-ノミナルモデルあるいは学習モデルに基づき $U$を用いて現在の状態 $X[0]= x_0$から将来を予測したものを
-$$X = (X[0],X[1],\ldots,X[N])\in \mathbb{R}^{(N+1)\times(6+M_{\mathrm{acc}} + M_{\mathrm{steer}})}$$
+学習モデルに基づき $U$を用いて現在の状態 $X[0]= x_0$から将来を予測したものを
+$$X = (X[0],X[1],\ldots,X[N])\in \mathbb{R}^{(N+1)\times 6}$$
 と表す。
-ワールド座標 $xy$成分、直進速度、ワールド相対ヨー角、直進加速度実現値、ステア実現値、直進加速度入力値、ステア入力値の8成分に対する目標軌道 $X_{\mathrm{des}} \in \mathbb{R}^{(N+1)\times8}$ を用いてMPCコストは
-$$J(X,U,X_{\mathrm{des}}) =\sum_{t=0}^{N-1} l_t(X[t],U[t],X_{\mathrm{des}}[t]) + l_N(X[N],X_{\mathrm{des}}[N])$$
-のように設計される。ここで $l_t$はステージコスト、 $l_N$は終端コストを表し、 $l_t$および $l_N$には目標値との直進偏差、横偏差、速度偏差、ヨー角偏差、加速度偏差、ステア偏差、加速度入力値偏差、ステア各入力値偏差および、制約条件をコストとして扱ったものが入っている。
+コントローラの入力の予定、あるいはその予測から入力の変化率を計算したもの $U_{\mathrm{ref}}\in \mathbb{R}^{N\times 2}$ を用いて、コントローラのノミナルモデルに基づき、現在の状態 $X[0]= x_0$ から将来を予測したものを
+$X_{\mathrm{ref}} \in \mathbb{R}^{(N+1)\times 6}$ とする。
+このときMPCコストは
+$$J(X,U,X_{\mathrm{ref}}, U_{\mathrm{ref}}) =\sum_{t=0}^{N-1} l_t(X[t],U[t],X_{\mathrm{ref}}[t],U_{\mathrm{ref}}[t]) + l_N(X[N],X_{\mathrm{ref}}[N])$$
+のように設計される。
+ここで $l_t$はステージコスト、 $l_N$は終端コストを表し、 $l_t$および $l_N$には目標値との直進偏差、横偏差、速度偏差、ヨー角偏差、加速度偏差、ステア偏差、加速度入力値偏差、ステア各入力値偏差が入っている。
 更にステージコスト $l_t$ には $U$ を小さくするコストが入っている。
 入力の変化率 $U$ に対してコストを掛けることで入力の大きな変化を防いでいる。
-
 MPCでは $J$ を最小化するような $U$ を求める。
+このようにして、コントローラ入力がノミナルモデルに基づいて期待する状態の変化が、学習モデルに基づいてなるべく実現されるような入力を求めることができる。
 
 ## キャリブレーションNN
 
@@ -504,21 +507,29 @@ graph LR;
 
 ### 実機実験
 
-BSでの実験(40 km/h)での実験。
+Vehicle adaptorの学習データとしては特に記載がない場合はdata_collecting走行およびBSでのスラローム走行や柏の葉での走行データを用いている。
+
+#### 旧実験
+
+##### BS 40 km/h ノミナル走行
+
 ノミナル走行では直線部分で20cmくらいの横偏差が出た。
 <p><img src="images/bs_nom_steer_lat_dev.png" width=200pix></p>
 ノミナル走行における速度・加速度のグラフは次の通りで、一部加速度入力と実現値で乖離が見られた。
 <p><img src="images/bs_nom_vel_acc.png" width=200pix></p>
+
+##### BS 40 km/h Vehicle adaptor走行
 
 Vehicle adaptor導入ではじめの直線における横偏差が10cmくらいになった。
 <p><img src="images/bs_va_steer_lat_dev.png" width=200pix></p>
 
 一方で速度・加速度に関しては、特に加速度入力と実現値が乖離していた部分において
 Vehicle adaptor導入で振動が発生した。
+ただし、この問題に関しては上述のコントローラの入力予定の予測の後処理によって解決済みである。
 <p><img src="images/bs_va_vel_acc.png" width=200pix></p>
 
+##### 柏の葉 15 km/h ノミナル走行
 
-柏の葉での実験(15km/h)での実験。
 ノミナルでカーブにおいて40cmくらいの横偏差が出た。
 
 <p><img src="images/kw_nom_steer_lat_dev.png" width=200pix></p>
@@ -526,15 +537,72 @@ Vehicle adaptor導入で振動が発生した。
 ノミナル走行における速度・加速度のグラフは次の通り。
 <p><img src="images/kw_nom_vel_acc.png" width=200pix></p>
 
+##### 柏の葉 15 km/h Vehicle adaptor走行
+
 Vehicle adaptor導入で20cm以下の横偏差になったカーブもあるが、特に一番はじめのカーブなど良くも悪くもならなかったカーブもあった。
-改善しなかった原因が学習側にあるのか、オンラインでの最適化側にあるのかなどを決定するための解析を今後行う予定である。
+ただしこの問題に関しては後の検証により、改善しなかった原因が学習側ではなく入力値の補正のための最適化側にあることが発覚したため、対応を行い改善が得られた。
 <p><img src="images/kw_va_steer_lat_dev.png" width=200pix></p>
 
-BS実験の後に加速度入力補正のアルゴリズムの修正を行ったが、速度・加速度は次の通り、Vehicle adaptor導入で特にノミナルに比べて振動が強くなるなどは見られなかった。
-BSコースでも振動しなくなったかは今後の実験にて確認予定。
+BS実験の後に加速度入力補正のアルゴリズムの修正を行ったことで速度・加速度は次の通り、Vehicle adaptor導入で特にノミナルに比べて振動が強くなるなどは見られなかった。
 <p><img src="images/kw_va_vel_acc.png" width=200pix></p>
 
 一方で最適化パラメータを変更すると、次のように直線（グラフでは9060 sの停止付近）にてステアの振動が見られた。
-今後このような現象が起きにくくなるような修正を行いたい。
+この問題に関しては、入力値の補正のための最適化側の修正を行い、ある程度の改善が得られた。
 
 <p><img src="images/kw_va_steer_lat_dev_param_change.png" width=200pix></p>
+
+#### 新実験
+
+##### BS 30 km/h ノミナル走行
+
+ノミナル走行では、はみ出てしまいオーバーライドが入った。(520 sec付近以降)
+そのためそれ以降の部分はあまり評価の対象にはできない。
+<p><img src="images/bs_nom_steer_lat_dev_new_30.png" width=200pix></p>
+<p><img src="images/bs_nom_vel_acc_new_30.png" width=200pix></p>
+
+##### BS 30 km/h Vehicle adaptor走行
+
+スラローム部分の横偏差が30 cm程度に減少し、オーバーライドなしで走行できるようになった。
+<p><img src="images/bs_va_steer_lat_dev_new_30.png" width=200pix></p>
+以前起きていたVehicle adaptorによる加速度の振動も見られなくなった。
+<p><img src="images/bs_va_vel_acc_new_30.png" width=200pix></p>
+
+##### BS 40 km/h ノミナル走行
+
+
+はみ出てしまいオーバーライドが入った。
+そのため480 sec以降のデータはあまり評価の対象にできない。
+<p><img src="images/bs_nom_steer_lat_dev_new_40.png" width=200pix></p>
+<p><img src="images/bs_nom_vel_acc_new_40.png" width=200pix></p>
+
+##### BS 40 km/h Vehicle adaptor走行
+
+スラローム部分の横偏差が30 cm程度に減少し、オーバーライドなしで走行できるようになった。
+<p><img src="images/bs_va_steer_lat_dev_new_40.png" width=200pix></p>
+以前起きていたVehicle adaptorによる加速度の振動も見られなくなった。
+<p><img src="images/bs_va_vel_acc_new_40.png" width=200pix></p>
+
+##### BS 40 km/h Vehicle adaptor走行 (data_collecting_toolのみでの学習データ)
+
+Vehicle adaptorをdata_collecting_toolのみで学習したもの。
+オーバーライドは入らなかったが若干はみ出てしまい70 cm程度の横偏差になった。
+原因は7~8 m/sくらいの中程度の速度域のカーブデータが不足していたためと考えられる。
+<p><img src="images/bs_va_steer_lat_dev_data_collecting_40.png" width=200pix></p>
+<p><img src="images/bs_va_vel_acc_data_collecting_40.png" width=200pix></p>
+
+##### 柏の葉 30 km/h ノミナル走行
+
+40cmくらいの横偏差が出ておりカーブがギリギリだった。
+
+<p><img src="images/kw_nom_steer_lat_dev_new_30.png" width=200pix></p>
+
+<p><img src="images/kw_nom_vel_acc_new_30.png" width=200pix></p>
+
+##### 柏の葉 30 km/h Vehicle adaptor走行
+
+
+Vehicle adaptor導入で30cm程度の横偏差に改善し、カーブに多少の余裕ができた。
+
+<p><img src="images/kw_va_steer_lat_dev_new_30.png" width=200pix></p>
+
+<p><img src="images/kw_va_vel_acc_new_30.png" width=200pix></p>
