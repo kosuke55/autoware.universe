@@ -198,6 +198,9 @@ The test method in [run_auto_parameter_change_sim.py](./autoware_vehicle_adaptor
 
 # Parameter description
 
+Some parameters are expressed in the form of a table. When the domain table is `[d_0, ..., d_n]` and the target table is `[t_0,...,t_n]`, the target value `t_i` is used when the domain value is `d = d_i`.
+In the case of a value between nodes, it is linearly interpolated, and when `d` is less than `d_0`, `t_0` is used, and when `d_n` is greater than `d_n`, `t_n` is used.
+
 The important parameters in the Vehicle Adaptor's changeable parameter file [optimization_param.yaml](./autoware_vehicle_adaptor/param/optimization_param.yaml) are as follows:
 
 
@@ -208,7 +211,11 @@ The important parameters in the Vehicle Adaptor's changeable parameter file [opt
 | weight_parameter:vel_cost                  | float         | velocity error stage cost weight                                                                                                               |
 | weight_parameter:yaw_cost                  | float         | yaw angle error stage cost weight                                                                                                               |
 | weight_parameter:acc_cost                  | float         | acceleration error stage cost weight                                                                                                               |
-| weight_parameter:steer_cost                  | float         | steer angle error stage cost weight                                                                                                               |
+| weight_parameter:steer_cost                  | float         | steering angle error stage cost weight                                                                                                               |
+| weight_parameter:steer_rate_cost                  | float         | steering input rate cost weight                                                                                                               |
+| weight_parameter:acc_rate_cost                  | float         | acceleration input rate cost weight                                                                                                               |
+| weight_parameter:steer_rate_rate_cost                  | float         | rate of steering input rate cost weight                                                                                                               |
+| weight_parameter:acc_rate_rate_cost                  | float         | rate of acceleration input rate cost weight                                                                                                               |
 | weight_parameter:x_terminal_cost                  | float         | longitudinal error terminal cost weight                                                                                                               |
 | weight_parameter:y_terminal_cost                  | float         | lateral error stage terminal weight                                                                                                               |
 | weight_parameter:vel_terminal_cost                  | float         | velocity error stage terminal weight                                                                                                               |
@@ -222,7 +229,61 @@ The important parameters in the Vehicle Adaptor's changeable parameter file [opt
 | weight_parameter:yaw_intermediate_cost                  | float         | yaw angle error stage intermediate weight                                                                                                               |
 | weight_parameter:acc_intermediate_cost                  | float         | acceleration error stage intermediate weight                                                                                                               |
 | weight_parameter:steer_intermediate_cost                  | float         | steer angle error stage intermediate weight                                                                                                               |
+| inputs_schedule_prediction_mode:acc_input_schedule_prediction_mode |str| A prediction mode for controller acceleration inputs that is used when the controller horizon cannot be obtained. "NN", "linear_extrapolation" or "polynomial_regression"|
+| inputs_schedule_prediction_mode:steer_input_schedule_prediction_mode|str| A prediction mode for controller steering inputs that is used when the controller horizon cannot be obtained. "NN", "linear_extrapolation" or "polynomial_regression"|
+| mix_ratio:mix_ratio_vel_target_table                  | list[float]| The mix ratio table for the velocity-dependent vehicle adaptor correction, which takes values from 0 to 1.|
+| mix_ratio:mix_ratio_vel_domain_table                  | list[float]| Velocity domain table (m/s) for the mix ratio.|
+| mix_ratio:mix_ratio_time_target_table                  | list[float]| The mix ratio table for the time-dependent vehicle adaptor correction, which takes values from 0 to 1.|
+| mix_ratio:mix_ratio_time_domain_table                  | list[float]| Time domain table (s) for the mix ratio. The time since control start is used as the domain value.|
+| cost_tables:acc_rate_input_table                  | list[float]| Acceleration rate table (m/s^3).|
+| cost_tables:acc_rate_cost_coef_table                  | list[float]         | Acceleration rate cost coefficient table depending on acceleration rate. Multiply the acceleration rate cost weight by this coefficien. |
+| cost_tables:x_coef_by_acc_rate_table                  | list[float]         | Longitudinal error cost coefficient table depending on acceleration rate. |
+| cost_tables:vel_coef_by_acc_rate_table                  | list[float]         | Velocity error cost coefficient table depending on acceleration rate. |
+| cost_tables:acc_coef_by_acc_rate_table                  | list[float]         | Acceleration error cost coefficient table depending on acceleration rate. |
+| cost_tables:steer_rate_input_table                  | list[float]         | Steering rate table (rad/s).|
+| cost_tables:steer_rate_cost_coef_table                  | list[float]         | Steering rate cost coefficient table depending on steering rate. |
+| cost_tables:vel_for_steer_rate_table                  | list[float]         | Velocity table (m/s) for steering input rate.|
+| cost_tables:steer_rate_cost_coef_by_vel_table                  | list[float]         | Steering rate cost coefficient table depending on velocity. |                  
+| cost_tables:y_coef_by_steer_rate_table                  | list[float]         | Lateral error cost coefficient table depending on steering rate. |
+| cost_tables:yaw_coef_by_steer_rate_table                  | list[float]         | Yaw angle error cost coefficient table depending on steering rate. |
+| cost_tables:steer_coef_by_steer_rate_table                  | list[float]         | Steering error cost coefficient table depending on steering rate. |
+| cost_tables:steer_coef_by_steer_rate_table                  | list[float]         | Steering error cost coefficient table depending on steering rate. |
+| cost_tables:controller_vel_error_domain_table                  | list[float]         | Controller nominal prediction's velocity error table (m/s). |
+| cost_tables:controller_acc_error_domain_table                  | list[float]         | Controller nominal prediction's acceleration error table (m/s^2). |
+| cost_tables:controller_longitudinal_coef_target_table                  | list[float]         | Longitudinal position, velocity and acceleration error cost coefficient table depending on controller nominal prediction's velocity and acceleration error. |
+| cost_tables:controller_acc_input_weight_target_table                  | list[float]         | Cost coefficient table to respect the raw acceleration input of the controller depending on controller nominal prediction's velocity and acceleration error. |
+| cost_tables:controller_yaw_error_domain_table                  | list[float]         | Controller nominal prediction's yaw angle error table (rad). |
+| cost_tables:controller_steer_error_domain_table                  | list[float]         | Controller nominal prediction's steering angle error table (rad). |
+| cost_tables:controller_lateral_coef_target_table                  | list[float]         | Lateral position, yaw and steering angle error cost coefficient table depending on controller nominal prediction's yaw and steering angle error. |
+| cost_tables:controller_steer_input_weight_target_table                  | list[float]         | Cost coefficient table to respect the raw steering input of the controller depending on controller nominal prediction's yaw and steering angle error. |
+| cost_tables:x_error_domain_table                  | list[float]         | Longitudinal position error table (m) |
+| cost_tables:x_error_target_table                  | list[float]         | Longitudinal position error cost coefficient table depending on longitudinal position error. |    
+| cost_tables:y_error_domain_table                  | list[float]         | Lateral position error table (m) |
+| cost_tables:y_error_target_table                  | list[float]         | Lateral position error cost coefficient table depending on longitudinal position error. |  
+| cost_tables:vel_error_domain_table                  | list[float]         | Velocity error table (m/s) |
+| cost_tables:vel_error_domain_table                  | list[float]         | Velocity error cost coefficient table depending on velocity error. | 
+| cost_tables:yaw_error_domain_table                  | list[float]         | Yaw angle error table (rad) |
+| cost_tables:yaw_error_domain_table                  | list[float]         | Yaw angle error cost coefficient table depending on yaw angle error. |
+| cost_tables:acc_error_domain_table                  | list[float]         | Acceleration error table (m/s^2) |
+| cost_tables:acc_error_domain_table                  | list[float]         | Acceleration error cost coefficient table depending on acceleration error. |  
+| cost_tables:steer_error_domain_table                  | list[float]         | Steering error table (rad) |
+| cost_tables:steer_error_domain_table                  | list[float]         | Steering error cost coefficient table depending on steering error. |  
+| autoware_alignment:use_controller_steer_input_schedule                  | bool         | Whether to use horizon for steering input. |  
+| autoware_alignment:use_vehicle_adaptor                  | bool         | Whether to use vehicle adaptor | 
+| autoware_alignment:use_offline_features                  | bool         | This is a parameter for a function in the development stage, so please use it with false. | 
 
+## Parameter tuning
+
+The particularly important parameters are `yaw_terminal_cost`, `yaw_intermediate_cost`, `vel_for_steer_rate_table`, `steer_rate_cost_coef_by_vel_table`, `yaw_coef_by_steer_rate_table`, `controller_acc_input_weight_target_table` and `controller_steer_input_weight_target_table`.
+
+If the parameters `yaw_terminal_cost` and `yaw_intermediate_cost` are large, the tracking performance improves, but there is a trade-off in that the steering vibration is likely to occur.
+To deal with this, we adjust parameter `yaw_coef_by_steer_rate_table`, and when the steer rate is large, we increase the yaw angle cost weight, and when the steer rate is small, we decrease the yaw angle cost weight.
+Similarly, in order to avoid steering vibration in the high-speed range, the parameters `vel_for_steer_rate_table` and `steer_rate_cost_coef_by_vel_table` are adjusted, and the cost weight of the steering input rate is made small in the low-speed range and large in the high-speed range.
+
+By setting the parameter `controller_acc_input_weight_target_table` to a large values (in particular, first two values), the raw acceleration input of the controller is prioritized when the controller's acceleration dynamics are accurate, preventing degradation due to the Vehicle Adaptor.
+
+Similarly, by setting the parameter `controller_steer_input_weight_target_table` to a large values (in particular, first two values), the raw steering input of the controller is prioritized when the controller's steering dynamics are accurate, preventing degradation due to the Vehicle Adaptor.
+If the controller steering dynamics are not very accurate, the user may want to set this values to, for example, `[1e+7, 1e+4, 1.0]` instead of the default `[1e+12, 1e+11, 1e+2]`.
 
 # Limitation
 
