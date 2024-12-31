@@ -48,13 +48,6 @@ add_yaw_to_prediction = bool(trained_model_param["trained_model_parameter"]["set
 use_position_observation = bool(trained_model_param["trained_model_parameter"]["setting"]["use_position_observation"])
 use_vel_observation = bool(trained_model_param["trained_model_parameter"]["setting"]["use_vel_observation"])
 use_yaw_observation = bool(trained_model_param["trained_model_parameter"]["setting"]["use_yaw_observation"])
-integrate_states = bool(trained_model_param["trained_model_parameter"]["setting"]["integrate_states"])
-integrate_vel = bool(trained_model_param["trained_model_parameter"]["setting"]["integrate_vel"])
-integrate_yaw = bool(trained_model_param["trained_model_parameter"]["setting"]["integrate_yaw"])
-if not add_vel_to_prediction:
-    integrate_vel = False
-if not add_yaw_to_prediction:
-    integrate_yaw = False
 
 state_component_predicted =[]
 state_component_predicted_index = []
@@ -94,8 +87,3 @@ acc_input_schedule_prediction_len = int(optimization_param["optimization_paramet
 steer_input_schedule_prediction_len = int(optimization_param["optimization_parameter"]["inputs_schedule_prediction_NN"]["steer_input_schedule_prediction_len"])
 controller_acc_input_history_len = int(optimization_param["optimization_parameter"]["inputs_schedule_prediction_NN"]["controller_acc_input_history_len"])
 controller_steer_input_history_len = int(optimization_param["optimization_parameter"]["inputs_schedule_prediction_NN"]["controller_steer_input_history_len"])
-
-fit_yaw_for_linear_compensation = bool(optimization_param["optimization_parameter"]["compensation"]["fit_yaw"])
-x_history_len_for_linear_compensation = int(optimization_param["optimization_parameter"]["compensation"]["x_history_len"])
-vel_scale_for_linear_compensation = float(optimization_param["optimization_parameter"]["compensation"]["vel_scale"])
-compensation_lstm_len = int(optimization_param["optimization_parameter"]["compensation"]["compensation_lstm_len"])

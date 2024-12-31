@@ -119,7 +119,7 @@ class GetInitialHiddenNN(nn.Module):
         attention = attention.unsqueeze(3) # (batch_size, sample_size, num_heads, 1)
         context = torch.sum(attention * value, dim=1)
         context = context.view(batch_size, -1)
-        final_out = self.final_layer_offline(context)
+        final_out = self.final_layer(context)
     
         if mask is None:
             return final_out

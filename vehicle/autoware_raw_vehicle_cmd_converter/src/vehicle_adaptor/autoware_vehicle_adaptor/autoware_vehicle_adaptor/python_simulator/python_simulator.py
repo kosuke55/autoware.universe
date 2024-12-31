@@ -343,8 +343,6 @@ class PythonSimulator:
         offline_feature_dir="vehicle_model",
         states_ref_mode="predict_by_polynomial_regression",
         course_csv_data="slalom_course_data.csv", # "slalom_course_data.csv" or "mpc_figure_eight_course_data.csv"
-        offline_data_dir=None,
-        projection_matrix_dir=None,
         max_lateral_accel = None):
         #if control_type != ControlType.mpc:
         #    print(f"\n[run {control_type.value}]\n")
@@ -382,12 +380,6 @@ class PythonSimulator:
             if use_offline_features:
                 self.set_offline_features(offline_feature_dir)
             self.vehicle_adaptor.send_initialized_flag()
-            self.vehicle_adaptor.unset_offline_data_set_for_compensation()
-            self.vehicle_adaptor.unset_projection_matrix_for_compensation()
-            if offline_data_dir is not None:
-                self.set_offline_data_for_linear_compensation(offline_data_dir)
-            if projection_matrix_dir is not None:
-                self.set_projection_matrix_for_linear_compensation(projection_matrix_dir)
         prev_u_actual_input = np.zeros(2)
         prev_u_actual_input[1] = self.initial_steer_input
         break_flag = False
@@ -675,14 +667,6 @@ class PythonSimulator:
                 vehicle_model = torch.load(path)
                 load_dir = path.replace(".pth", "")
                 self.set_NN_params_from_model(vehicle_model, load_dir)
-    
-    def set_offline_data_for_linear_compensation(self, csv_dir):
-        XXT = np.loadtxt(csv_dir + "/XXT.csv", delimiter=",")
-        YXT = np.loadtxt(csv_dir + "/YXT.csv", delimiter=",")
-        self.vehicle_adaptor.set_offline_data_set_for_compensation(XXT, YXT)
-    def set_projection_matrix_for_linear_compensation(self, csv_dir):
-        P = np.loadtxt(csv_dir + "/Projection.csv", delimiter=",")
-        self.vehicle_adaptor.set_projection_matrix_for_compensation(P)
     def set_NN_params_from_model(self, vehicle_model,load_dir):
         
         state_component_predicted_dir = load_dir + "/state_component_predicted.csv"

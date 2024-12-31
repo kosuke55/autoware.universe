@@ -2,6 +2,7 @@
 ///////////////// NominalDynamics ///////////////////////
 #include "nominal_dynamics.h"
 
+using namespace nominal_dynamics_constants;
 
   NominalDynamics::NominalDynamics() {}
   NominalDynamics::~NominalDynamics() {}

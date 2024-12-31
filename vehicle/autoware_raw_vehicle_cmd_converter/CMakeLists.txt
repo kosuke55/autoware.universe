@@ -24,7 +24,6 @@ ament_auto_add_library(vehicle_adaptor SHARED
   src/vehicle_adaptor/autoware_vehicle_adaptor/autoware_vehicle_adaptor/src/inputs_prediction.cpp
   src/vehicle_adaptor/autoware_vehicle_adaptor/autoware_vehicle_adaptor/src/nominal_dynamics.cpp
   src/vehicle_adaptor/autoware_vehicle_adaptor/autoware_vehicle_adaptor/src/transform_vehicle_adaptor_model.cpp
-  src/vehicle_adaptor/autoware_vehicle_adaptor/autoware_vehicle_adaptor/src/linear_regression_compensator.cpp
   src/vehicle_adaptor/autoware_vehicle_adaptor/autoware_vehicle_adaptor/src/inputs_ref_smoother.cpp
   src/vehicle_adaptor/autoware_vehicle_adaptor/autoware_vehicle_adaptor/src/vehicle_adaptor_utils.cpp
 )

@@ -11,9 +11,9 @@ SKIP_DATA_COLLECTION = False
 SKIP_TRAINING = False
 #states_ref_mode = "predict_by_polynomial_regression"
 #states_ref_mode = "controller_steer_prediction"
-#states_ref_mode = "controller_d_steer_schedule"
+states_ref_mode = "controller_d_steer_schedule"
 #states_ref_mode = "controller_prediction"
-states_ref_mode = "controller_d_inputs_schedule"
+#states_ref_mode = "controller_d_inputs_schedule"
 simulator = python_simulator.PythonSimulator()
 dir_additional_name = ""
 if not os.path.isdir("log_data"):
@@ -31,7 +31,7 @@ if len(sys.argv) > 1:
         save_dir = "log_data/test_python_nominal_sim"
         if len(sys.argv) > 2:
             save_dir += "_" + sys.argv[2]
-        simulator.drive_sim(max_control_time = 300.0,save_dir=save_dir)#,course_csv_data="mpc_figure_eight_course_data.csv")
+        simulator.drive_sim(max_control_time = 300.0,save_dir=save_dir)
         #simulator.drive_sim(max_control_time = 300.0,save_dir=save_dir,course_csv_data="mpc_figure_eight_course_data.csv")
         #simulator.drive_sim(max_control_time = 300.0,save_dir=save_dir,course_csv_data="mpc_straight_line_course_data.csv")
     
@@ -58,7 +58,6 @@ if len(sys.argv) == 1 or (len(sys.argv) > 1 and sys.argv[1] != "nominal_test"):
         model_trainer = train_error_prediction_NN.train_error_prediction_NN()
         model_trainer.add_data_from_csv(train_dir, add_mode="as_train")
         model_trainer.add_data_from_csv(val_dir, add_mode="as_val")
-        model_trainer.calc_dataloader_weights()
         model_trainer.get_trained_ensemble_models(batch_sizes=[100],ensemble_size=5)
         model_trainer.save_ensemble_models(paths=paths)
     save_dir = "log_data/test_python_vehicle_adaptor_sim" + dir_additional_name

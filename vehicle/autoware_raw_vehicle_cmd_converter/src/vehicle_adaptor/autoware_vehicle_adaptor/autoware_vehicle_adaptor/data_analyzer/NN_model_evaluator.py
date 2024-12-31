@@ -28,7 +28,7 @@ class NNModelEvaluator(train_error_prediction_NN_with_offline_data.train_error_p
             print("No model")
             return
         if self.model_for_initial_hidden is None:
-            X_test_np, Y_test_np, _ = training_utils.TrainErrorPredictionNNFunctions.get_sequence_data(self.X_test_list, self.Y_test_list, self.Z_test_list, self.division_indices_test)
+            X_test_np, Y_test_np = training_utils.TrainErrorPredictionNNFunctions.get_sequence_data(self.X_test_list, self.Y_test_list, self.division_indices_test)
             X_test = torch.tensor(X_test_np, dtype=torch.float32)
             Y_test = torch.tensor(Y_test_np, dtype=torch.float32)
             if self.models is None:

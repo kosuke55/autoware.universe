@@ -67,16 +67,12 @@ class add_data_from_csv:
     def __init__(self):
         self.X_train_list = []
         self.Y_train_list = []
-        self.Z_train_list = []
         self.X_val_list = []
         self.Y_val_list = []
-        self.Z_val_list = []
         self.X_test_list = []
         self.Y_test_list = []
-        self.Z_test_list = []
         self.X_replay_list = []
         self.Y_replay_list = []
-        self.Z_replay_list = []
         self.division_indices_train = []
         self.division_indices_val = []
         self.division_indices_test = []
@@ -96,16 +92,12 @@ class add_data_from_csv:
     def clear_data(self):
         self.X_train_list = []
         self.Y_train_list = []
-        self.Z_train_list = []
         self.X_val_list = []
         self.Y_val_list = []
-        self.Z_val_list = []
         self.X_test_list = []
         self.Y_test_list = []
-        self.Z_test_list = []
         self.X_replay_list = []
         self.Y_replay_list = []
-        self.Z_replay_list = []
         self.division_indices_train = []
         self.division_indices_val = []
         self.division_indices_test = []
@@ -275,7 +267,6 @@ class add_data_from_csv:
         Inputs = np.array(Inputs)
         X_list = []
         Y_list = []
-        Z_list = []
         TimeStamp_list = []
 
         for i in range(max(acc_queue_size, steer_queue_size), States.shape[0] - predict_step - 1):
@@ -340,10 +331,6 @@ class add_data_from_csv:
                 predict_error[yaw_index] = -predict_error[yaw_index]
                 predict_error[steer_index] = -predict_error[steer_index]
             Y_list.append(predict_error / predict_dt)
-            if not reverse_steer:
-                Z_list.append(state)
-            else:
-                Z_list.append(reverse_state)
 
         Y_smooth = np.array(Y_list)
         Y_smooth[:, x_index] = data_smoothing(Y_smooth[:, x_index], x_error_sigma_for_training)
@@ -365,12 +352,10 @@ class add_data_from_csv:
                     self.X_train_list.append(X_list[i])
                     self.Y_train_list.append(Y_smooth[i])
                     #self.Y_train_list.append(Y_list[i])
-                    self.Z_train_list.append(Z_list[i])
                 else:
                     self.X_val_list.append(X_list[i])
                     self.Y_val_list.append(Y_smooth[i])
                     #self.Y_val_list.append(Y_list[i])
-                    self.Z_val_list.append(Z_list[i])
 
             self.division_indices_train.append(len(self.X_train_list))
             self.division_indices_val.append(len(self.X_val_list))
@@ -380,7 +365,6 @@ class add_data_from_csv:
                 self.X_train_list.append(X_list[i])
                 self.Y_train_list.append(Y_smooth[i])
                 #self.Y_train_list.append(Y_list[i])
-                self.Z_train_list.append(Z_list[i])
 
             self.division_indices_train.append(len(self.X_train_list))
         elif add_mode == "as_val":
@@ -388,7 +372,6 @@ class add_data_from_csv:
                 self.X_val_list.append(X_list[i])
                 self.Y_val_list.append(Y_smooth[i])
                 #self.Y_val_list.append(Y_list[i])
-                self.Z_val_list.append(Z_list[i])
 
             self.division_indices_val.append(len(self.X_val_list))
         elif add_mode == "as_test":
@@ -396,7 +379,6 @@ class add_data_from_csv:
                 self.X_test_list.append(X_list[i])
                 self.Y_test_list.append(Y_smooth[i])
                 #self.Y_test_list.append(Y_list[i])
-                self.Z_test_list.append(Z_list[i])
 
             self.division_indices_test.append(len(self.X_test_list))
         elif add_mode == "as_replay":
@@ -404,7 +386,6 @@ class add_data_from_csv:
                 self.X_replay_list.append(X_list[i])
                 self.Y_replay_list.append(Y_smooth[i])
                 #self.Y_replay_list.append(Y_list[i])
-                self.Z_replay_list.append(Z_list[i])
 
             self.division_indices_replay.append(len(self.X_replay_list))
         

@@ -4,6 +4,15 @@
 #include <Eigen/Core>
 #include <Eigen/Dense>
 
+namespace nominal_dynamics_constants {
+  constexpr int x_index_ = 0;
+  constexpr int y_index_ = 1;
+  constexpr int vel_index_ = 2;
+  constexpr int yaw_index_ = 3;
+  constexpr int acc_index_ = 4;
+  constexpr int steer_index_ = 5;
+  constexpr int state_size_ = 6;
+}
 
 class NominalDynamics
 {
@@ -15,14 +24,6 @@ private:
   double steer_time_constant_ = 0.24;
   int acc_queue_size_ = 15;
   int steer_queue_size_ = 15;
-
-  int x_index_ = 0;
-  int y_index_ = 1;
-  int vel_index_ = 2;
-  int yaw_index_ = 3;
-  int acc_index_ = 4;
-  int steer_index_ = 5;
-  int state_size_ = 6;
 
   int acc_input_start_index_ = 6;
   int acc_input_end_index_ = 6 + acc_queue_size_ - 1;

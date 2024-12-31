@@ -12,246 +12,15 @@
 #include <cmath>
 #include "vehicle_adaptor_compensator.h"
 
-#include <cstdlib> // for rand() and srand()
-#include <ctime>   // for time()
-
 namespace py = pybind11;
 using namespace Proxima;
+using namespace vehicle_adaptor_constants;
 
-
-Eigen::VectorXd states_vehicle_to_world(Eigen::VectorXd states_vehicle, double yaw)
-{
-  Eigen::VectorXd states_world = states_vehicle;
-  states_world[0] = states_vehicle[0] * std::cos(yaw) - states_vehicle[1] * std::sin(yaw);
-  states_world[1] = states_vehicle[0] * std::sin(yaw) + states_vehicle[1] * std::cos(yaw);
-  return states_world;
-}
-Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw)
-{
-  Eigen::VectorXd states_vehicle = states_world;
-  states_vehicle[0] = states_world[0] * std::cos(yaw) + states_world[1] * std::sin(yaw);
-  states_vehicle[1] = -states_world[0] * std::sin(yaw) + states_world[1] * std::cos(yaw);
-  return states_vehicle;
-}
-
-///////////////// Polynomial Regression ///////////////////////
-
-  PolynomialRegressionPredictor::PolynomialRegressionPredictor() {}
-  PolynomialRegressionPredictor::~PolynomialRegressionPredictor() {}
-  void PolynomialRegressionPredictor::set_params(int degree, int num_samples, std::vector<double> lambda)
-  {
-    degree_ = degree;
-    num_samples_ = num_samples;
-    lambda_ = lambda;
-  }
-  void PolynomialRegressionPredictor::set_oldest_sample_weight(double oldest_sample_weight) { oldest_sample_weight_ = oldest_sample_weight; }
-  void PolynomialRegressionPredictor::set_ignore_intercept() { ignore_intercept_ = true; }
-  void PolynomialRegressionPredictor::calc_coef_matrix()
-  {
-    if (ignore_intercept_) {
-      Eigen::VectorXd time_vector = Eigen::VectorXd::LinSpaced(num_samples_ -1 , - (num_samples_ - 1), - 1.0);
-      Eigen::MatrixXd time_matrix = Eigen::MatrixXd::Zero(num_samples_ - 1 , degree_);
-
-      time_matrix.col(0) = time_vector;
-
-      for (int i = 1; i < degree_; i++) {
-        time_matrix.col(i) = time_matrix.col(i - 1).array() * time_vector.array();
-      }
-      Eigen::VectorXd weight_vector = Eigen::VectorXd::LinSpaced(num_samples_ - 1, oldest_sample_weight_, 1.0);
-      Eigen::MatrixXd weight_matrix = weight_vector.asDiagonal();
-
-      Eigen::MatrixXd regularization_matrix = Eigen::MatrixXd::Identity(degree_, degree_);
-      for (int i = 0; i < degree_; i++) {
-        regularization_matrix(i, i) = lambda_[i];
-      }
-      coef_matrix_ = (time_matrix.transpose() * weight_matrix * time_matrix +
-                      regularization_matrix).inverse() *
-                    time_matrix.transpose() * weight_matrix;
-    }
-    else{
-      Eigen::VectorXd time_vector = Eigen::VectorXd::LinSpaced(num_samples_, - (num_samples_ - 1),  0.0);
-      Eigen::MatrixXd time_matrix = Eigen::MatrixXd::Ones(num_samples_, degree_ + 1);
-      for (int i = 1; i < degree_; i++) {
-        time_matrix.col(i) = time_matrix.col(i - 1).array() * time_vector.array();
-      }
-      Eigen::VectorXd weight_vector = Eigen::VectorXd::LinSpaced(num_samples_, oldest_sample_weight_, 1.0);
-      Eigen::MatrixXd weight_matrix = weight_vector.asDiagonal();
-
-      Eigen::MatrixXd regularization_matrix = Eigen::MatrixXd::Identity(degree_ + 1, degree_ + 1);
-      regularization_matrix(0, 0) = 0.0;
-      for (int i = 0; i < degree_; i++) {
-        regularization_matrix(i+1, i+1) = lambda_[i];
-      }
-      coef_matrix_ = (time_matrix.transpose() * weight_matrix * time_matrix + regularization_matrix).inverse() *
-                    time_matrix.transpose() * weight_matrix;
-    }
-  }
-  void PolynomialRegressionPredictor::calc_prediction_matrix(int horizon_len)
-  {
-    Eigen::VectorXd time_vector = Eigen::VectorXd::LinSpaced(horizon_len, 1.0, horizon_len);
-    if (ignore_intercept_){
-      Eigen::MatrixXd prediction_time_matrix = Eigen::MatrixXd::Zero(horizon_len, degree_);
-      prediction_time_matrix.col(0) = time_vector;
-      for (int i = 1; i < degree_; i++) {
-        prediction_time_matrix.col(i) = prediction_time_matrix.col(i - 1).array() * time_vector.array();
-      }
-      prediction_matrix_ = prediction_time_matrix * coef_matrix_;
-    }
-    else{
-      Eigen::MatrixXd prediction_time_matrix = Eigen::MatrixXd::Ones(horizon_len, degree_ + 1);
-      for (int i = 1; i < degree_ + 1; i++) {
-        prediction_time_matrix.col(i) = prediction_time_matrix.col(i - 1).array() * time_vector.array();
-      }
-      prediction_matrix_ = prediction_time_matrix * coef_matrix_;
-    }
-  }
-  Eigen::VectorXd PolynomialRegressionPredictor::predict(Eigen::VectorXd vec)
-  {
-    if (ignore_intercept_) {
-      Eigen::VectorXd vec_ = Eigen::VectorXd(vec.size() - 1);
-      vec_ = vec.head(vec.size() - 1);
-      vec_ = vec_.array() - vec[vec.size() - 1];
-      Eigen::VectorXd prediction = prediction_matrix_ * vec_;
-      prediction = prediction.array() + vec[vec.size() - 1];
-      return prediction;
-    }
-    else {
-      Eigen::VectorXd vec_ = Eigen::VectorXd(vec.size());
-      vec_ = vec.array() - vec[vec.size() - 1];
-      Eigen::VectorXd prediction = prediction_matrix_ * vec;
-      prediction = prediction.array() + vec[vec.size() - 1];
-      return prediction;
-    }
-  }
-
-///////////////// SgFilter ///////////////////////
-
-  SgFilter::SgFilter() {}
-  SgFilter::~SgFilter() {}
-  void SgFilter::set_params(int degree, int window_size)
-  {
-    degree_ = degree;
-    window_size_ = window_size;
-  }
-  void SgFilter::calc_sg_filter_weight()
-  {
-    Eigen::VectorXd e_0 = Eigen::VectorXd::Zero(degree_+1);
-    e_0[0] = 1.0;
-    sg_vector_left_edge_ = std::vector<Eigen::VectorXd>(window_size_);
-    sg_vector_right_edge_ = std::vector<Eigen::VectorXd>(window_size_);
-    for (int i = 0; i<window_size_; i++){
-      Eigen::VectorXd time_vector = Eigen::VectorXd::LinSpaced(window_size_ + i + 1, - i, window_size_);
-      Eigen::MatrixXd time_matrix = Eigen::MatrixXd::Ones(window_size_ + i + 1, degree_ + 1);
-      for (int j = 1; j < degree_+1; j++) {
-        time_matrix.col(j) = time_matrix.col(j - 1).array() * time_vector.array();
-      }
-      sg_vector_left_edge_[i] = time_matrix * (time_matrix.transpose() * time_matrix).inverse() * e_0;
-      time_vector = Eigen::VectorXd::LinSpaced(window_size_ + i + 1, - window_size_, i);
-      time_matrix = Eigen::MatrixXd::Ones(window_size_ + i + 1, degree_ + 1);
-      for (int j = 1; j < degree_+1; j++) {
-        time_matrix.col(j) = time_matrix.col(j - 1).array() * time_vector.array();
-      }
-      sg_vector_right_edge_[i] = time_matrix * (time_matrix.transpose() * time_matrix).inverse() * e_0;
-    }
-    Eigen::VectorXd time_vector = Eigen::VectorXd::LinSpaced(2*window_size_ + 1, - window_size_, window_size_);
-    Eigen::MatrixXd time_matrix = Eigen::MatrixXd::Ones(2*window_size_ + 1, degree_ + 1);
-    for (int j = 1; j < degree_+1; j++) {
-      time_matrix.col(j) = time_matrix.col(j - 1).array() * time_vector.array();
-    }
-    sg_vector_center_ = time_matrix * (time_matrix.transpose() * time_matrix).inverse() * e_0;
-  }
-  // Overloaded function for std::vector<Eigen::MatrixXd>
-  std::vector<Eigen::MatrixXd> SgFilter::sg_filter(const std::vector<Eigen::MatrixXd>& raw_data) {
-      return sg_filter_impl(raw_data);
-  }
-
-  // Overloaded function for std::vector<Eigen::VectorXd>
-  std::vector<Eigen::VectorXd> SgFilter::sg_filter(const std::vector<Eigen::VectorXd>& raw_data) {
-      return sg_filter_impl(raw_data);
-  }
-
-///////////////// FilterDiffNN ///////////////////////
-  FilterDiffNN::FilterDiffNN() {}
-  FilterDiffNN::~FilterDiffNN() {}
-  void FilterDiffNN::set_sg_filter_params(int degree, int window_size, int state_size, int h_dim, int acc_queue_size, int steer_queue_size, int predict_step, double control_dt)
-  {
-    state_size_ = state_size;
-    h_dim_ = h_dim;
-    acc_queue_size_ = acc_queue_size;
-    steer_queue_size_ = steer_queue_size;
-    predict_step_ = predict_step;
-    control_dt_ = control_dt;
-    sg_filter_.set_params(degree, window_size);
-    sg_filter_.calc_sg_filter_weight();
-  }
-  void FilterDiffNN::fit_transform_for_NN_diff(
-    std::vector<Eigen::MatrixXd> A, std::vector<Eigen::MatrixXd> B, std::vector<Eigen::MatrixXd> C,std::vector<Eigen::MatrixXd> & dF_d_states,
-    std::vector<Eigen::MatrixXd> & dF_d_inputs)
-  {
-    int num_samples = A.size();
-    dF_d_states = std::vector<Eigen::MatrixXd>(num_samples);
-    dF_d_inputs = std::vector<Eigen::MatrixXd>(num_samples);
-    std::vector<Eigen::MatrixXd> dF_d_state_with_input_history;
-    dF_d_state_with_input_history = sg_filter_.sg_filter(C);
-    for (int i = 0; i < num_samples; i++) {
-      Eigen::MatrixXd dF_d_state_temp = Eigen::MatrixXd::Zero(2*h_dim_ + state_size_, 2*h_dim_ + state_size_ + acc_queue_size_ + steer_queue_size_);
-
-      Eigen::MatrixXd dF_d_input_temp = Eigen::MatrixXd::Zero(2*h_dim_ + state_size_, 2);
-      Eigen::MatrixXd dF_d_state_with_input_history_tmp = dF_d_state_with_input_history[i];
-
-
-      dF_d_state_temp.block(2*h_dim_, 2*h_dim_, state_size_, state_size_ + acc_queue_size_ + steer_queue_size_) = A[i];
-
-      dF_d_input_temp.block(2*h_dim_, 0, state_size_, 2) = B[i];
-
-      dF_d_state_temp.leftCols(2*h_dim_ + state_size_ + acc_queue_size_) += dF_d_state_with_input_history_tmp.leftCols(2*h_dim_ + state_size_ + acc_queue_size_);
-
-      dF_d_state_temp.rightCols(steer_queue_size_) += dF_d_state_with_input_history_tmp.middleCols(2*h_dim_ + state_size_ + acc_queue_size_ + predict_step_, steer_queue_size_);
-      for (int j=0; j<predict_step_; j++){
-        dF_d_state_temp.col(2*h_dim_ + state_size_ + acc_queue_size_ -1) += dF_d_state_with_input_history_tmp.col(2*h_dim_ + state_size_ + acc_queue_size_ + j);
-        dF_d_state_temp.col(2*h_dim_ + state_size_ + acc_queue_size_ + steer_queue_size_ -1) += dF_d_state_with_input_history_tmp.col(2*h_dim_ + state_size_ + acc_queue_size_ + predict_step_ + steer_queue_size_ + j);
-        dF_d_input_temp.col(0) += (j+1) * dF_d_state_with_input_history_tmp.col(2*h_dim_ + state_size_ + acc_queue_size_ + j)*control_dt_;
-        dF_d_input_temp.col(1) += (j+1) * dF_d_state_with_input_history_tmp.col(2*h_dim_ + state_size_ + acc_queue_size_ + predict_step_ + steer_queue_size_ + j)*control_dt_;
-      }
-      dF_d_states[i] = dF_d_state_temp;
-      dF_d_inputs[i] = dF_d_input_temp;
-    }
-  }
-///////////////// ButterworthFilter ///////////////////////
-
-  ButterworthFilter::ButterworthFilter() {
-    set_params();
-  }
-  ButterworthFilter::~ButterworthFilter() {}
-  void ButterworthFilter::set_params()
-  {
-    YAML::Node butterworth_coef_node = YAML::LoadFile(get_param_dir_path() + "/butterworth_coef.yaml");
-    order_ = butterworth_coef_node["Butterworth"]["order"].as<int>();
-    a_ = butterworth_coef_node["Butterworth"]["a"].as<std::vector<double>>();
-    b_ = butterworth_coef_node["Butterworth"]["b"].as<std::vector<double>>();
-    initialized_ = false;
-  }
-  Eigen::VectorXd ButterworthFilter::apply(Eigen::VectorXd input_value){
-    if (!initialized_){
-      x_ = std::vector<Eigen::VectorXd>(order_, input_value);
-      y_ = std::vector<Eigen::VectorXd>(order_, input_value);
-      initialized_ = true;
-    }
-    Eigen::VectorXd output_value = b_[0] * input_value;
-    for (int i = 0; i < order_; i++) {
-      output_value += b_[order_ - i] * x_[i] - a_[order_ - i] * y_[i];
-    }
-    x_.erase(x_.begin());
-    x_.push_back(input_value);
-    y_.erase(y_.begin());
-    y_.push_back(output_value);
-    return output_value;
-  }
 ///////////////// TrainedDynamics ///////////////////////
   TrainedDynamics::TrainedDynamics() {
     YAML::Node optimization_param_node = YAML::LoadFile(get_param_dir_path() + "/optimization_param.yaml");
-    minimum_acc_diff_ = optimization_param_node["optimization_parameter"]["minimum_diff"]["minimum_acc_diff"].as<double>();
-    minimum_steer_diff_ = optimization_param_node["optimization_parameter"]["minimum_diff"]["minimum_steer_diff"].as<double>();
+    min_gradient_acc_ = optimization_param_node["optimization_parameter"]["min_gradient"]["min_gradient_acc"].as<double>();
+    min_gradient_steer_ = optimization_param_node["optimization_parameter"]["min_gradient"]["min_gradient_steer"].as<double>();
   }
   TrainedDynamics::~TrainedDynamics() {}
   void TrainedDynamics::set_vehicle_params(
@@ -268,9 +37,9 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     steer_queue_size_ = steer_queue_size;
 
     predict_step_ = predict_step;
-    acc_input_end_index_ = 6 + acc_queue_size_ - 1;
-    steer_input_start_index_ = 6 + acc_queue_size_;
-    steer_input_end_index_ = 6 + acc_queue_size_ + steer_queue_size_ - 1;
+    acc_input_end_index_ = state_size_ + acc_queue_size_ - 1;
+    steer_input_start_index_ = state_size_ + acc_queue_size_;
+    steer_input_end_index_ = state_size_ + acc_queue_size_ + steer_queue_size_ - 1;
     control_dt_ = control_dt;
     predict_dt_ = control_dt_ * predict_step_;
 
@@ -327,7 +96,7 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
   }
   void TrainedDynamics::set_sg_filter_params(int degree, int window_size)
   {
-    filter_diff_NN_.set_sg_filter_params(degree, window_size, state_dim_,h_dim_,
+    filter_diff_NN_.set_sg_filter_params(degree, window_size, state_size_,h_dim_,
                    acc_queue_size_, steer_queue_size_, predict_step_, control_dt_);
   }
   Eigen::VectorXd TrainedDynamics::nominal_prediction(
@@ -351,54 +120,6 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     h_lstm = h_lstm_next;
     c_lstm = c_lstm_next;
   }
-  void TrainedDynamics::initialize_compensation(int acc_queue_size, int steer_queue_size, int predict_step, int h_dim_full)
-  {
-    linear_regression_compensation_.initialize(acc_queue_size, steer_queue_size, predict_step, h_dim_full);
-  }
-  void TrainedDynamics::update_state_queue_for_compensation(Eigen::VectorXd states){
-    linear_regression_compensation_.update_state_queue(states);
-  }
-  void TrainedDynamics::update_one_step_for_compensation(Eigen::VectorXd acc_input_history_concat, Eigen::VectorXd steer_input_history_concat, Eigen::VectorXd h_lstm, Eigen::VectorXd c_lstm, Eigen::VectorXd error_vector){
-    linear_regression_compensation_.update_one_step(acc_input_history_concat, steer_input_history_concat, h_lstm, c_lstm, error_vector);
-  }
-  void TrainedDynamics::update_regression_matrix_for_compensation(){
-    linear_regression_compensation_.update_regression_matrix();
-  }
-  void TrainedDynamics::save_state_queue_for_compensation(){
-    linear_regression_compensation_.save_state_queue();
-  }
-  void TrainedDynamics::load_state_queue_for_compensation(){
-    linear_regression_compensation_.load_state_queue();
-  }
-  void TrainedDynamics::initialize_for_candidates_compensation(int num_candidates){
-    linear_regression_compensation_.initialize_for_candidates(num_candidates);
-  }
-  Eigen::VectorXd TrainedDynamics::prediction_for_compensation(
-    Eigen::VectorXd states, Eigen::VectorXd acc_input_history_concat, Eigen::VectorXd steer_input_history_concat, Eigen::VectorXd h_lstm, Eigen::VectorXd c_lstm
-  ){
-    return linear_regression_compensation_.predict(states, acc_input_history_concat, steer_input_history_concat, h_lstm, c_lstm);
-  }
-  Eigen::MatrixXd TrainedDynamics::Prediction_for_compensation(
-    Eigen::MatrixXd States, Eigen::MatrixXd Acc_input_history_concat, Eigen::MatrixXd Steer_input_history_concat, Eigen::MatrixXd H_lstm, Eigen::MatrixXd C_lstm
-  ){
-    return linear_regression_compensation_.Predict(States, Acc_input_history_concat, Steer_input_history_concat, H_lstm, C_lstm);
-  }
-  void TrainedDynamics::set_offline_data_set_for_compensation(
-    Eigen::MatrixXd XXT, Eigen::MatrixXd YXT
-  ){
-    linear_regression_compensation_.set_offline_data_set(XXT, YXT);
-  }
-  void TrainedDynamics::unset_offline_data_set_for_compensation(){
-    linear_regression_compensation_.unset_offline_data_set();
-  }
-  void TrainedDynamics::set_projection_matrix_for_compensation(Eigen::MatrixXd P)
-  {
-    linear_regression_compensation_.set_projection_matrix(P);
-  }
-  void TrainedDynamics::unset_projection_matrix_for_compensation()
-  {
-    linear_regression_compensation_.unset_projection_matrix();
-  }
   Eigen::VectorXd TrainedDynamics::F_with_model_for_calc_controller_prediction_error(
     const Eigen::VectorXd & states, const Eigen::VectorXd & acc_input_history_concat,
     const Eigen::VectorXd & steer_input_history_concat, 
@@ -417,45 +138,6 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     if (horizon == 0) {
       previous_error = error_decay_rate_* previous_error +
                        (1 - error_decay_rate_) * NN_output;
-    } else {
-      previous_error =
-        double_power(error_decay_rate_, predict_step_) * previous_error +
-        (1.0 - double_power(error_decay_rate_, predict_step_)) * NN_output;
-    }
-    double yaw = states[yaw_index_];
-    for (int i = 0; i< int(state_component_predicted_index_.size()); i++) {
-      if (state_component_predicted_index_[i] == x_index_) {
-        states_next[x_index_] += previous_error[i] * predict_dt_ * std::cos(yaw) - previous_error[i+1] * predict_dt_ * std::sin(yaw);
-      } else if (state_component_predicted_index_[i] == y_index_) {
-        states_next[y_index_] += previous_error[i-1] * predict_dt_ * std::sin(yaw) + previous_error[i] * predict_dt_ * std::cos(yaw);
-      } else {
-        states_next[state_component_predicted_index_[i]] += previous_error[i] * predict_dt_;
-      }
-    }
-    Eigen::VectorXd compensation = prediction_for_compensation(states, acc_input_history_concat, steer_input_history_concat, h_lstm, c_lstm);
-    states_next += compensation * predict_dt_;
-    h_lstm = h_lstm_next;
-    c_lstm = c_lstm_next;
-
-    return states_next;
-  }
-  Eigen::VectorXd TrainedDynamics::F_with_model_without_compensation(
-    const Eigen::VectorXd & states, const Eigen::VectorXd & acc_input_history_concat,
-    const Eigen::VectorXd & steer_input_history_concat, 
-    Eigen::VectorXd & h_lstm, Eigen::VectorXd & c_lstm, Eigen::VectorXd & previous_error, const int horizon)
-  {
-    Eigen::VectorXd states_next = nominal_dynamics_.F_with_input_history(
-      states, acc_input_history_concat, steer_input_history_concat);
-
-    Eigen::VectorXd NN_input = Eigen::VectorXd::Zero(3 + acc_queue_size_ + steer_queue_size_+2*predict_step_ );
-    NN_input << states[vel_index_], states[acc_index_], states[steer_index_],
-      acc_input_history_concat, steer_input_history_concat;
-    
-    Eigen::VectorXd h_lstm_next, c_lstm_next, NN_output;
-    transform_model_to_eigen_.error_prediction(
-      NN_input, h_lstm, c_lstm, h_lstm_next, c_lstm_next, NN_output);
-    if (horizon == 0) {
-      previous_error = NN_output;
     } else {
       previous_error =
         double_power(error_decay_rate_, predict_step_) * previous_error +
@@ -512,11 +194,8 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
         states_next[state_component_predicted_index_[i]] += previous_error[i] * predict_dt_;
       }
     }
-    Eigen::VectorXd compensation = prediction_for_compensation(states, acc_input_history_concat, steer_input_history_concat, h_lstm, c_lstm);
-    states_next += compensation * predict_dt_;
     h_lstm = h_lstm_next;
     c_lstm = c_lstm_next;
-
     return states_next;
   }
   Eigen::VectorXd TrainedDynamics::F_with_model(
@@ -588,20 +267,20 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     double steer_diff = d_steer_d_steer_input.sum();
     double acc_diff = d_acc_d_acc_input.sum();
 
-    if (steer_diff < minimum_steer_diff_) {
+    if (steer_diff < min_gradient_steer_) {
       int max_d_steer_index;
       d_steer_d_steer_input.array().maxCoeff(&max_d_steer_index);
       max_d_steer_index = std::min(max_d_steer_index, steer_queue_size_);
       for (int i = 0; i< predict_step_; i++) {
-        C(2 * h_dim_ + steer_index_, 2 * h_dim_ + steer_input_start_index_ + predict_step_ + max_d_steer_index + i) += (minimum_steer_diff_ - steer_diff)/predict_step_;
+        C(2 * h_dim_ + steer_index_, 2 * h_dim_ + steer_input_start_index_ + predict_step_ + max_d_steer_index + i) += (min_gradient_steer_ - steer_diff)/predict_step_;
       }
     }
-    if (acc_diff < minimum_acc_diff_) {
+    if (acc_diff < min_gradient_acc_) {
       int max_d_acc_index;
       d_acc_d_acc_input.array().maxCoeff(&max_d_acc_index);
       max_d_acc_index = std::min(max_d_acc_index, acc_queue_size_);
       for (int i = 0; i< predict_step_; i++) {
-        C(2 * h_dim_ + acc_index_, 2 * h_dim_ + states.size() + acc_queue_size_ + predict_step_ + max_d_acc_index + i) += (minimum_acc_diff_ - acc_diff)/predict_step_;
+        C(2 * h_dim_ + acc_index_, 2 * h_dim_ + states.size() + acc_queue_size_ + predict_step_ + max_d_acc_index + i) += (min_gradient_acc_ - acc_diff)/predict_step_;
       }
     }
     if (horizon == 0) {
@@ -612,7 +291,6 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
         double_power(error_decay_rate_, predict_step_) * previous_error +
         (1 - double_power(error_decay_rate_, predict_step_)) * NN_output;
     }
-    Eigen::VectorXd compensation = prediction_for_compensation(states, acc_input_history_concat, steer_input_history_concat, h_lstm, c_lstm);
     h_lstm = h_lstm_next;
     c_lstm = c_lstm_next;
     for (int i = 0; i < int(state_component_predicted_index_.size()); i++) {
@@ -626,7 +304,6 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
         states_next[state_component_predicted_index_[i]] += previous_error[i] * predict_dt_;
       }
     }
-    states_next += compensation * predict_dt_;
     return states_next;
   }
   Eigen::VectorXd TrainedDynamics::F_with_model_diff(
@@ -652,7 +329,6 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     Eigen::MatrixXd States_next = nominal_dynamics_.F_with_input_history_for_candidates(
       States, Acc_input_history, Steer_input_history, Acc_input_history_concat,
       Steer_input_history_concat, D_inputs);
-    Eigen::MatrixXd Compensation = Prediction_for_compensation(States, Acc_input_history_concat, Steer_input_history_concat, H_lstm, C_lstm);
     Eigen::MatrixXd NN_input =
       Eigen::MatrixXd::Zero(3 + acc_queue_size_ + steer_queue_size_ + 2 * predict_step_, States.cols());
     NN_input.row(0)=States.row(vel_index_);
@@ -683,17 +359,14 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     for (int i = 0; i< int(state_component_predicted_index_.size()); i++) {
       if (state_component_predicted_index_[i] == x_index_) {
         States_next.row(x_index_) += (Previous_error.row(i).array() * predict_dt_ * yaw.array().cos() - Previous_error.row(i+1).array() * predict_dt_ * yaw.array().sin()).matrix() ;
-        //continue;
       }
       else if (state_component_predicted_index_[i] == y_index_) {
         States_next.row(y_index_) += (Previous_error.row(i-1).array() * predict_dt_ * yaw.array().sin() + Previous_error.row(i).array() * predict_dt_ * yaw.array().cos()).matrix() ;
-        //continue;
       }
       else {
         States_next.row(state_component_predicted_index_[i]) += Previous_error.row(i) * predict_dt_;
       }
     }
-    States_next += Compensation * predict_dt_;
     return States_next;
   }
   Eigen::MatrixXd TrainedDynamics::F_with_model_for_candidates(
@@ -708,8 +381,8 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
       horizon);
     return States_next;
   }
-  void TrainedDynamics::calc_forward_trajectory_with_diff(Eigen::VectorXd states, Eigen::VectorXd acc_input_history,
-                                         Eigen::VectorXd steer_input_history, std::vector<Eigen::VectorXd> d_inputs_schedule,
+  void TrainedDynamics::calc_forward_trajectory_with_diff(const Eigen::VectorXd & states, const Eigen::VectorXd & acc_input_history,
+                                         const Eigen::VectorXd & steer_input_history, const std::vector<Eigen::VectorXd> & d_inputs_schedule,
                                          const Eigen::VectorXd & h_lstm, const Eigen::VectorXd & c_lstm, 
                                          const Eigen::VectorXd & previous_error, std::vector<Eigen::VectorXd> & states_prediction,
                                          std::vector<Eigen::MatrixXd> & dF_d_states, std::vector<Eigen::MatrixXd> & dF_d_inputs,
@@ -729,7 +402,6 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     steer_input_history_tmp = steer_input_history;
     h_lstm_tmp = h_lstm;
     c_lstm_tmp = c_lstm;
-    load_state_queue_for_compensation();
     for (int i = 0; i < horizon_len; i++) {
       Eigen::Vector2d d_inputs = d_inputs_schedule[i];
       Eigen::MatrixXd A, B, C;
@@ -882,6 +554,10 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
       wheel_base, acc_time_delay, steer_time_delay, acc_time_constant, steer_time_constant,
       acc_queue_size, steer_queue_size, control_dt, predict_step);
   }
+  void AdaptorILQR::set_horizon_len(int horizon_len)
+  {
+    horizon_len_ = horizon_len;
+  }
   void AdaptorILQR::set_NN_params(
     const Eigen::MatrixXd & weight_acc_encoder_layer_1, const Eigen::MatrixXd & weight_steer_encoder_layer_1,
     const Eigen::MatrixXd & weight_acc_encoder_layer_2, const Eigen::MatrixXd & weight_steer_encoder_layer_2,
@@ -925,9 +601,8 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
   {
     trained_dynamics_.clear_NN_params();
   }
-  void AdaptorILQR::set_sg_filter_params(int degree, int horizon_len,int window_size)
+  void AdaptorILQR::set_sg_filter_params(int degree, int window_size)
   {
-    horizon_len_ = horizon_len;
     trained_dynamics_.set_sg_filter_params(degree, window_size);
   }
   Eigen::VectorXd AdaptorILQR::nominal_prediction(
@@ -944,60 +619,13 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     trained_dynamics_.update_lstm_states(
       states, acc_input_history_concat, steer_input_history_concat, h_lstm, c_lstm, previous_error);
   }
-  Eigen::VectorXd AdaptorILQR::F_with_model_without_compensation(
-    const Eigen::VectorXd & states, Eigen::VectorXd & acc_input_history_concat,
-    Eigen::VectorXd & steer_input_history_concat, 
-    Eigen::VectorXd & h_lstm, Eigen::VectorXd & c_lstm, Eigen::VectorXd & previous_error, int horizon)
-  {
-    return trained_dynamics_.F_with_model_without_compensation(
-      states, acc_input_history_concat, steer_input_history_concat, h_lstm, c_lstm, previous_error, horizon);
-  }
-  void AdaptorILQR::initialize_compensation(int acc_queue_size, int steer_queue_size, int predict_step, int h_dim_full){
-    trained_dynamics_.initialize_compensation(acc_queue_size, steer_queue_size, predict_step, h_dim_full);
-  }
-  void AdaptorILQR::update_state_queue_for_compensation(Eigen::VectorXd states){
-    trained_dynamics_.update_state_queue_for_compensation(states);
-  }
-  void AdaptorILQR::update_one_step_for_compensation(Eigen::VectorXd states, Eigen::VectorXd acc_input_history_concat, Eigen::VectorXd steer_input_history_concat, Eigen::VectorXd & h_lstm, Eigen::VectorXd & c_lstm){
-    trained_dynamics_.update_one_step_for_compensation(states, acc_input_history_concat, steer_input_history_concat, h_lstm, c_lstm);
-  }
-  void AdaptorILQR::update_regression_matrix_for_compensation(){
-    trained_dynamics_.update_regression_matrix_for_compensation();
-  }
-  void AdaptorILQR::save_state_queue_for_compensation(){
-    trained_dynamics_.save_state_queue_for_compensation();
-  }
-  void AdaptorILQR::load_state_queue_for_compensation(){
-    trained_dynamics_.load_state_queue_for_compensation();
-  }
-  Eigen::VectorXd AdaptorILQR::prediction_for_compensation(
-    Eigen::VectorXd states, Eigen::VectorXd acc_input_history_concat, Eigen::VectorXd steer_input_history_concat, Eigen::VectorXd h_lstm, Eigen::VectorXd c_lstm
-  ){
-    return trained_dynamics_.prediction_for_compensation(states, acc_input_history_concat, steer_input_history_concat, h_lstm, c_lstm);
-  }
-  void AdaptorILQR::set_offline_data_set_for_compensation(
-    Eigen::MatrixXd XXT, Eigen::MatrixXd YXT
-  ){
-    trained_dynamics_.set_offline_data_set_for_compensation(XXT, YXT);
-  }
-  void AdaptorILQR::unset_offline_data_set_for_compensation(){
-    trained_dynamics_.unset_offline_data_set_for_compensation();
-  }
-  void AdaptorILQR::set_projection_matrix_for_compensation(
-    Eigen::MatrixXd P
-  ){
-    trained_dynamics_.set_projection_matrix_for_compensation(P);
-  }
-  void AdaptorILQR::unset_projection_matrix_for_compensation(){
-    trained_dynamics_.unset_projection_matrix_for_compensation();
-  }
   void AdaptorILQR::calc_forward_trajectory_with_cost(
-    Eigen::VectorXd states, Eigen::VectorXd acc_input_history, Eigen::VectorXd steer_input_history,
-    std::vector<Eigen::MatrixXd> D_inputs_schedule, const Eigen::VectorXd & h_lstm,
+    const Eigen::VectorXd & states, const Eigen::VectorXd & acc_input_history, const Eigen::VectorXd & steer_input_history,
+    const std::vector<Eigen::MatrixXd> & D_inputs_schedule, const Eigen::VectorXd & h_lstm,
     const Eigen::VectorXd & c_lstm,
     const Eigen::VectorXd & previous_error, std::vector<Eigen::MatrixXd> & states_prediction,
     const std::vector<Eigen::VectorXd> & states_ref, const std::vector<Eigen::VectorXd> & d_input_ref, 
-    std::vector<Eigen::Vector2d> inputs_ref,
+    const std::vector<Eigen::Vector2d> & inputs_ref,
     double x_weight_coef, double y_weight_coef, double vel_weight_coef,
     double yaw_weight_coef, double acc_weight_coef, double steer_weight_coef,
     double acc_input_weight, double steer_input_weight,
@@ -1005,7 +633,6 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     Eigen::VectorXd & Cost)
   {
     int sample_size = D_inputs_schedule[0].cols();
-    trained_dynamics_.initialize_for_candidates_compensation(sample_size);
     Cost = Eigen::VectorXd::Zero(sample_size);
     Eigen::VectorXd X_Cost = Eigen::VectorXd::Zero(sample_size);
     Eigen::VectorXd Y_Cost = Eigen::VectorXd::Zero(sample_size);
@@ -1136,7 +763,6 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     double & initial_prediction_x_weight_coef, double & initial_prediction_y_weight_coef, double & initial_prediction_vel_weight_coef,
     double & initial_prediction_yaw_weight_coef, double & initial_prediction_acc_weight_coef, double & initial_prediction_steer_weight_coef)
   {// edit here to change the adaptive cost
-    trained_dynamics_.load_state_queue_for_compensation();
     Eigen::VectorXd acc_input_history_concat(acc_queue_size_ + predict_step_);
     Eigen::VectorXd steer_input_history_concat(steer_queue_size_ + predict_step_);
     acc_input_history_concat.head(acc_queue_size_) = acc_input_history;
@@ -1260,7 +886,7 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     initial_prediction_acc_weight_coef = calc_table_value(initial_prediction_max_acc_error, acc_error_domain_table_, acc_error_target_table_);
     initial_prediction_steer_weight_coef = calc_table_value(initial_prediction_max_steer_error, steer_error_domain_table_, steer_error_target_table_);
   }
-  Eigen::MatrixXd AdaptorILQR::extract_dF_d_state(Eigen::MatrixXd dF_d_state_with_history)
+  Eigen::MatrixXd AdaptorILQR::extract_dF_d_state(const Eigen::MatrixXd & dF_d_state_with_history)
   {
     Eigen::MatrixXd result = Eigen::MatrixXd::Zero(2*h_dim_ + num_state_component_ilqr_, 2*h_dim_ + num_state_component_ilqr_ + acc_queue_size_ + steer_queue_size_);
     //(dF_d_state_with_history.rows() -3 , dF_d_state_with_history.cols()-3);
@@ -1275,7 +901,7 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     }
     return result;
   }
-  Eigen::MatrixXd AdaptorILQR::extract_dF_d_input(Eigen::MatrixXd dF_d_input)
+  Eigen::MatrixXd AdaptorILQR::extract_dF_d_input(const Eigen::MatrixXd & dF_d_input)
   {
     Eigen::MatrixXd result = Eigen::MatrixXd::Zero(2*h_dim_ + num_state_component_ilqr_, 2);
     result.block(0,0,2*h_dim_,2) = dF_d_input.block(0,0,2*h_dim_,2);
@@ -1285,7 +911,7 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     return result;
   }
 
-  Eigen::MatrixXd AdaptorILQR::right_action_by_state_diff_with_history(Eigen::MatrixXd Mat, Eigen::MatrixXd dF_d_state_with_history)
+  Eigen::MatrixXd AdaptorILQR::right_action_by_state_diff_with_history(const Eigen::MatrixXd & Mat, const Eigen::MatrixXd & dF_d_state_with_history)
   {
     Eigen::MatrixXd result = Eigen::MatrixXd::Zero(Mat.rows(), dF_d_state_with_history.cols());
     result = Mat.leftCols(num_state_component_ilqr_ + 2*h_dim_)*dF_d_state_with_history;
@@ -1297,7 +923,7 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     }
     return result;
   }
-  Eigen::MatrixXd AdaptorILQR::left_action_by_state_diff_with_history(Eigen::MatrixXd dF_d_state_with_history, Eigen::MatrixXd Mat)
+  Eigen::MatrixXd AdaptorILQR::left_action_by_state_diff_with_history(const Eigen::MatrixXd & dF_d_state_with_history, const Eigen::MatrixXd & Mat)
   {
     Eigen::MatrixXd result = Eigen::MatrixXd::Zero(dF_d_state_with_history.cols(), Mat.cols());
     result = dF_d_state_with_history.transpose() * Mat.topRows(num_state_component_ilqr_ + 2*h_dim_);
@@ -1309,7 +935,7 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     }
     return result;
   }
-  Eigen::MatrixXd AdaptorILQR::right_action_by_input_diff(Eigen::MatrixXd Mat, Eigen::MatrixXd dF_d_input)
+  Eigen::MatrixXd AdaptorILQR::right_action_by_input_diff(const Eigen::MatrixXd & Mat, const Eigen::MatrixXd & dF_d_input)
   {
     Eigen::MatrixXd result = Eigen::MatrixXd::Zero(Mat.rows(), dF_d_input.cols());
     result = Mat.leftCols(num_state_component_ilqr_ + 2*h_dim_)*dF_d_input;
@@ -1319,7 +945,7 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     }
     return result;
   }
-  Eigen::MatrixXd AdaptorILQR::left_action_by_input_diff(Eigen::MatrixXd dF_d_input, Eigen::MatrixXd Mat)
+  Eigen::MatrixXd AdaptorILQR::left_action_by_input_diff(const Eigen::MatrixXd & dF_d_input, const Eigen::MatrixXd & Mat)
   {
     Eigen::MatrixXd result = Eigen::MatrixXd::Zero(dF_d_input.cols(), Mat.cols());
     result = dF_d_input.transpose() * Mat.topRows(num_state_component_ilqr_ + 2*h_dim_);
@@ -1334,11 +960,11 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     const std::vector<Eigen::VectorXd> & states_prediction, const std::vector<Eigen::VectorXd> & d_inputs_schedule,
     const std::vector<Eigen::VectorXd> & states_ref,
     const std::vector<Eigen::VectorXd> & d_input_ref, const double prev_acc_rate, const double prev_steer_rate,
-    std::vector<Eigen::Vector2d> inputs_ref, 
-    double x_weight_coef, double y_weight_coef, double vel_weight_coef,
-    double yaw_weight_coef, double acc_weight_coef, double steer_weight_coef,
-    double acc_input_weight, double steer_input_weight,
-    double acc_rate_weight_coef, double steer_rate_weight_coef,
+    const std::vector<Eigen::Vector2d> & inputs_ref, 
+    const double x_weight_coef, const double y_weight_coef, const double vel_weight_coef,
+    const double yaw_weight_coef, const double acc_weight_coef, const double steer_weight_coef,
+    const double acc_input_weight, const double steer_input_weight,
+    const double acc_rate_weight_coef, const double steer_rate_weight_coef,
     const std::vector<Eigen::Vector2d> & inputs_schedule,
     std::vector<Eigen::MatrixXd> & K, std::vector<Eigen::VectorXd> & k)
   {
@@ -1446,7 +1072,7 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
       }
     }
   }
-  std::vector<Eigen::MatrixXd> AdaptorILQR::calc_line_search_candidates(std::vector<Eigen::MatrixXd> K, std::vector<Eigen::VectorXd> k, std::vector<Eigen::MatrixXd> dF_d_states, std::vector<Eigen::MatrixXd> dF_d_inputs,  std::vector<Eigen::VectorXd> d_inputs_schedule, Eigen::VectorXd ls_points)
+  std::vector<Eigen::MatrixXd> AdaptorILQR::calc_line_search_candidates(const std::vector<Eigen::MatrixXd> & K, const std::vector<Eigen::VectorXd> & k, const std::vector<Eigen::MatrixXd> & dF_d_states, const std::vector<Eigen::MatrixXd> & dF_d_inputs, const std::vector<Eigen::VectorXd> & d_inputs_schedule, const Eigen::VectorXd & ls_points)
   {
     std::vector<Eigen::MatrixXd> D_inputs_schedule(horizon_len_);
     Eigen::MatrixXd D_states = Eigen::MatrixXd::Zero(num_state_component_ilqr_ + 2*h_dim_ + acc_queue_size_ + steer_queue_size_, ls_points.size());
@@ -1472,8 +1098,8 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     }
     return D_inputs_schedule;
   }
-  void AdaptorILQR::compute_optimal_control(Eigen::VectorXd states, Eigen::VectorXd acc_input_history,
-                              Eigen::VectorXd steer_input_history, std::vector<Eigen::VectorXd> & d_inputs_schedule,
+  void AdaptorILQR::compute_optimal_control(const Eigen::VectorXd & states, const Eigen::VectorXd & acc_input_history,
+                              const Eigen::VectorXd & steer_input_history, std::vector<Eigen::VectorXd> & d_inputs_schedule,
                               const Eigen::VectorXd & h_lstm, const Eigen::VectorXd & c_lstm,
                               const std::vector<Eigen::VectorXd> & states_ref,
                               const std::vector<Eigen::VectorXd> & d_input_ref,
@@ -1613,12 +1239,14 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     yaw_intermediate_cost_ = optimization_param_node["optimization_parameter"]["weight_parameter"]["yaw_intermediate_cost"].as<double>();
     acc_intermediate_cost_ = optimization_param_node["optimization_parameter"]["weight_parameter"]["acc_intermediate_cost"].as<double>();
     steer_intermediate_cost_ = optimization_param_node["optimization_parameter"]["weight_parameter"]["steer_intermediate_cost"].as<double>();
-    intermediate_cost_index_ = optimization_param_node["optimization_parameter"]["weight_parameter"]["intermediate_cost_index_predict_by_polynomial_regression"].as<int>();
+    intermediate_cost_index_ = optimization_param_node["optimization_parameter"]["weight_parameter"]["intermediate_cost_index"].as<int>();
 
     control_dt_ = optimization_param_node["optimization_parameter"]["setting"]["control_dt"].as<double>();
     predict_step_ = optimization_param_node["optimization_parameter"]["setting"]["predict_step"].as<int>();
     predict_dt_ = control_dt_ * predict_step_;
-    horizon_len_ = optimization_param_node["optimization_parameter"]["setting"]["horizon_len_predict_by_polynomial_regression"].as<int>();
+    horizon_len_ = optimization_param_node["optimization_parameter"]["setting"]["horizon_len"].as<int>();
+
+
 
     controller_acc_input_history_len_ = optimization_param_node["optimization_parameter"]["polynomial_regression"]["controller_acc_input_history_len"].as<int>();
     controller_steer_input_history_len_ = optimization_param_node["optimization_parameter"]["polynomial_regression"]["controller_steer_input_history_len"].as<int>();
@@ -1631,8 +1259,6 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     acc_polynomial_prediction_len_ = optimization_param_node["optimization_parameter"]["polynomial_regression"]["acc_polynomial_prediction_len"].as<int>();
     steer_polynomial_prediction_len_ = optimization_param_node["optimization_parameter"]["polynomial_regression"]["steer_polynomial_prediction_len"].as<int>();
 
-    use_acc_linear_extrapolation_ = optimization_param_node["optimization_parameter"]["linear_extrapolation"]["use_acc_linear_extrapolation"].as<bool>();
-    use_steer_linear_extrapolation_ = optimization_param_node["optimization_parameter"]["linear_extrapolation"]["use_steer_linear_extrapolation"].as<bool>();
     acc_linear_extrapolation_len_ = optimization_param_node["optimization_parameter"]["linear_extrapolation"]["acc_linear_extrapolation_len"].as<int>();
     steer_linear_extrapolation_len_ = optimization_param_node["optimization_parameter"]["linear_extrapolation"]["steer_linear_extrapolation_len"].as<int>();
     past_len_for_acc_linear_extrapolation_ = optimization_param_node["optimization_parameter"]["linear_extrapolation"]["past_len_for_acc_linear_extrapolation"].as<int>();
@@ -1649,10 +1275,11 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     steer_queue_size_ = trained_model_param_node["trained_model_parameter"]["queue_size"]["steer_queue_size"].as<int>();
     update_lstm_len_ = trained_model_param_node["trained_model_parameter"]["lstm"]["update_lstm_len"].as<int>();
 
-    prob_update_memory_bank_ = trained_model_param_node["trained_model_parameter"]["attention"]["prob_update_memory_bank"].as<double>();
-    memory_bank_size_ = trained_model_param_node["trained_model_parameter"]["attention"]["memory_bank_size"].as<int>();
-    memory_bank_element_len_ = trained_model_param_node["trained_model_parameter"]["attention"]["memory_bank_element_len"].as<int>();
-    
+
+    acc_delay_step_ = std::min(int(std::round(acc_time_delay_ / control_dt_)), acc_queue_size_);
+    steer_delay_step_ =
+      std::min(int(std::round(steer_time_delay_ / control_dt_)), steer_queue_size_);
+
     YAML::Node controller_param_node = YAML::LoadFile(param_dir_path + "/controller_param.yaml");
 
     double acc_time_delay_controller = controller_param_node["controller_parameter"]["acceleration"]["acc_time_delay"].as<double>();
@@ -1665,9 +1292,7 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     nominal_dynamics_controller_.set_params(wheel_base_,acc_time_delay_controller,steer_time_delay_controller,acc_time_constant_controller,steer_time_constant_controller,acc_queue_size_,steer_queue_size_,control_dt_,predict_step_);
     nominal_dynamics_controller_.set_steer_dead_band(steer_dead_band_);
 
-    
-    compensation_lstm_len_ = optimization_param_node["optimization_parameter"]["compensation"]["compensation_lstm_len"].as<int>();
-
+  
     mix_ratio_vel_target_table_ = optimization_param_node["optimization_parameter"]["mix_ratio"]["mix_ratio_vel_target_table"].as<std::vector<double>>();
     mix_ratio_vel_domain_table_ = optimization_param_node["optimization_parameter"]["mix_ratio"]["mix_ratio_vel_domain_table"].as<std::vector<double>>();
     mix_ratio_time_target_table_ = optimization_param_node["optimization_parameter"]["mix_ratio"]["mix_ratio_time_target_table"].as<std::vector<double>>();
@@ -1680,7 +1305,6 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     polynomial_reg_for_predict_acc_input_.set_params(
       deg_controller_acc_input_history_, controller_acc_input_history_len_, lam_controller_acc_input_history_);
     polynomial_reg_for_predict_acc_input_.set_oldest_sample_weight(oldest_sample_weight_controller_acc_input_history_);
-    //polynomial_reg_for_predict_acc_input_.set_ignore_intercept();
     bool ignore_intercept_acc_prediction = optimization_param_node["optimization_parameter"]["polynomial_regression"]["ignore_intercept_acc_prediction"].as<bool>();
     if (ignore_intercept_acc_prediction){
       polynomial_reg_for_predict_acc_input_.set_ignore_intercept();
@@ -1714,8 +1338,10 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     use_vehicle_adaptor_ = optimization_param_node["optimization_parameter"]["autoware_alignment"]["use_vehicle_adaptor"].as<bool>();
     use_offline_features_autoware_ = optimization_param_node["optimization_parameter"]["autoware_alignment"]["use_offline_features"].as<bool>();
 
-    use_acc_input_schedule_prediction_ = optimization_param_node["optimization_parameter"]["inputs_schedule_prediction_NN"]["use_acc_input_schedule_prediction"].as<bool>();
-    use_steer_input_schedule_prediction_ = optimization_param_node["optimization_parameter"]["inputs_schedule_prediction_NN"]["use_steer_input_schedule_prediction"].as<bool>();
+
+    acc_input_schedule_prediction_mode_ = optimization_param_node["optimization_parameter"]["inputs_schedule_prediction_mode"]["acc_input_schedule_prediction_mode"].as<std::string>();
+    steer_input_schedule_prediction_mode_ = optimization_param_node["optimization_parameter"]["inputs_schedule_prediction_mode"]["steer_input_schedule_prediction_mode"].as<std::string>();
+
     acc_input_schedule_prediction_len_ = optimization_param_node["optimization_parameter"]["inputs_schedule_prediction_NN"]["acc_input_schedule_prediction_len"].as<int>();
     steer_input_schedule_prediction_len_ = optimization_param_node["optimization_parameter"]["inputs_schedule_prediction_NN"]["steer_input_schedule_prediction_len"].as<int>();
     acc_input_schedule_prediction_len_ = std::min(acc_input_schedule_prediction_len_, horizon_len_ * predict_step_ -1);
@@ -1723,14 +1349,23 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     int controller_acc_input_history_len = optimization_param_node["optimization_parameter"]["inputs_schedule_prediction_NN"]["controller_acc_input_history_len"].as<int>();
     int controller_steer_input_history_len = optimization_param_node["optimization_parameter"]["inputs_schedule_prediction_NN"]["controller_steer_input_history_len"].as<int>();
     int adaptive_scale_index = optimization_param_node["optimization_parameter"]["inputs_schedule_prediction_NN"]["adaptive_scale_index"].as<int>();
-    if (use_acc_input_schedule_prediction_ && !acc_input_schedule_prediction_initialized_){
+    if (acc_input_schedule_prediction_mode_ == "NN" && !acc_input_schedule_prediction_initialized_){
       acc_input_schedule_prediction_.set_params(controller_acc_input_history_len, acc_input_schedule_prediction_len_ , control_dt_, "inputs_schedule_prediction_model/acc_schedule_predictor",adaptive_scale_index);
       acc_input_schedule_prediction_initialized_ = true;
     }
-    if (use_steer_input_schedule_prediction_ && !steer_input_schedule_prediction_initialized_){
+    if (steer_input_schedule_prediction_mode_ == "NN" && !steer_input_schedule_prediction_initialized_){
       steer_input_schedule_prediction_.set_params(controller_steer_input_history_len, steer_input_schedule_prediction_len_ , control_dt_, "inputs_schedule_prediction_model/steer_schedule_predictor",adaptive_scale_index);
       steer_input_schedule_prediction_initialized_ = true;
     }
+    double lambda_smooth_acc_ref_smoother = optimization_param_node["optimization_parameter"]["inputs_ref_smoother"]["lambda_smooth_acc_ref_smoother"].as<double>();
+    double terminal_lambda_smooth_acc_ref_smoother = optimization_param_node["optimization_parameter"]["inputs_ref_smoother"]["terminal_lambda_smooth_acc_ref_smoother"].as<double>();
+    
+    double lambda_decay_acc_ref_smoother = optimization_param_node["optimization_parameter"]["inputs_ref_smoother"]["lambda_decay_acc_ref_smoother"].as<double>();
+    double lambda_terminal_decay_acc_ref_smoother = optimization_param_node["optimization_parameter"]["inputs_ref_smoother"]["lambda_terminal_decay_acc_ref_smoother"].as<double>();
+    bool use_acc_ref_smoother = optimization_param_node["optimization_parameter"]["inputs_ref_smoother"]["use_acc_ref_smoother"].as<bool>();
+
+    acc_input_ref_smoother_.set_params(control_dt_, lambda_smooth_acc_ref_smoother, terminal_lambda_smooth_acc_ref_smoother, lambda_decay_acc_ref_smoother, lambda_terminal_decay_acc_ref_smoother);
+    acc_input_ref_smoother_.set_use_smoother(use_acc_ref_smoother);
 
     double lambda_smooth_steer_ref_smoother = optimization_param_node["optimization_parameter"]["inputs_ref_smoother"]["lambda_smooth_steer_ref_smoother"].as<double>();
     double terminal_lambda_smooth_steer_ref_smoother = optimization_param_node["optimization_parameter"]["inputs_ref_smoother"]["terminal_lambda_smooth_steer_ref_smoother"].as<double>();
@@ -1741,28 +1376,20 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     steer_input_ref_smoother_.set_params(control_dt_, lambda_smooth_steer_ref_smoother,terminal_lambda_smooth_steer_ref_smoother, lambda_decay_steer_ref_smoother, lambda_terminal_decay_steer_ref_smoother);
     steer_input_ref_smoother_.set_use_smoother(use_steer_ref_smoother);
 
-    double lambda_smooth_acc_ref_smoother = optimization_param_node["optimization_parameter"]["inputs_ref_smoother"]["lambda_smooth_acc_ref_smoother"].as<double>();
-    double terminal_lambda_smooth_acc_ref_smoother = optimization_param_node["optimization_parameter"]["inputs_ref_smoother"]["terminal_lambda_smooth_acc_ref_smoother"].as<double>();
-    
-    double lambda_decay_acc_ref_smoother = optimization_param_node["optimization_parameter"]["inputs_ref_smoother"]["lambda_decay_acc_ref_smoother"].as<double>();
-    double lambda_terminal_decay_acc_ref_smoother = optimization_param_node["optimization_parameter"]["inputs_ref_smoother"]["lambda_terminal_decay_acc_ref_smoother"].as<double>();
-    bool use_acc_ref_smoother = optimization_param_node["optimization_parameter"]["inputs_ref_smoother"]["use_acc_ref_smoother"].as<bool>();
 
-    acc_input_ref_smoother_.set_params(control_dt_, lambda_smooth_acc_ref_smoother, terminal_lambda_smooth_acc_ref_smoother, lambda_decay_acc_ref_smoother, lambda_terminal_decay_acc_ref_smoother);
-    acc_input_ref_smoother_.set_use_smoother(use_acc_ref_smoother);
-    if (use_acc_input_schedule_prediction_){
+    if (acc_input_schedule_prediction_mode_ == "NN"){
       acc_input_ref_smoother_.set_prediction_len(acc_input_schedule_prediction_len_);
     }
-    else if (use_acc_linear_extrapolation_){
+    else if (acc_input_schedule_prediction_mode_ == "linear_extrapolation"){
       acc_input_ref_smoother_.set_prediction_len(acc_linear_extrapolation_len_);
     }
     else{
       acc_input_ref_smoother_.set_prediction_len(acc_polynomial_prediction_len_);
     }
-    if (use_steer_input_schedule_prediction_){
+    if (steer_input_schedule_prediction_mode_ == "NN"){
       steer_input_ref_smoother_.set_prediction_len(steer_input_schedule_prediction_len_);
     }
-    else if (use_steer_linear_extrapolation_){
+    else if (steer_input_schedule_prediction_mode_ == "linear_extrapolation"){
       steer_input_ref_smoother_.set_prediction_len(steer_linear_extrapolation_len_);
     }
     else{
@@ -1827,7 +1454,6 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     Eigen::MatrixXd weight_steer_layer_1 = read_csv(csv_dir + "/weight_steer_layer_1.csv");
     Eigen::MatrixXd weight_acc_layer_2 = read_csv(csv_dir + "/weight_acc_layer_2.csv");
     Eigen::MatrixXd weight_steer_layer_2 = read_csv(csv_dir + "/weight_steer_layer_2.csv");
-    //todo
 
     Eigen::MatrixXd weight_lstm_ih = read_csv(csv_dir + "/weight_lstm_ih.csv");
     Eigen::MatrixXd weight_lstm_hh = read_csv(csv_dir + "/weight_lstm_hh.csv");
@@ -1880,39 +1506,8 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
   {
     adaptor_ilqr_.clear_NN_params();
   }
-  void VehicleAdaptor::set_offline_data_set_for_compensation(
-    Eigen::MatrixXd XXT, Eigen::MatrixXd YXT
-  )
-  {
-    adaptor_ilqr_.set_offline_data_set_for_compensation(XXT, YXT);
-  }
-  void VehicleAdaptor::set_offline_data_set_for_compensation_from_csv(std::string csv_dir)
-  {
-    Eigen::MatrixXd XXT = read_csv(csv_dir + "/XXT.csv");
-    Eigen::MatrixXd YXT = read_csv(csv_dir + "/YXT.csv");
-    set_offline_data_set_for_compensation(XXT, YXT);
-  }
-  void VehicleAdaptor::unset_offline_data_set_for_compensation()
-  {
-    adaptor_ilqr_.unset_offline_data_set_for_compensation();
-  }
-  void VehicleAdaptor::set_projection_matrix_for_compensation(
-    Eigen::MatrixXd P
-  )
-  {
-    adaptor_ilqr_.set_projection_matrix_for_compensation(P);
-  }
-  void VehicleAdaptor::unset_projection_matrix_for_compensation()
-  {
-    adaptor_ilqr_.unset_projection_matrix_for_compensation();
-  }
-  void VehicleAdaptor::set_projection_matrix_for_compensation_from_csv(std::string csv_dir)
-  {
-    Eigen::MatrixXd P = read_csv(csv_dir + "/Projection.csv");
-    set_projection_matrix_for_compensation(P);
-  }
   void VehicleAdaptor::set_controller_d_inputs_schedule(const Eigen::VectorXd & acc_controller_d_inputs_schedule, const Eigen::VectorXd & steer_controller_d_inputs_schedule)
-  {
+  { // called when controller inputs increments schedule are available
     acc_controller_d_inputs_schedule_ = acc_controller_d_inputs_schedule;
     steer_controller_d_inputs_schedule_ = steer_controller_d_inputs_schedule;
     if (!initialized_)
@@ -1920,16 +1515,16 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
       set_params();
       states_ref_mode_ = "controller_d_inputs_schedule";
       YAML::Node optimization_param_node = YAML::LoadFile(get_param_dir_path() + "/optimization_param.yaml"); 
-      horizon_len_ = optimization_param_node["optimization_parameter"]["setting"]["horizon_len_controller_d_inputs_schedule"].as<int>();
+      horizon_len_ = optimization_param_node["optimization_parameter"]["setting"]["horizon_len"].as<int>();
       horizon_len_ = std::min(horizon_len_, int(acc_controller_d_inputs_schedule.size()));
       horizon_len_ = std::min(horizon_len_, int(steer_controller_d_inputs_schedule.size()));
-      intermediate_cost_index_ = optimization_param_node["optimization_parameter"]["weight_parameter"]["intermediate_cost_index_controller_d_inputs_schedule"].as<int>();
+      intermediate_cost_index_ = optimization_param_node["optimization_parameter"]["weight_parameter"]["intermediate_cost_index"].as<int>();
       intermediate_cost_index_ = std::min(intermediate_cost_index_, horizon_len_-1);
       adaptor_ilqr_.set_intermediate_cost(x_intermediate_cost_,y_intermediate_cost_,vel_intermediate_cost_,yaw_intermediate_cost_,acc_intermediate_cost_,steer_intermediate_cost_,intermediate_cost_index_);
     }
   }
   void VehicleAdaptor::set_controller_d_steer_schedule(const Eigen::VectorXd & steer_controller_d_inputs_schedule)
-  {
+  { // called when controller steer inputs increments schedule are available
     steer_controller_d_inputs_schedule_ = steer_controller_d_inputs_schedule;
     if (!initialized_)
     {
@@ -1938,7 +1533,7 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     }
   }
   void VehicleAdaptor::set_controller_steer_input_schedule(double timestamp, const std::vector<double> & steer_controller_input_schedule)
-  {
+  { // called when controller steer input schedule are available
     if (int(steer_controller_input_schedule.size()) < horizon_len_ + 1)
     {
       std::cerr << "steer_controller_input_schedule size is smaller than horizon_len" << std::endl;
@@ -1975,7 +1570,7 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
 
   }
   void VehicleAdaptor::set_controller_prediction(const Eigen::VectorXd & x_controller_prediction, const Eigen::VectorXd & y_controller_prediction, const Eigen::VectorXd & vel_controller_prediction, const Eigen::VectorXd & yaw_controller_prediction, const Eigen::VectorXd & acc_controller_prediction, const Eigen::VectorXd & steer_controller_prediction)
-  {
+  { // called when controller prediction trajectory are available
     x_controller_prediction_ = x_controller_prediction;
     y_controller_prediction_ = y_controller_prediction;
     vel_controller_prediction_ = vel_controller_prediction;
@@ -1987,16 +1582,16 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
       set_params();
       states_ref_mode_ = "controller_prediction";
       YAML::Node optimization_param_node = YAML::LoadFile(get_param_dir_path() + "/optimization_param.yaml"); 
-      horizon_len_ = optimization_param_node["optimization_parameter"]["setting"]["horizon_len_controller_prediction"].as<int>();
+      horizon_len_ = optimization_param_node["optimization_parameter"]["setting"]["horizon_len"].as<int>();
       horizon_len_ = std::min(horizon_len_, int(acc_controller_prediction.size())-1);
       horizon_len_ = std::min(horizon_len_, int(steer_controller_prediction.size())-1);
-      intermediate_cost_index_ = optimization_param_node["optimization_parameter"]["weight_parameter"]["intermediate_cost_index_controller_prediction"].as<int>();
+      intermediate_cost_index_ = optimization_param_node["optimization_parameter"]["weight_parameter"]["intermediate_cost_index"].as<int>();
       intermediate_cost_index_ = std::min(intermediate_cost_index_, horizon_len_-1);
       adaptor_ilqr_.set_intermediate_cost(x_intermediate_cost_,y_intermediate_cost_,vel_intermediate_cost_,yaw_intermediate_cost_,acc_intermediate_cost_,steer_intermediate_cost_,intermediate_cost_index_);
     }
   }
   void VehicleAdaptor::set_controller_steer_prediction(const Eigen::VectorXd & steer_controller_prediction)
-  {
+  { // called when controller steer prediction trajectory are available
     steer_controller_prediction_ = steer_controller_prediction;
     steer_controller_prediction_aided_ = true;
   }
@@ -2008,14 +1603,14 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     int controller_steer_input_history_len = std::max({controller_steer_input_history_len_, steer_delay_step_ + 1,past_len_for_steer_linear_extrapolation_ + 1});
     if (!initialized_) {//initialize
       start_time_ = time_stamp;
-      if (states_ref_mode_ == "predict_by_polynomial_regression"){
+      if (states_ref_mode_ == "input_schedule_prediction"){
         set_params();
       }
       previous_error_ = Eigen::VectorXd::Zero(NN_prediction_target_dim_);
 
-      adaptor_ilqr_.initialize_compensation(acc_queue_size_, steer_queue_size_, predict_step_, h_dim_full_);
 
-      adaptor_ilqr_.set_sg_filter_params(sg_deg_for_NN_diff_,horizon_len_,sg_window_size_for_NN_diff_);
+      adaptor_ilqr_.set_sg_filter_params(sg_deg_for_NN_diff_,sg_window_size_for_NN_diff_);
+      adaptor_ilqr_.set_horizon_len(horizon_len_);
 
       max_queue_size_ = std::max({acc_queue_size_ + 1, steer_queue_size_ + 1, controller_acc_input_history_len, controller_steer_input_history_len, predict_step_*update_lstm_len_+2});
       time_stamp_obs_ = std::vector<double>(max_queue_size_);
@@ -2137,10 +1732,7 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     Eigen::VectorXd c_lstm = Eigen::VectorXd::Zero(h_dim_full_);
     std::vector<Eigen::VectorXd> h_lstm_encoder(num_layers_encoder_, Eigen::VectorXd::Zero(h_dim_full_));
     std::vector<Eigen::VectorXd> c_lstm_encoder(num_layers_encoder_, Eigen::VectorXd::Zero(h_dim_full_));
-    Eigen::VectorXd h_lstm_compensation = Eigen::VectorXd::Zero(h_dim_full_);
-    Eigen::VectorXd c_lstm_compensation = Eigen::VectorXd::Zero(h_dim_full_);
     Eigen::Vector2d acc_steer_error = Eigen::Vector2d::Zero();
-    Eigen::VectorXd previous_error_compensator = Eigen::VectorXd::Zero(previous_error_.size());
 
     if (use_offline_features_){
       h_lstm = offline_features_.head(h_dim_full_);
@@ -2160,29 +1752,7 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
         acc_input_history_concat[acc_queue_size_ + j] = acc_input_history_lstm_[predict_step_*i + j + 1][acc_queue_size_ - 1];
         steer_input_history_concat[steer_queue_size_ + j] = steer_input_history_lstm_[predict_step_*i + j + 1][steer_queue_size_ - 1];
       }
-      adaptor_ilqr_.update_state_queue_for_compensation(states_tmp);
-      if (i == update_lstm_len_ - compensation_lstm_len_ - 5){
-        h_lstm_compensation = h_lstm_encoder[num_layers_encoder_-1];
-        c_lstm_compensation = c_lstm_encoder[num_layers_encoder_-1];
-      }
-      if (i < update_lstm_len_ - compensation_lstm_len_ - 5){
-        adaptor_ilqr_.update_state_queue_for_compensation(states_tmp);
-      }
-      else if (i < update_lstm_len_ - compensation_lstm_len_){//update previous_error_compensator
-        adaptor_ilqr_.F_with_model_without_compensation(states_tmp, acc_input_history_concat, steer_input_history_concat, h_lstm_compensation, c_lstm_compensation, previous_error_compensator, i);
-      }
-      else {
-        Eigen::VectorXd lstm_error;
-        if (i < update_lstm_len_ - 1){
-          lstm_error = (state_history_lstm_[predict_step_*(i+1)]
-                                 - adaptor_ilqr_.F_with_model_without_compensation(states_tmp, acc_input_history_concat, steer_input_history_concat, h_lstm_compensation, c_lstm_compensation, previous_error_compensator, i)) / predict_dt_;
-        }
-        else{
-          lstm_error = (states
-                                 - adaptor_ilqr_.F_with_model_without_compensation(states_tmp, acc_input_history_concat, steer_input_history_concat, h_lstm_compensation, c_lstm_compensation, previous_error_compensator, i)) / predict_dt_;
-        }
-        adaptor_ilqr_.update_one_step_for_compensation(acc_input_history_concat, steer_input_history_concat, h_lstm_compensation, c_lstm_compensation, lstm_error);
-      }
+
       if (i < update_lstm_len_ - 1){
        acc_steer_error = (state_history_lstm_[predict_step_*(i+1)]
                                  - adaptor_ilqr_.nominal_prediction(states_tmp, acc_input_history_concat, steer_input_history_concat)).tail(2) / predict_dt_;
@@ -2193,8 +1763,6 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
       }
       adaptor_ilqr_.update_lstm_states(states_tmp, acc_input_history_concat, steer_input_history_concat, h_lstm_encoder, c_lstm_encoder, acc_steer_error);
     }
-    adaptor_ilqr_.save_state_queue_for_compensation();
-    adaptor_ilqr_.update_regression_matrix_for_compensation();
     h_lstm = h_lstm_encoder[num_layers_encoder_-1];
     c_lstm = c_lstm_encoder[num_layers_encoder_-1];
 
@@ -2214,7 +1782,7 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     Eigen::VectorXd steer_input_schedule_predictor_states(2);
     acc_input_schedule_predictor_states << states[vel_index_], acc_controller_input;
     steer_input_schedule_predictor_states << states[vel_index_], steer_controller_input;
-    if (use_acc_input_schedule_prediction_)
+    if (acc_input_schedule_prediction_mode_ == "NN")
     {
       std::vector<double> controller_acc_input_prediction_by_NN = acc_input_schedule_prediction_.get_inputs_schedule_predicted(acc_input_schedule_predictor_states, time_stamp);
       for (int i = 0; i < acc_input_schedule_prediction_len_; i++)
@@ -2229,7 +1797,7 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
       }
       
     }
-    if (use_steer_input_schedule_prediction_)
+    if (steer_input_schedule_prediction_mode_ == "NN")
     {
       std::vector<double> controller_steer_input_prediction_by_NN = steer_input_schedule_prediction_.get_inputs_schedule_predicted(steer_input_schedule_predictor_states, time_stamp);
       for (int i = 0; i < steer_input_schedule_prediction_len_; i++)
@@ -2254,11 +1822,11 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
       past_steer_input_change_weight_ = 0.5;
 
       Eigen::VectorXd acc_controller_input_prediction(horizon_len_*predict_step_-1);
-      if (use_acc_input_schedule_prediction_)
+      if (acc_input_schedule_prediction_mode_ == "NN")
       {
         acc_controller_input_prediction = acc_controller_inputs_prediction_by_NN; 
       }
-      else if (use_acc_linear_extrapolation_)
+      else if (acc_input_schedule_prediction_mode_ == "linear_extrapolation")
       {
         acc_controller_input_prediction.head(acc_linear_extrapolation_len_) = (acc_controller_input_history_[acc_controller_input_history_.size() - 1]
                                                                              - acc_controller_input_history_[acc_controller_input_history_.size() - past_len_for_acc_linear_extrapolation_ - 1]) / past_len_for_acc_linear_extrapolation_
@@ -2305,7 +1873,7 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
     }
     else
     {
-      if (states_ref_mode_ == "predict_by_polynomial_regression"){
+      if (states_ref_mode_ == "input_schedule_prediction"){
         past_acc_input_change_weight_ = 1.0;
         past_steer_input_change_weight_ = 1.0;
       }
@@ -2316,11 +1884,11 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
 
       Eigen::VectorXd acc_controller_input_prediction(horizon_len_*predict_step_-1);
       Eigen::VectorXd steer_controller_input_prediction(horizon_len_*predict_step_-1);
-      if (use_acc_input_schedule_prediction_)
+      if (acc_input_schedule_prediction_mode_ == "NN")
       {
         acc_controller_input_prediction = acc_controller_inputs_prediction_by_NN; 
       }
-      else if (use_acc_linear_extrapolation_)
+      else if (acc_input_schedule_prediction_mode_ == "linear_extrapolation")
       {
         acc_controller_input_prediction.head(acc_linear_extrapolation_len_) = (acc_controller_input_history_[acc_controller_input_history_.size() - 1]
                                                                              - acc_controller_input_history_[acc_controller_input_history_.size() - past_len_for_acc_linear_extrapolation_ - 1]) / past_len_for_acc_linear_extrapolation_
@@ -2335,11 +1903,11 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
                              = acc_input_ref_smoother_.get_smoothed_inputs_ref(acc_controller_input, acc_controller_input_prediction.head(acc_polynomial_prediction_len_));
         acc_controller_input_prediction.tail(horizon_len_*predict_step_ - acc_polynomial_prediction_len_ -1) = acc_controller_input_prediction[acc_polynomial_prediction_len_ - 1]*Eigen::VectorXd::Ones(horizon_len_*predict_step_ - acc_polynomial_prediction_len_ -1);
       }
-      if (use_steer_input_schedule_prediction_)
+      if (steer_input_schedule_prediction_mode_ == "NN")
       {
         steer_controller_input_prediction = steer_controller_inputs_prediction_by_NN; 
       }
-      else if (use_steer_linear_extrapolation_)
+      else if (steer_input_schedule_prediction_mode_ == "linear_extrapolation")
       {
         steer_controller_input_prediction.head(steer_linear_extrapolation_len_) = (steer_controller_input_history_[steer_controller_input_history_.size() - 1]
                                                                              - steer_controller_input_history_[steer_controller_input_history_.size() - past_len_for_steer_linear_extrapolation_ - 1]) / past_len_for_steer_linear_extrapolation_
@@ -2358,7 +1926,7 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
       steer_controller_input_history_with_schedule.tail(predict_step_*horizon_len_ - 1) = steer_controller_input_prediction;
     }
       // calculate states_ref by controller inputs history with schedule //
-    if (states_ref_mode_ == "predict_by_polynomial_regression" || states_ref_mode_ == "controller_d_inputs_schedule" || states_ref_mode_ == "controller_d_steer_schedule")
+    if (states_ref_mode_ == "input_schedule_prediction" || states_ref_mode_ == "controller_d_inputs_schedule" || states_ref_mode_ == "controller_d_steer_schedule")
     {
       states_ref[0] = states;
       Eigen::VectorXd states_ref_tmp = states;
@@ -2481,7 +2049,7 @@ Eigen::VectorXd states_world_to_vehicle(Eigen::VectorXd states_world, double yaw
   void VehicleAdaptor::send_initialized_flag()
   {
     initialized_ = false;
-    states_ref_mode_ = "predict_by_polynomial_regression";
+    states_ref_mode_ = "input_schedule_prediction";
   }
 
 PYBIND11_MODULE(vehicle_adaptor_compensator, m)
@@ -2499,11 +2067,6 @@ PYBIND11_MODULE(vehicle_adaptor_compensator, m)
     .def("set_NN_params", &VehicleAdaptor::set_NN_params)
     .def("set_NN_params_from_csv", &VehicleAdaptor::set_NN_params_from_csv)
     .def("set_offline_features_from_csv", &VehicleAdaptor::set_offline_features_from_csv)
-    .def("set_offline_data_set_for_compensation", &VehicleAdaptor::set_offline_data_set_for_compensation)
-    .def("set_offline_data_set_for_compensation_from_csv", &VehicleAdaptor::set_offline_data_set_for_compensation_from_csv)
-    .def("unset_offline_data_set_for_compensation", &VehicleAdaptor::unset_offline_data_set_for_compensation)
-    .def("set_projection_matrix_for_compensation", &VehicleAdaptor::set_projection_matrix_for_compensation)
-    .def("unset_projection_matrix_for_compensation", &VehicleAdaptor::unset_projection_matrix_for_compensation)
     .def("clear_NN_params", &VehicleAdaptor::clear_NN_params)
     .def("set_controller_d_inputs_schedule", &VehicleAdaptor::set_controller_d_inputs_schedule)
     .def("set_controller_d_steer_schedule", &VehicleAdaptor::set_controller_d_steer_schedule)

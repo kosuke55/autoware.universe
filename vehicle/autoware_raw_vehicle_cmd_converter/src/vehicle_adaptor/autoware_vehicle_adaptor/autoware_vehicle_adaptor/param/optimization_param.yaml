@@ -11,20 +11,18 @@ optimization_parameter:
         steer_rate_rate_cost: 500.0
         acc_rate_rate_cost: 0.0
         x_terminal_cost: 1e+1
-        y_terminal_cost: 1e+7
+        y_terminal_cost: 1e+1
         vel_terminal_cost: 1e+4
         yaw_terminal_cost: 1e+8
         acc_terminal_cost: 1e+3
-        steer_terminal_cost: 1e+7 # if steer -> yaw' dynamics is precise
+        steer_terminal_cost: 1e+9
         x_intermediate_cost: 0.0
         y_intermediate_cost: 0.0
         vel_intermediate_cost: 0.0
-        yaw_intermediate_cost: 1e+7
+        yaw_intermediate_cost: 1e+9
         acc_intermediate_cost: 1e+3
-        steer_intermediate_cost: 1e+0 # if steer -> yaw' dynamics is precise
-        intermediate_cost_index_predict_by_polynomial_regression: 6
-        intermediate_cost_index_controller_d_inputs_schedule: 6
-        intermediate_cost_index_controller_prediction: 6
+        steer_intermediate_cost: 1e+0
+        intermediate_cost_index: 6
         past_steer_input_change_decay_rate: 0.9
         steer_input_change_window_size: 3
         future_steer_input_change_decay_rate: 0.9
@@ -34,10 +32,11 @@ optimization_parameter:
     setting:
         control_dt: 0.033
         predict_step: 3
-        horizon_len_predict_by_polynomial_regression: 12
-        horizon_len_controller_d_inputs_schedule: 12
-        horizon_len_controller_prediction: 12
-    polynomial_regression: # primary
+        horizon_len: 12
+    inputs_schedule_prediction_mode:
+        acc_input_schedule_prediction_mode: "NN"
+        steer_input_schedule_prediction_mode: "NN"
+    polynomial_regression:
         controller_acc_input_history_len: 7
         deg_controller_acc_input_history: 2
         lam_controller_acc_input_history: [1e-4,1e+1]
@@ -50,41 +49,20 @@ optimization_parameter:
         oldest_sample_weight_controller_steer_input_history: 0.1
         steer_polynomial_prediction_len: 8
         ignore_intercept_steer_prediction: true
-    inputs_schedule_prediction_NN: # secondary
-        use_acc_input_schedule_prediction: true
-        use_steer_input_schedule_prediction: false
+    inputs_schedule_prediction_NN:
         acc_input_schedule_prediction_len: 20
         controller_acc_input_history_len: 150
         steer_input_schedule_prediction_len: 20
         controller_steer_input_history_len: 150
         adaptive_scale_index: 1
-    linear_extrapolation: # tertiary
-        use_acc_linear_extrapolation: false
-        use_steer_linear_extrapolation: false
+    linear_extrapolation:
         acc_linear_extrapolation_len: 8
         steer_linear_extrapolation_len: 8
         past_len_for_acc_linear_extrapolation: 3
         past_len_for_steer_linear_extrapolation: 6
-    minimum_diff:
-        minimum_acc_diff: 0.03
-        minimum_steer_diff: 0.03
-    compensation:
-        lambda: 1e+4
-        lambda_bias: 1e-1
-        #decay: 0.6
-        default_forgetting_factor: 0.999
-        min_forgetting_factor: 0.5
-        coef_wide: 0.995
-        coef_narrow: 0.98
-        default_weight_offline_ratio: 0.5
-        x_history_len: 3
-        fit_yaw: false
-        compensation_lstm_len: 5
-        max_yaw_compensation: 0.000001
-        max_acc_compensation: 0.1
-        max_steer_compensation: 0.1
-        vel_scale: 0.1
-        use_compensator: false
+    min_gradient:
+        min_gradient_acc: 0.03
+        min_gradient_steer: 0.03
     sg_filter:
         use_sg_for_d_inputs_schedule: true
         sg_deg_for_d_inputs_schedule: 0
@@ -124,10 +102,10 @@ optimization_parameter:
         acc_coef_by_acc_rate_table: [0.1,0.3,1.0]
         steer_rate_input_table: [0.0001,0.001,0.01]
         steer_rate_cost_coef_table: [100000.0,1000.0,1.0]
-        vel_for_steer_rate_table: [3.0, 6.0, 10.0]
-        steer_rate_cost_coef_by_vel_table: [1.0,100.0,1000.0] 
+        vel_for_steer_rate_table: [3.0, 5.0, 10.0]
+        steer_rate_cost_coef_by_vel_table: [1.0,1000.0,10000.0] 
         y_coef_by_steer_rate_table: [0.1,0.3,1.0]
-        yaw_coef_by_steer_rate_table: [0.1,0.3,1.0]
+        yaw_coef_by_steer_rate_table: [0.00001,0.0001,1.0]
         steer_coef_by_steer_rate_table: [1.0,1.0,1.0]
         controller_vel_error_domain_table: [0.1, 0.3, 1.0]
         controller_acc_error_domain_table: [0.01, 0.1, 0.2]
@@ -136,7 +114,7 @@ optimization_parameter:
         controller_yaw_error_domain_table: [0.01, 0.03, 0.1]
         controller_steer_error_domain_table: [0.001, 0.003, 0.005]
         controller_lateral_coef_target_table: [0.01, 0.1, 1.0]
-        controller_steer_input_weight_target_table: [1e+7, 1e+4, 1.0]
+        controller_steer_input_weight_target_table: [1e+12, 1e+11, 1e+2]
         x_error_domain_table: [0.05, 0.1, 0.5]
         x_error_target_table: [0.1, 0.3, 1.0]
         y_error_domain_table: [0.05, 0.1, 0.5]
@@ -152,4 +130,4 @@ optimization_parameter:
     autoware_alignment:
         use_controller_steer_input_schedule: true
         use_vehicle_adaptor: true
-        use_offline_features: true
+        use_offline_features: false

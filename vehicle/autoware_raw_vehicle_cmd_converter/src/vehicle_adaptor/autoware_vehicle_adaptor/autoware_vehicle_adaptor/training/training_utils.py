@@ -31,9 +31,6 @@ integration_weight = parameters.integration_weight
 add_position_to_prediction = parameters.add_position_to_prediction
 add_vel_to_prediction = parameters.add_vel_to_prediction
 add_yaw_to_prediction = parameters.add_yaw_to_prediction
-integrate_states = parameters.integrate_states
-integrate_vel = parameters.integrate_vel
-integrate_yaw = parameters.integrate_yaw
 
 state_component_predicted = parameters.state_component_predicted
 state_component_predicted_index = parameters.state_component_predicted_index
@@ -109,7 +106,7 @@ def get_nominal_signed_prediction_error(X,window_size=10,past_length=past_length
 
 class TrainErrorPredictionNNFunctions:
     @staticmethod
-    def get_loss(criterion, model, X_batch, Y, Z, adaptive_weight,tanh_gain = 10, tanh_weight = 0.1, first_order_weight = 0.01, second_order_weight = 0.01, randomize_previous_error=[0.5,0.1], integral_prob=0.0, alpha_jacobian=0.01, calc_jacobian_len=10, eps=1e-6):
+    def get_loss(criterion, model, X_batch, Y, adaptive_weight,tanh_gain = 10, tanh_weight = 0.1, first_order_weight = 0.01, second_order_weight = 0.01, randomize_previous_error=[0.5,0.1], integral_prob=0.0, alpha_jacobian=0.01, calc_jacobian_len=10, eps=1e-6):
         randomize_scale_tensor = torch.tensor(randomize_previous_error).to(X_batch.device)
         previous_error = Y[:, :past_length, -2:] + torch.mean(torch.abs(Y[:, :past_length, -2:]),dim=1).unsqueeze(1) * randomize_scale_tensor * torch.randn_like(Y[:, :past_length, -2:])
         Y_pred, hc = model(X_batch, previous_error=previous_error, mode="get_lstm_states")
@@ -120,35 +117,21 @@ class TrainErrorPredictionNNFunctions:
             Y_perturbed, _ = model(X_batch[:, past_length: past_length + calc_jacobian_len] + eps * torch.randn_like(X_batch[:, past_length: past_length + calc_jacobian_len]), hc=hc_perturbed, mode="predict_with_hc")
             loss += alpha_jacobian * criterion((Y_perturbed - Y_pred[:,:calc_jacobian_len]) / eps, torch.zeros_like(Y_perturbed))
         # Calculate the integrated loss
-        #if integrate_states:
         if random.random() < integral_prob:
             predicted_states = X_batch[:, past_length, [vel_index, acc_index, steer_index]].unsqueeze(1)
-            if integrate_yaw:
-                predicted_yaw = Z[:,0,state_name_to_predicted_index["yaw"]]
             for i in range(integration_length):
+                if i > 0:
+                  predicted_states[:,0,0] = X_batch[:,past_length + i, vel_index]
+
                 predicted_states_with_input_history = torch.cat((predicted_states, X_batch[:,[past_length + i], 3:]), dim=2)
                 predicted_error, hc =  model(predicted_states_with_input_history, hc=hc, mode="predict_with_hc")
                 for j in range(prediction_step):
-                    if integrate_vel:
-                        predicted_states[:,0,0] = predicted_states[:,0,0] + predicted_states[:,0,1] * control_dt
-                    if integrate_yaw:
-                        predicted_yaw = predicted_yaw + Z[:,i*prediction_step + j,state_name_to_predicted_index["vel"]]* torch.tan(predicted_states[:,0,2]) / wheel_base * control_dt
                     predicted_states[:,0,1] = predicted_states[:,0,1] + (X_batch[:,past_length + i, acc_input_indices_nom[j]] - predicted_states[:,0,1]) * (1 - np.exp(- control_dt / acc_time_constant))
                     predicted_states[:,0,2] = predicted_states[:,0,2] + (X_batch[:,past_length + i, steer_input_indices_nom[j]] - predicted_states[:,0,2])  * (1 - np.exp(- control_dt / steer_time_constant))
-                if integrate_vel:
-                    predicted_states[:,0,0] = predicted_states[:,0,0] + predicted_error[:,0,state_name_to_predicted_index["vel"]] * control_dt * prediction_step
-                else:
-                    predicted_states[:,0,0] = X_batch[:,past_length + i + 1, vel_index]
-                if integrate_yaw:
-                    predicted_yaw = predicted_yaw + predicted_error[:,0,state_name_to_predicted_index["yaw"]] * control_dt * prediction_step
                 predicted_states[:,0,-2] = predicted_states[:,0,-2] + predicted_error[:,0,-2] * control_dt * prediction_step
                 predicted_states[:,0,-1] = predicted_states[:,0,-1] + predicted_error[:,0,-1] * control_dt * prediction_step
-            if integrate_vel:
-                loss += integration_weight*criterion(predicted_states[:,0,0], Z[:,-1,state_name_to_predicted_index["vel"]])
-            if integrate_yaw:
-                loss += integration_weight*criterion(predicted_yaw, Z[:,-1,state_name_to_predicted_index["yaw"]])
-            loss += adaptive_weight[-2] * integration_weight*criterion(predicted_states[:,0,-2], Z[:,-1,state_name_to_predicted_index["acc"]])
-            loss += adaptive_weight[-1] * integration_weight*criterion(predicted_states[:,0,-1], Z[:,-1,state_name_to_predicted_index["steer"]])
+            loss += adaptive_weight[-2] * integration_weight*criterion(predicted_states[:,0,-2], X_batch[:,past_length + integration_length, acc_index])
+            loss += adaptive_weight[-1] * integration_weight*criterion(predicted_states[:,0,-1], X_batch[:,past_length + integration_length, steer_index])
         # Calculate the tanh loss
         loss += tanh_weight * criterion(torch.tanh(tanh_gain * (Y_pred[:,:,-1]-Y[:,past_length:,-1])),torch.zeros_like(Y_pred[:,:,-1]))
         # Calculate the first order loss
@@ -159,7 +142,7 @@ class TrainErrorPredictionNNFunctions:
         total_loss = loss + first_order_loss + second_order_loss
         return total_loss
     @staticmethod
-    def validate_in_batches(model, criterion, X_val, Y_val, Z_val, adaptive_weight, randomize_previous_error=[0.03,0.03],batch_size=1000,alpha_jacobian=None,calc_jacobian_len=10,eps=1e-5):
+    def validate_in_batches(model, criterion, X_val, Y_val, adaptive_weight, randomize_previous_error=[0.03,0.03],batch_size=1000,alpha_jacobian=None,calc_jacobian_len=10,eps=1e-5):
         model.eval()
         val_loss = 0.0
         num_batches = (X_val.size(0) + batch_size - 1) // batch_size
@@ -171,9 +154,8 @@ class TrainErrorPredictionNNFunctions:
                 
                 X_batch = X_val[start_idx:end_idx]
                 Y_batch = Y_val[start_idx:end_idx]
-                Z_batch = Z_val[start_idx:end_idx]
                 
-                loss = TrainErrorPredictionNNFunctions.get_loss(criterion, model, X_batch, Y_batch, Z_batch,adaptive_weight=adaptive_weight,randomize_previous_error=randomize_previous_error,alpha_jacobian=alpha_jacobian,calc_jacobian_len=calc_jacobian_len,eps=eps)
+                loss = TrainErrorPredictionNNFunctions.get_loss(criterion, model, X_batch, Y_batch, adaptive_weight=adaptive_weight,randomize_previous_error=randomize_previous_error,alpha_jacobian=alpha_jacobian,calc_jacobian_len=calc_jacobian_len,eps=eps)
                 val_loss += loss.item() * (end_idx - start_idx)
         
         val_loss /= X_val.size(0)
@@ -233,10 +215,10 @@ class TrainErrorPredictionNNFunctions:
         return Y_pred_np
     @staticmethod
     def get_losses(
-        model,criterion,X, Y, Z, adaptive_weight
+        model,criterion,X, Y, adaptive_weight
     ):
         loss = TrainErrorPredictionNNFunctions.validate_in_batches(
-            model, criterion, X, Y, Z, adaptive_weight=adaptive_weight
+            model, criterion, X, Y, adaptive_weight=adaptive_weight
         )
         each_component_loss, Y_pred = TrainErrorPredictionNNFunctions.get_each_component_loss(
             model, X, Y
@@ -321,7 +303,7 @@ class TrainErrorPredictionNNFunctions:
         relearned_model_prediction_error = TrainErrorPredictionNNFunctions.get_model_signed_prediction_error(relearned_model,X,Y,window_size,batch_size)
         return nominal_prediction_error,model_prediction_error,relearned_model_prediction_error
     @staticmethod
-    def get_sequence_data(X, Y, Z, division_indices, acc_threshold=2.0, steer_threshold=0.7, acc_change_threshold=3.5, steer_change_threshold=0.8, acc_change_window=10, steer_change_window=10):
+    def get_sequence_data(X, Y, division_indices, acc_threshold=2.0, steer_threshold=0.8, acc_change_threshold=3.5, steer_change_threshold=1.0, acc_change_window=10, steer_change_window=10):
         X_seq = transform_to_sequence_data(
             np.array(X),
             past_length + prediction_length,
@@ -334,15 +316,8 @@ class TrainErrorPredictionNNFunctions:
             division_indices,
             prediction_step,
         )
-        Z_seq = transform_to_sequence_data(
-            np.array(Z)[:, state_component_predicted_index],
-            (past_length + prediction_length) * prediction_step,
-            division_indices,
-            1,
-        )[:, past_length * prediction_step: (past_length + integration_length) * prediction_step + 1]
         X_seq_filtered = []
         Y_seq_filtered = []
-        Z_seq_filtered = []
         for i in range(X_seq.shape[0]):
             acc = X_seq[i, :, 1]
             steer = X_seq[i, :, 2]
@@ -360,8 +335,7 @@ class TrainErrorPredictionNNFunctions:
             ):
                 X_seq_filtered.append(X_seq[i])
                 Y_seq_filtered.append(Y_seq[i])
-                Z_seq_filtered.append(Z_seq[i])
-        return np.array(X_seq_filtered), np.array(Y_seq_filtered), np.array(Z_seq_filtered)
+        return np.array(X_seq_filtered), np.array(Y_seq_filtered)
 
 # with offline data
 
@@ -648,7 +622,7 @@ class TrainErrorPredictionNNWithOfflineData:
                 else:
                     X_batch = X_val[start_idx:end_idx]
                     Y_batch = Y_val[start_idx:end_idx]
-                hc_initial_concat = TrainErrorPredictionNNWithOfflineData.get_offline_features(
+                hc_initial_concat = TrainErrorPredictionNNWithOfflineData.get_initial_hidden(
                     model_for_initial_hidden, 
                     offline_data_val,
                     indices_batch,
@@ -785,6 +759,7 @@ class TrainErrorPredictionNNWithOfflineData:
                 states_tmp[:,0,2] = states_tmp[:,0,2] + predicted_error[:,0,state_name_to_predicted_index["steer"]] * control_dt * prediction_step                
             prediction.append(states_tmp[:,0,[1,2]].detach().to("cpu").numpy())
         prediction = np.concatenate(prediction,axis=0)
+        return prediction
     @staticmethod
     def get_model_signed_prediction_error(
             model,

@@ -4,6 +4,7 @@ import os
 import matplotlib.pyplot as plt
 import os
 from autoware_vehicle_adaptor.data_analyzer import rosbag_to_csv
+import csv
 def yaw_transform(raw_yaw):
     transformed_yaw = np.zeros(raw_yaw.shape)
     transformed_yaw[0] = raw_yaw[0]
@@ -68,6 +69,22 @@ class DrivingLogPlotter:
             self.v_des = self.v_des_stamped[:,2]
         else:
             self.v_des_stamped = None
+            
+        self.system_operation_mode_state = np.loadtxt(
+            dir_name + "/system_operation_mode_state.csv", delimiter=",", usecols=[0, 1, 2]
+        )
+        if self.system_operation_mode_state.ndim == 1:
+            self.system_operation_mode_state = self.system_operation_mode_state.reshape(1, -1)
+        with open(dir_name + "/system_operation_mode_state.csv") as f:
+            reader = csv.reader(f, delimiter=",")
+            autoware_control_enabled_str = np.array([row[3] for row in reader])
+
+        self.control_enabled = np.zeros(self.system_operation_mode_state.shape[0])
+        for i in range(self.system_operation_mode_state.shape[0]):
+            if self.system_operation_mode_state[i, 2] > 1.5 and autoware_control_enabled_str[i] == "True":
+                self.control_enabled[i] = 1.0
+
+
     def plot_position(self,skip_time=0.0, plot_time=None):
         if plot_time is None:
             plot_indices = np.where((self.localization_kinematic_state[:,0]+ 1e-9*self.localization_kinematic_state[:,1] >= self.start_time+skip_time) & (self.localization_kinematic_state[:,0]+ 1e-9*self.localization_kinematic_state[:,1] <= self.start_time+self.total_time))
@@ -76,7 +93,7 @@ class DrivingLogPlotter:
         plt.plot(self.pos_x[plot_indices], self.pos_y[plot_indices])
         plt.xlabel("x[m]")
         plt.ylabel("y[m]")
-        plt.title("driveing position")
+        plt.title("driving position")
         plt.show()
     def plot_velocity(self, skip_time=0.0, plot_time=None,y_lim=[-0.1,12.0]):
         plt.plot(self.localization_kinematic_state[:,0]+ 1e-9*self.localization_kinematic_state[:,1], self.vel, label="vel_obs") 
@@ -162,7 +179,7 @@ class DrivingLogPlotter:
             plt.xlim([self.start_time+skip_time, self.start_time+skip_time+plot_time])
         plt.ylim(y_lim)
         plt.xlabel("time[s]")
-        plt.ylabel("acceleration_change[m/s^2]")
+        plt.ylabel("acceleration_change[m/s^3]")
         plt.title("acceleration_change")
         plt.legend()
         plt.show()
@@ -192,7 +209,7 @@ class DrivingLogPlotter:
             plt.xlim([self.start_time+skip_time, self.start_time+skip_time+plot_time])
         plt.ylim(y_lim)
         plt.xlabel("time[s]")
-        plt.ylabel("acceleration_cmd_change[m/s^2]")
+        plt.ylabel("acceleration_cmd_change[m/s^3]")
         plt.title("acceleration_cmd_change")
         plt.legend()
         plt.show()
@@ -224,5 +241,17 @@ class DrivingLogPlotter:
         plt.xlabel("time[s]")
         plt.ylabel("lateral_deviation[m]")
         plt.title("lateral_deviation")
+        plt.legend()
+        plt.show()
+    def plot_control_enable(self, skip_time=0.0, plot_time=None, y_lim=[-0.1,1.1]):
+        plt.plot(self.system_operation_mode_state[:,0]+ 1e-9*self.system_operation_mode_state[:,1], self.control_enabled, label="control_enable")
+        if plot_time is None:
+            plt.xlim([self.start_time+skip_time, self.start_time+self.total_time])
+        else:
+            plt.xlim([self.start_time+skip_time, self.start_time+skip_time+plot_time])
+        plt.ylim(y_lim)
+        plt.xlabel("time[s]")
+        plt.ylabel("control_enable")
+        plt.title("control_enable")
         plt.legend()
         plt.show()

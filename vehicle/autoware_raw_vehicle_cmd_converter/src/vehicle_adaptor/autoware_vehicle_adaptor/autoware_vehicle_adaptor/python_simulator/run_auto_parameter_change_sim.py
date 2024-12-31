@@ -116,11 +116,8 @@ def run_parameter_change_sim(
         for k in range(MODEL_NUM):
             paths.append(save_dir + "/vehicle_model_" + str(k) + ".pth")
         if not SKIP_TRAINING:
-            #model_trainer.get_trained_model(batch_size=batch_size)
-            #model_trainer.save_model(path=save_dir+"/vehicle_model.pth")
             model_trainer.get_trained_ensemble_models(batch_sizes=batch_sizes,ensemble_size=MODEL_NUM)
             model_trainer.save_ensemble_models(paths=paths)
-        #load_dir = save_dir
         save_dir = dir_generator.test_dir_name(
             control_type=ControlType.mpc,
             change_param=change_param,
@@ -129,18 +126,9 @@ def run_parameter_change_sim(
             with_adaptor=True,
         )
 
-        #for k in range(MODEL_NUM):
-        #    simulator.drive_sim(
-        #        save_dir=save_dir + "_model_" + str(k),
-        #        use_vehicle_adaptor=True,
-                #vehicle_adaptor_model_path=load_dir+"/vehicle_model.pth",
-        #        vehicle_adaptor_model_path=paths[k],
-        #        states_ref_mode=STATES_REF_MODE,
-        #    )
         simulator.drive_sim(
             save_dir=save_dir,
             use_vehicle_adaptor=True,
-            #vehicle_adaptor_model_path=load_dir+"/vehicle_model.pth",
             vehicle_adaptor_model_path=paths,
             states_ref_mode=STATES_REF_MODE,
         )

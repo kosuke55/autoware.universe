@@ -43,9 +43,6 @@ integration_weight = parameters.integration_weight
 add_position_to_prediction = parameters.add_position_to_prediction
 add_vel_to_prediction = parameters.add_vel_to_prediction
 add_yaw_to_prediction = parameters.add_yaw_to_prediction
-integrate_states = parameters.integrate_states
-integrate_vel = parameters.integrate_vel
-integrate_yaw = parameters.integrate_yaw
 
 state_component_predicted = parameters.state_component_predicted
 state_component_predicted_index = parameters.state_component_predicted_index

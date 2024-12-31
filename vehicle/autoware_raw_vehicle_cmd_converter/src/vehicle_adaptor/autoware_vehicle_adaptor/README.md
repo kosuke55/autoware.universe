@@ -1,176 +1,230 @@
-# インストール
+<p align="center">
+  <a href="https://proxima-ai-tech.com/">
+    <img width="500px" src="./images/proxima_logo.png">
+  </a>
+</p>
 
-autoware_vehicle_adaptorディレクトリ上で
+# Autoware Vehicle Adaptor
+
+In order to perform adaptive control that allows various vehicles to operate without detailed parameter calibration, it is placed in the lower part of the controller and corrects the input so that the ideal state based on the internal model of the controller is achieved according to the learned model.
+However, if you are not going to do any learning and simply want to drive on Autoware with the default NN model, you do not need to follow this installation procedure, and it is sufficient to just do the normal Autoware setup.
+
+
+
+# Provided features
+
+To use all the functions of this package, execute the following setup command on the autoware_vehicle_adaptor directory:
+
 ```bash
 pip3 install .
 ```
-2回目以降は
+
+For the upcoming setup, execute the following command:
+
 ```bash
 pip3 install -U .
 ```
-動かなくなったらひとまずこのコマンドは叩いてみてください。
 
-setup.pyの
-```
-SKIP_PRE_INSTALL_FLAG = True
-```
-にするとpip3のインストールが速く終わる(C++ファイルの更新がなければこっちでやれば良い)
-
-
-それぞれのC++ファイルのビルドを試すには
-autoware_vehicle_adaptorディレクトリ上で
+For the training and evaluation, we can use the following rosbag record command:
 ```bash
-python3 build_test.py
-python3 build_actuation_map_2d_test.py
+ros2 bag record /localization/kinematic_state /localization/acceleration /vehicle/status/steering_status /control/command/control_cmd /control/trajectory_follower/lane_departure_checker_node/debug/deviation/lateral /system/operation_mode/state /vehicle/raw_vehicle_cmd_converter/debug/compensated_control_cmd /external/selected/control_cmd /control/command/actuation_cmd 
 ```
-
-# python simulatorのテスト
-
-なんとなく試すにはpython_simulatorディレクトリ上で
+Not all of the topics listed here are always published.
+The following topics are always required:
 ```bash
-python3 run_vehicle_adaptor.py
+/localization/kinematic_state /localization/acceleration /vehicle/status/steering_status /system/operation_mode/state
 ```
-をやる。
-パラメータ変更しつつやるには
+Either of the following two is required, and the former is published when the vehicle is automatically driven by a `trajectory_follower_node`, and the latter is published when the data collection tool in the `autoware_tools` is used.
 ```bash
-python3 run_auto_parameter_change_sim.py --root=time --param_name=steer_scaling
+/control/command/control_cmd /external/selected/control_cmd
+```
+The following topic is required if you want to evaluate lateral deviation:
+```bash
+/control/trajectory_follower/lane_departure_checker_node/debug/deviation/lateral
+```
+The following topic is required if you want to evaluate the driving data with the vehicle_adaptor or include the driving data with the vehicle_adaptor in the training data.
+```bash
+/vehicle/raw_vehicle_cmd_converter/debug/compensated_control_cmd
+```
+The following topic is required if you want to use the NN based accel brake map calibrator or evaluate the accel brake inputs:
+```bash
+/control/command/actuation_cmd
 ```
 
-などやればできる。
-キャリブレーションのテストを動かすには
+To convert a rosbag file into a form that can be used for our training and evaluation, execute the following command:
+
+```python
+from autoware_vehicle_adaptor.data_analyzer import rosbag_to_csv
+rosbag_to_csv.rosbag_to_csv(rosbag_dir)
+```
+Here, `rosbag_dir` represents the rosbag directory.
+As a result, the necessary CSV files are generated in `rosbag_dir`.
+
+## Trajectory following with vehicle adaptor
+
+To use vehicle adaptor, you need set `use_vehicle_adaptor: true` and `enable_control_cmd_horizon_pub: true`.
+When you start up autoware and perform automatic driving, the controller's input values are corrected based on the NN (ensemble) models saved in [vehicle_models](./vehicle_models).
+By default, the models trained based on drive with nominal parameter are saved.
+If you want to train models based on specific vehicle data and make changes, please refer to the next section.
+The parameters in [controller_param.yaml](./autoware_vehicle_adaptor/param/controller_param.yaml), which includes following, need to be adjusted to match those of the controller.
+
+| Parameter                                        | Type  | Description                    |
+| ------------------------------------------------ | ----- | ------------------------------ |
+| controller_parameter:vehicle_info:wheel_base        | float | wheel base [m]                 |
+| controller_parameter:acceleration:acc_time_delay    | float | acceleration time delay [s]    |
+| controller_parameter:acceleration:acc_time_constant | float | acceleration time constant [s] |
+| controller_parameter:steering:steer_time_delay      | float | steer time delay [s]           |
+| controller_parameter:steering:steer_time_constant   | float | steer time constant [s]        |
+
+We test our vehicle adaptor with the following route:
+
+<p style="text-align: center;">
+    <img src="images/sample_map_root.png" width="712px">
+</p>
+
+The parameter `optimization_parameter:autoware_alignment:use_vehicle_adaptor` in [optimization_param.yaml](./autoware_vehicle_adaptor/param/optimization_param.yaml) is switched between `false` and `true` to compare driving without using the Vehicle Adaptor and driving with it.
+Here, we use the trained [sample model](./vehicle_models).
+The performance of the drive can be evaluated using [driving_log_plotter.py](./autoware_vehicle_adaptor/data_analyzer/driving_log_plotter.py).
+Please refer to [test_drive_log_plotter.ipynb](./autoware_vehicle_adaptor/data_analyzer/test_drive_log_plotter.ipynb) for sample code for performance evaluation.
+We will only display the resulting graphs for lateral deviation and steering here.
+
+The following shows a nominal autoware mpc drive without using Vehicle Adaptor, with a lateral deviation of about 40 cm.
+
+<p style="text-align: center;">
+    <img src="images/sample_map_sim_nominal_controller.png" width="712px">
+</p>
+
+By using Vehicle Adaptor, the lateral deviation was reduced to about 30 cm, and driving was improved.
+
+<p style="text-align: center;">
+    <img src="images/sample_map_sim_vehicle_adaptor.png" width="712px">
+</p>
+
+
+## Training and its evaluation
+
+[test_vehicle_adaptor_model_training.ipynb](./autoware_vehicle_adaptor/data_analyzer/test_vehicle_adaptor_model_training.ipynb) is a useful reference for training the models.
+The training is done using the gray box model, and the parameters of the nominal model are specified in [nimonal_param.yaml](./autoware_vehicle_adaptor/param/nominal_param.yaml).
+The parameters that can be specified are the same as for [controller_param.yaml](./autoware_vehicle_adaptor/param/controller_param.yaml).
+This parameter needs to be consistent during training and driving, but it does not need to match [controller_param.yaml](./autoware_vehicle_adaptor/param/controller_param.yaml), and [controller_param.yaml](./autoware_vehicle_adaptor/param/controller_param.yaml) can be changed to match the controller when driving even after training has been performed.
+
+In order to train the models, training and validation data are required.
+With the paths of the rosbag directories used for training and validation, `dir_train_0`, `dir_train_1`, `dir_train_2`,..., `dir_val_0`, `dir_val_1`, `dir_val_2`,... and the directory `save_dir` where you save the models, the model can be trained and saved in the python environment as follows:
+
+```python
+from autoware_vehicle_adaptor.data_analyzer import driving_learners
+model_trainer = driving_learners.train_error_prediction_NN()
+model_trainer.add_data_from_csv(dir_train_0, add_mode="as_train")
+model_trainer.add_data_from_csv(dir_train_1, add_mode="as_train")
+model_trainer.add_data_from_csv(dir_train_2, add_mode="as_train")
+...
+model_trainer.add_data_from_csv(dir_val_0, add_mode="as_val")
+model_trainer.add_data_from_csv(dir_val_1, add_mode="as_val")
+model_trainer.add_data_from_csv(dir_val_2, add_mode="as_val")
+...
+model_trainer.get_trained_model()
+model_trainer.save_models(save_dir)
+model_trainer.get_trained_ensemble_models(batch_sizes=[100],ensemble_size=5)
+paths = [save_dir + "/vehicle_model_" + str(i+1) + ".pth" for i in range(5)]
+model_trainer.save_ensemble_models(paths=paths)
+```
+If you rename `save_dir` to `vehicle_models` and place it in `autoware_vehicle_adaptor`, it will be loaded when using vehicle adaptor.
+
+In some cases, training once may not work because it falls into the local minimum, but [test_vehicle_adaptor_model_training_with_relearn.ipynb](./autoware_vehicle_adaptor/data_analyzer/test_vehicle_adaptor_model_training_with_relearn.ipynb) can be used as a reference when repeating training to avoid this.
+
+[test_NN_model_evaluator.ipynb](./autoware_vehicle_adaptor/data_analyzer/test_NN_model_evaluator.ipynb) is useful for evaluating how well the trained model can predict the dynamics of the driving data.
+The default model is evaluated as follows.
+<p style="text-align: center;">
+    <img src="images/NN_evaluator_result.png" width="712px">
+</p>
+
+## Brief simulation using a python simulator
+
+First, to give the steer time constant in the python simulator, create the following file and save it in [autoware_vehicle_adaptor/python_simulator/supporting_data](./autoware_vehicle_adaptor/python_simulator/supporting_data) with the name `sim_setting.json`:
+
+```json
+{ "steer_time_constant": 0.5}
+```
+
+Next, after moving to [autoware_vehicle_adaptor/python_simulator](./autoware_vehicle_adaptor/python_simulator), run the following commands to test the slalom driving on the python simulator with the nominal control:
 
 ```bash
-python3 run_accel_brake_map_calibrator.py
+python3 run_vehicle_adaptor.py nominal_test (nominal_dir)
 ```
 
-をやる。
+The results are saved in a directory that the user can specify, here `python_simulator/log_data/test_python_nominal_sim_(nominal_dir)`.
 
-pythonファイルの中でシミュレータを動かすには
+The following results were obtained.
 
-```python
-from data_collection_utils import ControlType
-import python_simulator
+<p style="text-align: center;">
+    <img src="images/nominal_sim_steer_time_constant_0_5.png" width="712px">
+</p>
+
+The center of the upper row represents the lateral deviation.
+
+To perform training using a figure eight driving and driving with Vehicle Adaptor based on the obtained model, run the following commands:
+
+```bash
+python3 run_vehicle_adaptor.py (trained_dir)
 ```
 
-save_dirを定義して
+The result of the driving is stored in `python_simulator/log_data/test_python_vehicle_adaptor_sim_(trained_dir)`.
 
-```python
-simulator.drive_sim(control_type=ControlType.pp_eight, max_control_time=1500, save_dir=save_dir, max_lateral_accel=0.5)
+
+The following results were obtained.
+
+<p style="text-align: center;">
+    <img src="images/vehicle_adaptor_sim_steer_time_constant_0_5.png" width="712px">
+</p>
+
+The following are some of the parameters that can be specified:
+
+| Parameter                | Type        | Description                                                                                                                                                                                                                                                                                  |
+| ------------------------ | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| steer_dead_band          | float       | steer dead band [rad]                                                                                                                                                                                                                                                                        |
+| acc_time_delay           | float       | acceleration time delay [s]                                                                                                                                                                                                                                                                  |
+| steer_time_delay         | float       | steer time delay [s]                                                                                                                                                                                                                                                                         |
+| acc_time_constant        | float       | acceleration time constant [s]                                                                                                                                                                                                                                                               |
+| steer_time_constant      | float       | steer time constant [s]                                                                                                                                                                                                                                                                      |
+
+For example, to give the simulation side 0.5 [sec] of steer time constant and 0.001 [rad] of steer dead band, edit the `sim_setting.json` as follows.
+
+```json
+{ "steer_time_constant": 0.5, "steer_dead_band": 0.001 }
 ```
 
-で8の字走行。
+Please refer to [parameter_change_utils.py](./autoware_vehicle_adaptor/python_simulator/utils/parameter_change_utils.py) for other parameters.
+The test method in [run_auto_parameter_change_sim.py](./autoware_vehicle_adaptor/python_simulator/run_auto_parameter_change_sim.py)　is also helpful.
 
-```python
-simulator.drive_sim(save_dir=save_dir)
-```
+# Parameter description
 
-でノミナルのMPC走行。
-python_simulatorにてコントローラ側加速度入力からアクセル・ブレーキ踏み込み量への変換マップ(キャリブレーションにより作成)をずらすには
-
-```python
-map_dir = "../actuation_cmd_maps/accel_brake_maps/low_quality_map"
-sim_setting_dict = {}
-sim_setting_dict["accel_brake_map_control_path"] = map_dir
-simulator.perturbed_sim(sim_setting_dict)
-```
-
-とする。
-python_simulatorにてアクセル・ブレーキ踏み込み量から入力加速度への変換マップ（車両特性）をずらすには
-
-```python
-map_dir = "../actuation_cmd_maps/accel_brake_maps/low_quality_map"
-sim_setting_dict = {}
-sim_setting_dict["accel_brake_map_sim_path"] = map_dir
-simulator.perturbed_sim(sim_setting_dict)
-```
-とする。
-
-map_dirで別のマップを指定すればそのディレクトリにあるアクセル・ブレーキマップを読む。
-
-# キャリブレーション
-
-```python
-from autoware_vehicle_adaptor.calibrator import accel_brake_map_calibrator
-calibrator = accel_brake_map_calibrator.CalibratorByNeuralNetwork()
-```
-でキャリブレータの準備。
-走行データのディレクトリcsv_dirがあったとき
-
-```python
-calibrator.add_data_from_csv(csv_dir)
-```
-
-でキャリブレータにデータを追加できる。
-
-マップを保存したいsave_dirを定義した上で
-```python
-map_accel = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
-map_brake = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]
-map_vel=[0.0,1.39,2.78,4.17,5.56,6.94,8.33,9.72,11.11,12.5,13.89]
-calibrator.calibrate_by_NN()
-calibrator.save_accel_brake_map_NN(map_vel,map_accel,map_brake,save_dir)
-```
-によってキャリブレーション結果を保存できる。
-NNではなく多項式回帰を用いる場合はdegreeを指定して
-```python
-calibrator.calibrate_by_polynomial_regression(degree=degree)
-calibrator.save_accel_brake_map_poly(map_vel,map_accel,map_brake,save_dir)
-```
-とすれば良い。
+The important parameters in the Vehicle Adaptor's changeable parameter file [optimization_param.yaml](./autoware_vehicle_adaptor/param/optimization_param.yaml) are as follows:
 
 
-# CSVデータの読み込み
-
-CSVデータの読み込みについて
-準備としてヨー角が連続的に変化するようにする関数。
-```python
-import numpy as np
-import scipy.interpolate
-from scipy.ndimage import gaussian_filter
-from scipy.spatial.transform import Rotation
-
-def yaw_transform(raw_yaw: np.ndarray) -> np.ndarray:
-    """Adjust and transform within a period of 2π so that the yaw angle is continuous."""
-    transformed_yaw = np.zeros(raw_yaw.shape)
-    transformed_yaw[0] = raw_yaw[0]
-    for i in range(raw_yaw.shape[0] - 1):
-        rotate_num = (raw_yaw[i + 1] - transformed_yaw[i]) // (2 * np.pi)
-        if raw_yaw[i + 1] - transformed_yaw[i] - 2 * rotate_num * np.pi < np.pi:
-            transformed_yaw[i + 1] = raw_yaw[i + 1] - 2 * rotate_num * np.pi
-        else:
-            transformed_yaw[i + 1] = raw_yaw[i + 1] - 2 * (rotate_num + 1) * np.pi
-    return transformed_yaw
-```
-CSVファイルが保存されたディレクトリsave_dirがあったとき
-
-```python
-kinematic = np.loadtxt(
-    dir_name + "/kinematic_state.csv", delimiter=",", usecols=[0, 1, 4, 5, 7, 8, 9, 10, 47]
-)
-acc_status = np.loadtxt(dir_name + "/acceleration.csv", delimiter=",", usecols=[0, 1, 3])
-steer_status = np.loadtxt(
-    dir_name + "/steering_status.csv", delimiter=",", usecols=[0, 1, 2]
-)
-control_cmd = np.loadtxt(
-    dir_name + "/control_cmd_orig.csv", delimiter=",", usecols=[0, 1, 8, 16]
-)
+| Parameter                                  | Type        | Description                                                                                                                                                                                                                                        |
+| ------------------------------------------ | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| weight_parameter:x_cost                  | float         | longitudinal error stage cost weight                                                                                                               |
+| weight_parameter:y_cost                  | float         | lateral error stage cost weight                                                                                                               |
+| weight_parameter:vel_cost                  | float         | velocity error stage cost weight                                                                                                               |
+| weight_parameter:yaw_cost                  | float         | yaw angle error stage cost weight                                                                                                               |
+| weight_parameter:acc_cost                  | float         | acceleration error stage cost weight                                                                                                               |
+| weight_parameter:steer_cost                  | float         | steer angle error stage cost weight                                                                                                               |
+| weight_parameter:x_terminal_cost                  | float         | longitudinal error terminal cost weight                                                                                                               |
+| weight_parameter:y_terminal_cost                  | float         | lateral error stage terminal weight                                                                                                               |
+| weight_parameter:vel_terminal_cost                  | float         | velocity error stage terminal weight                                                                                                               |
+| weight_parameter:yaw_terminal_cost                  | float         | yaw angle error stage terminal weight                                                                                                               |
+| weight_parameter:acc_terminal_cost                  | float         | acceleration error stage terminal weight                                                                                                               |
+| weight_parameter:steer_terminal_cost                  | float         | steer angle error stage terminal weight                                                                                                               |
+| weight_parameter:intermediate_cost_index                  | int         | The intermediate point horizon number that increases the weight                                                                  |
+| weight_parameter:x_intermediate_cost                  | float         | longitudinal error intermediate cost weight                                                                                                               |
+| weight_parameter:y_intermediate_cost                  | float         | lateral error stage intermediate weight                                                                                                               |
+| weight_parameter:vel_intermediate_cost                  | float         | velocity error stage intermediate weight                                                                                                               |
+| weight_parameter:yaw_intermediate_cost                  | float         | yaw angle error stage intermediate weight                                                                                                               |
+| weight_parameter:acc_intermediate_cost                  | float         | acceleration error stage intermediate weight                                                                                                               |
+| weight_parameter:steer_intermediate_cost                  | float         | steer angle error stage intermediate weight                                                                                                               |
 
 
-pose_position_x = kinematic[:, 2]
-pose_position_y = kinematic[:, 3]
-vel = kinematic[:, 8]
-raw_yaw = Rotation.from_quat(kinematic[:, 4:8]).as_euler("xyz")[:, 2]
-yaw = yaw_transform(raw_yaw)
-acc = acc_status[:, 2]
-steer = steer_status[:, 2]
+# Limitation
 
-acc_des = control_cmd[:, 3]
-steer_des = control_cmd[:, 2]
-```
-のようにすれば、実現された状態x,y,vel,yaw,acc,steerとコントローラの入力acc_des, steer_desが得られる。
-タイムスタンプは1列目(sec)と2列目(nanosec)に保存されている。
-例えばkinematicのタイムスタンプの配列は
-```python
-kinematic_timestamp = kinematic[:, 0] + 1e-9 * kinematic[:, 1]
-```
-により取得できる。
+* The performance when the horizon of the steering input is not given has not been verified.
+* If the dynamics given to the controller are accurate, the performance may degrade.
