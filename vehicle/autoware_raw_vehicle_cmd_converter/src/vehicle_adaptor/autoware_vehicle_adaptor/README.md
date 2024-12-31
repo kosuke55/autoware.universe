@@ -194,7 +194,7 @@ For example, to give the simulation side 0.5 [sec] of steer time constant and 0.
 ```
 
 Please refer to [parameter_change_utils.py](./autoware_vehicle_adaptor/python_simulator/utils/parameter_change_utils.py) for other parameters.
-The test method in [run_auto_parameter_change_sim.py](./autoware_vehicle_adaptor/python_simulator/run_auto_parameter_change_sim.py)　is also helpful.
+The test method in [run_auto_parameter_change_sim.py](./autoware_vehicle_adaptor/python_simulator/run_auto_parameter_change_sim.py) is also helpful.
 
 # Parameter description
 
