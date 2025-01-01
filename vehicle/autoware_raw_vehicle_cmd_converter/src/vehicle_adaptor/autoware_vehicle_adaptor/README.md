@@ -277,12 +277,12 @@ The important parameters in the Vehicle Adaptor's changeable parameter file [opt
 The particularly important parameters are `yaw_terminal_cost`, `yaw_intermediate_cost`, `vel_for_steer_rate_table`, `steer_rate_cost_coef_by_vel_table`, `yaw_coef_by_steer_rate_table`, `controller_acc_input_weight_target_table` and `controller_steer_input_weight_target_table`.
 
 If the parameters `yaw_terminal_cost` and `yaw_intermediate_cost` are large, the tracking performance improves, but there is a trade-off in that the steering vibration is likely to occur.
-To deal with this, we adjust parameter `yaw_coef_by_steer_rate_table`, and when the steer rate is large, we increase the yaw angle cost weight, and when the steer rate is small, we decrease the yaw angle cost weight.
+To deal with this, we adjust parameter `yaw_coef_by_steer_rate_table`, and when the controller's raw steering input rate is large, we increase the yaw angle cost weight, and when the controller's raw steering input rate is small, we decrease the yaw angle cost weight.
 Similarly, in order to avoid steering vibration in the high-speed range, the parameters `vel_for_steer_rate_table` and `steer_rate_cost_coef_by_vel_table` are adjusted, and the cost weight of the steering input rate is made small in the low-speed range and large in the high-speed range.
 
-By setting the parameter `controller_acc_input_weight_target_table` to a large values (in particular, first two values), the raw acceleration input of the controller is prioritized when the controller's acceleration dynamics are accurate, preventing degradation due to the Vehicle Adaptor.
+By setting the parameter `controller_acc_input_weight_target_table` to large values (in particular, first two values), the raw acceleration input of the controller is prioritized when the controller's acceleration dynamics are accurate, preventing degradation due to Vehicle Adaptor.
 
-Similarly, by setting the parameter `controller_steer_input_weight_target_table` to a large values (in particular, first two values), the raw steering input of the controller is prioritized when the controller's steering dynamics are accurate, preventing degradation due to the Vehicle Adaptor.
+Similarly, by setting the parameter `controller_steer_input_weight_target_table` to large values (in particular, first two values), the raw steering input of the controller is prioritized when the controller's steering dynamics are accurate, preventing degradation due to Vehicle Adaptor.
 If the controller steering dynamics are not very accurate, the user may want to set this values to, for example, `[1e+7, 1e+4, 1.0]` instead of the default `[1e+12, 1e+11, 1e+2]`.
 
 # Limitation
